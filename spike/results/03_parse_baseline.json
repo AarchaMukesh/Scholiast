@@ -1,0 +1,608 @@
+{
+  "usable_rate": 0.95,
+  "verdicts": {
+    "usable": 19,
+    "poor": 1
+  },
+  "records": [
+    {
+      "name": "_broken-empty",
+      "pages": 1,
+      "chars": 0,
+      "chars_per_page": 0,
+      "parse_seconds": 0.0,
+      "verdict": "unusable",
+      "failure_class": "SCANNED_IMAGE",
+      "detail": "only 0 extractable chars"
+    },
+    {
+      "name": "_broken-encrypted",
+      "verdict": "unusable",
+      "failure_class": "UNPARSEABLE",
+      "detail": "encrypted / password required"
+    },
+    {
+      "name": "_broken-scanned",
+      "pages": 2,
+      "chars": 0,
+      "chars_per_page": 0,
+      "parse_seconds": 0.1,
+      "verdict": "unusable",
+      "failure_class": "SCANNED_IMAGE",
+      "detail": "only 0 extractable chars"
+    },
+    {
+      "name": "attention-is-all-you-need",
+      "pages": 15,
+      "chars": 38450,
+      "chars_per_page": 2563,
+      "parse_seconds": 0.19,
+      "body_font_size": 9.96,
+      "headings_detected": 11,
+      "canonical_sections": [
+        "abstract",
+        "conclusion",
+        "introduction",
+        "method",
+        "references",
+        "related_work",
+        "results"
+      ],
+      "n_canonical": 7,
+      "verdict": "usable",
+      "core_sections_found": [
+        "abstract",
+        "conclusion",
+        "introduction",
+        "method",
+        "related_work",
+        "results"
+      ]
+    },
+    {
+      "name": "beir",
+      "pages": 24,
+      "chars": 92312,
+      "chars_per_page": 3846,
+      "parse_seconds": 0.22,
+      "body_font_size": 6.99,
+      "headings_detected": 133,
+      "canonical_sections": [
+        "abstract",
+        "conclusion",
+        "discussion",
+        "experiments",
+        "introduction",
+        "limitations",
+        "method",
+        "references",
+        "related_work",
+        "results"
+      ],
+      "n_canonical": 10,
+      "verdict": "usable",
+      "core_sections_found": [
+        "abstract",
+        "conclusion",
+        "experiments",
+        "introduction",
+        "method",
+        "related_work",
+        "results"
+      ]
+    },
+    {
+      "name": "bert",
+      "pages": 16,
+      "chars": 62048,
+      "chars_per_page": 3878,
+      "parse_seconds": 0.06,
+      "body_font_size": 10.91,
+      "headings_detected": 21,
+      "canonical_sections": [
+        "abstract",
+        "conclusion",
+        "discussion",
+        "experiments",
+        "introduction",
+        "references",
+        "related_work"
+      ],
+      "n_canonical": 7,
+      "verdict": "usable",
+      "core_sections_found": [
+        "abstract",
+        "conclusion",
+        "experiments",
+        "introduction",
+        "related_work"
+      ]
+    },
+    {
+      "name": "bge-c-pack",
+      "pages": 9,
+      "chars": 56036,
+      "chars_per_page": 6226,
+      "parse_seconds": 0.08,
+      "body_font_size": 8.97,
+      "headings_detected": 29,
+      "canonical_sections": [
+        "abstract",
+        "discussion",
+        "experiments",
+        "introduction",
+        "method",
+        "references",
+        "related_work"
+      ],
+      "n_canonical": 7,
+      "verdict": "usable",
+      "core_sections_found": [
+        "abstract",
+        "experiments",
+        "introduction",
+        "method",
+        "related_work"
+      ]
+    },
+    {
+      "name": "big-bird",
+      "pages": 42,
+      "chars": 126581,
+      "chars_per_page": 3014,
+      "parse_seconds": 0.11,
+      "body_font_size": 9.86,
+      "headings_detected": 15,
+      "canonical_sections": [
+        "abstract",
+        "conclusion",
+        "experiments",
+        "introduction",
+        "limitations",
+        "method",
+        "references",
+        "results"
+      ],
+      "n_canonical": 8,
+      "verdict": "usable",
+      "core_sections_found": [
+        "abstract",
+        "conclusion",
+        "experiments",
+        "introduction",
+        "method",
+        "results"
+      ]
+    },
+    {
+      "name": "chain-of-thought",
+      "pages": 43,
+      "chars": 132935,
+      "chars_per_page": 3092,
+      "parse_seconds": 0.09,
+      "body_font_size": 9.96,
+      "headings_detected": 24,
+      "canonical_sections": [
+        "abstract",
+        "appendix",
+        "conclusion",
+        "discussion",
+        "experiments",
+        "introduction",
+        "references",
+        "related_work"
+      ],
+      "n_canonical": 8,
+      "verdict": "usable",
+      "core_sections_found": [
+        "abstract",
+        "conclusion",
+        "experiments",
+        "introduction",
+        "related_work"
+      ]
+    },
+    {
+      "name": "contriever",
+      "pages": 21,
+      "chars": 72559,
+      "chars_per_page": 3455,
+      "parse_seconds": 0.07,
+      "body_font_size": 8.97,
+      "headings_detected": 41,
+      "canonical_sections": [
+        "abstract",
+        "discussion",
+        "experiments",
+        "introduction",
+        "method",
+        "references",
+        "related_work",
+        "results"
+      ],
+      "n_canonical": 8,
+      "verdict": "usable",
+      "core_sections_found": [
+        "abstract",
+        "experiments",
+        "introduction",
+        "method",
+        "related_work",
+        "results"
+      ]
+    },
+    {
+      "name": "dpr",
+      "pages": 13,
+      "chars": 54421,
+      "chars_per_page": 4186,
+      "parse_seconds": 0.04,
+      "body_font_size": 10.91,
+      "headings_detected": 18,
+      "canonical_sections": [
+        "abstract",
+        "conclusion",
+        "discussion",
+        "experiments",
+        "introduction",
+        "references",
+        "related_work"
+      ],
+      "n_canonical": 7,
+      "verdict": "usable",
+      "core_sections_found": [
+        "abstract",
+        "conclusion",
+        "experiments",
+        "introduction",
+        "related_work"
+      ]
+    },
+    {
+      "name": "e5-embeddings",
+      "pages": 17,
+      "chars": 58188,
+      "chars_per_page": 3423,
+      "parse_seconds": 0.05,
+      "body_font_size": 9.46,
+      "headings_detected": 37,
+      "canonical_sections": [
+        "abstract",
+        "conclusion",
+        "discussion",
+        "experiments",
+        "introduction",
+        "method",
+        "references",
+        "related_work",
+        "results"
+      ],
+      "n_canonical": 9,
+      "verdict": "usable",
+      "core_sections_found": [
+        "abstract",
+        "conclusion",
+        "experiments",
+        "introduction",
+        "method",
+        "related_work",
+        "results"
+      ]
+    },
+    {
+      "name": "gpt-3",
+      "pages": 75,
+      "chars": 231278,
+      "chars_per_page": 3084,
+      "parse_seconds": 2.39,
+      "body_font_size": 9.86,
+      "headings_detected": 21,
+      "canonical_sections": [
+        "abstract",
+        "conclusion",
+        "introduction",
+        "limitations",
+        "method",
+        "references",
+        "related_work",
+        "results"
+      ],
+      "n_canonical": 8,
+      "verdict": "usable",
+      "core_sections_found": [
+        "abstract",
+        "conclusion",
+        "introduction",
+        "method",
+        "related_work",
+        "results"
+      ]
+    },
+    {
+      "name": "gpt-4-report",
+      "pages": 100,
+      "chars": 278517,
+      "chars_per_page": 2785,
+      "parse_seconds": 0.35,
+      "body_font_size": 9.89,
+      "headings_detected": 69,
+      "canonical_sections": [
+        "abstract",
+        "appendix",
+        "conclusion",
+        "experiments",
+        "introduction",
+        "limitations",
+        "method",
+        "references"
+      ],
+      "n_canonical": 8,
+      "verdict": "usable",
+      "core_sections_found": [
+        "abstract",
+        "conclusion",
+        "experiments",
+        "introduction",
+        "method"
+      ]
+    },
+    {
+      "name": "llama-2",
+      "pages": 77,
+      "chars": 256823,
+      "chars_per_page": 3335,
+      "parse_seconds": 1.94,
+      "body_font_size": 9.94,
+      "headings_detected": 128,
+      "canonical_sections": [
+        "abstract",
+        "appendix",
+        "conclusion",
+        "discussion",
+        "experiments",
+        "introduction",
+        "limitations",
+        "method",
+        "references",
+        "related_work",
+        "results"
+      ],
+      "n_canonical": 11,
+      "verdict": "usable",
+      "core_sections_found": [
+        "abstract",
+        "conclusion",
+        "experiments",
+        "introduction",
+        "method",
+        "related_work",
+        "results"
+      ]
+    },
+    {
+      "name": "llama",
+      "pages": 27,
+      "chars": 84929,
+      "chars_per_page": 3146,
+      "parse_seconds": 0.06,
+      "body_font_size": 10.91,
+      "headings_detected": 16,
+      "canonical_sections": [
+        "abstract",
+        "conclusion",
+        "introduction",
+        "method",
+        "references",
+        "related_work",
+        "results"
+      ],
+      "n_canonical": 7,
+      "verdict": "usable",
+      "core_sections_found": [
+        "abstract",
+        "conclusion",
+        "introduction",
+        "method",
+        "related_work",
+        "results"
+      ]
+    },
+    {
+      "name": "lost-in-the-middle",
+      "pages": 18,
+      "chars": 63521,
+      "chars_per_page": 3529,
+      "parse_seconds": 0.06,
+      "body_font_size": 10.91,
+      "headings_detected": 21,
+      "canonical_sections": [
+        "abstract",
+        "conclusion",
+        "introduction",
+        "method",
+        "references",
+        "related_work",
+        "results"
+      ],
+      "n_canonical": 7,
+      "verdict": "usable",
+      "core_sections_found": [
+        "abstract",
+        "conclusion",
+        "introduction",
+        "method",
+        "related_work",
+        "results"
+      ]
+    },
+    {
+      "name": "qasper",
+      "pages": 12,
+      "chars": 48813,
+      "chars_per_page": 4068,
+      "parse_seconds": 0.07,
+      "body_font_size": 9.96,
+      "headings_detected": 90,
+      "canonical_sections": [
+        "abstract",
+        "conclusion",
+        "discussion",
+        "experiments",
+        "introduction",
+        "limitations",
+        "method",
+        "references",
+        "related_work",
+        "results"
+      ],
+      "n_canonical": 10,
+      "verdict": "usable",
+      "core_sections_found": [
+        "abstract",
+        "conclusion",
+        "experiments",
+        "introduction",
+        "method",
+        "related_work",
+        "results"
+      ]
+    },
+    {
+      "name": "rag-lewis",
+      "pages": 19,
+      "chars": 67755,
+      "chars_per_page": 3566,
+      "parse_seconds": 0.09,
+      "body_font_size": 9.96,
+      "headings_detected": 25,
+      "canonical_sections": [
+        "abstract",
+        "discussion",
+        "experiments",
+        "introduction",
+        "limitations",
+        "method",
+        "references",
+        "related_work",
+        "results"
+      ],
+      "n_canonical": 9,
+      "verdict": "usable",
+      "core_sections_found": [
+        "abstract",
+        "experiments",
+        "introduction",
+        "method",
+        "related_work",
+        "results"
+      ]
+    },
+    {
+      "name": "rag-survey",
+      "pages": 21,
+      "chars": 107155,
+      "chars_per_page": 5103,
+      "parse_seconds": 0.45,
+      "body_font_size": 9.96,
+      "headings_detected": 3,
+      "canonical_sections": [
+        "method"
+      ],
+      "n_canonical": 1,
+      "verdict": "poor",
+      "core_sections_found": [
+        "method"
+      ]
+    },
+    {
+      "name": "raptor",
+      "pages": 23,
+      "chars": 75707,
+      "chars_per_page": 3292,
+      "parse_seconds": 0.33,
+      "body_font_size": 9.96,
+      "headings_detected": 22,
+      "canonical_sections": [
+        "abstract",
+        "conclusion",
+        "discussion",
+        "experiments",
+        "introduction",
+        "method",
+        "references",
+        "related_work"
+      ],
+      "n_canonical": 8,
+      "verdict": "usable",
+      "core_sections_found": [
+        "abstract",
+        "conclusion",
+        "experiments",
+        "introduction",
+        "method",
+        "related_work"
+      ]
+    },
+    {
+      "name": "self-rag",
+      "pages": 30,
+      "chars": 103664,
+      "chars_per_page": 3455,
+      "parse_seconds": 0.09,
+      "body_font_size": 9.96,
+      "headings_detected": 21,
+      "canonical_sections": [
+        "abstract",
+        "appendix",
+        "conclusion",
+        "experiments",
+        "introduction",
+        "limitations",
+        "references",
+        "related_work",
+        "results"
+      ],
+      "n_canonical": 9,
+      "verdict": "usable",
+      "core_sections_found": [
+        "abstract",
+        "conclusion",
+        "experiments",
+        "introduction",
+        "related_work",
+        "results"
+      ]
+    },
+    {
+      "name": "sentence-bert",
+      "pages": 11,
+      "chars": 42880,
+      "chars_per_page": 3898,
+      "parse_seconds": 0.04,
+      "body_font_size": 9.96,
+      "headings_detected": 90,
+      "canonical_sections": [
+        "abstract",
+        "conclusion",
+        "discussion",
+        "experiments",
+        "introduction",
+        "method",
+        "references",
+        "related_work",
+        "results"
+      ],
+      "n_canonical": 9,
+      "verdict": "usable",
+      "core_sections_found": [
+        "abstract",
+        "conclusion",
+        "experiments",
+        "introduction",
+        "method",
+        "related_work",
+        "results"
+      ]
+    }
+  ]
+}

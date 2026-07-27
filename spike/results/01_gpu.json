@@ -1,0 +1,25 @@
+{
+  "python": "3.12.9",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "torch_version": "2.11.0+cu128",
+  "torch_cuda_build": "12.8",
+  "cuda_available": true,
+  "device_name": "NVIDIA GeForce RTX 5060 Laptop GPU",
+  "compute_capability": "12.0",
+  "sm": "sm_120",
+  "vram_total_gb": 7.96,
+  "multiprocessors": 26,
+  "arch_list": [
+    "sm_75",
+    "sm_80",
+    "sm_86",
+    "sm_90",
+    "sm_100",
+    "sm_120"
+  ],
+  "native_kernels": true,
+  "matmul_ok": true,
+  "matmul_max_abs_err": 0.00048828125,
+  "fp16_matmul_tflops": 29.0,
+  "vram_free_gb": 6.7
+}

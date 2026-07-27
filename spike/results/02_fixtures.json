@@ -1,0 +1,185 @@
+{
+  "downloaded_ok": 20,
+  "requested": 20,
+  "total_fixtures": 23,
+  "records": [
+    {
+      "arxiv_id": "1706.03762",
+      "name": "attention-is-all-you-need",
+      "category": "clean",
+      "ok": true,
+      "status": "downloaded",
+      "bytes": 2215244
+    },
+    {
+      "arxiv_id": "1810.04805",
+      "name": "bert",
+      "category": "clean",
+      "ok": true,
+      "status": "downloaded",
+      "bytes": 775166
+    },
+    {
+      "arxiv_id": "1908.10084",
+      "name": "sentence-bert",
+      "category": "clean",
+      "ok": true,
+      "status": "downloaded",
+      "bytes": 548961
+    },
+    {
+      "arxiv_id": "2004.04906",
+      "name": "dpr",
+      "category": "clean",
+      "ok": true,
+      "status": "downloaded",
+      "bytes": 383508
+    },
+    {
+      "arxiv_id": "2005.11401",
+      "name": "rag-lewis",
+      "category": "clean",
+      "ok": true,
+      "status": "downloaded",
+      "bytes": 885323
+    },
+    {
+      "arxiv_id": "2112.09118",
+      "name": "contriever",
+      "category": "clean",
+      "ok": true,
+      "status": "downloaded",
+      "bytes": 686136
+    },
+    {
+      "arxiv_id": "2201.11903",
+      "name": "chain-of-thought",
+      "category": "clean",
+      "ok": true,
+      "status": "downloaded",
+      "bytes": 891773
+    },
+    {
+      "arxiv_id": "2310.11511",
+      "name": "self-rag",
+      "category": "clean",
+      "ok": true,
+      "status": "downloaded",
+      "bytes": 1405127
+    },
+    {
+      "arxiv_id": "2401.18059",
+      "name": "raptor",
+      "category": "clean",
+      "ok": true,
+      "status": "downloaded",
+      "bytes": 2547113
+    },
+    {
+      "arxiv_id": "2307.03172",
+      "name": "lost-in-the-middle",
+      "category": "tables",
+      "ok": true,
+      "status": "downloaded",
+      "bytes": 747542
+    },
+    {
+      "arxiv_id": "2104.08663",
+      "name": "beir",
+      "category": "tables",
+      "ok": true,
+      "status": "downloaded",
+      "bytes": 2094824
+    },
+    {
+      "arxiv_id": "2212.03533",
+      "name": "e5-embeddings",
+      "category": "tables",
+      "ok": true,
+      "status": "downloaded",
+      "bytes": 484956
+    },
+    {
+      "arxiv_id": "2309.07597",
+      "name": "bge-c-pack",
+      "category": "tables",
+      "ok": true,
+      "status": "downloaded",
+      "bytes": 1332241
+    },
+    {
+      "arxiv_id": "2302.13971",
+      "name": "llama",
+      "category": "tables",
+      "ok": true,
+      "status": "downloaded",
+      "bytes": 726566
+    },
+    {
+      "arxiv_id": "2007.14062",
+      "name": "big-bird",
+      "category": "tables",
+      "ok": true,
+      "status": "downloaded",
+      "bytes": 1153823
+    },
+    {
+      "arxiv_id": "2105.03011",
+      "name": "qasper",
+      "category": "tables",
+      "ok": true,
+      "status": "downloaded",
+      "bytes": 506609
+    },
+    {
+      "arxiv_id": "2005.14165",
+      "name": "gpt-3",
+      "category": "long",
+      "ok": true,
+      "status": "downloaded",
+      "bytes": 6768044
+    },
+    {
+      "arxiv_id": "2307.09288",
+      "name": "llama-2",
+      "category": "long",
+      "ok": true,
+      "status": "downloaded",
+      "bytes": 13661300
+    },
+    {
+      "arxiv_id": "2312.10997",
+      "name": "rag-survey",
+      "category": "long",
+      "ok": true,
+      "status": "downloaded",
+      "bytes": 1662567
+    },
+    {
+      "arxiv_id": "2303.08774",
+      "name": "gpt-4-report",
+      "category": "long",
+      "ok": true,
+      "status": "downloaded",
+      "bytes": 5245564
+    },
+    {
+      "name": "_broken-scanned",
+      "category": "broken",
+      "kind": "image-only",
+      "bytes": 12626564
+    },
+    {
+      "name": "_broken-encrypted",
+      "category": "broken",
+      "kind": "encrypted",
+      "bytes": 2180762
+    },
+    {
+      "name": "_broken-empty",
+      "category": "broken",
+      "kind": "no-text",
+      "bytes": 518
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "budget_ms": 2000,
+  "viable": [
+    "ms-marco-MiniLM-L6-v2 fp32@top20",
+    "ms-marco-MiniLM-L6-v2 fp32@top30"
+  ],
+  "records": [
+    {
+      "model": "BAAI/bge-reranker-base",
+      "quantized": false,
+      "threads": 16,
+      "top10_p50_ms": 1291.6,
+      "top10_max_ms": 1323.0,
+      "top20_p50_ms": 2679.1,
+      "top20_max_ms": 2753.8,
+      "top30_p50_ms": 4249.7,
+      "top30_max_ms": 4835.7
+    },
+    {
+      "model": "BAAI/bge-reranker-base",
+      "quantized": true,
+      "error": "AttributeError()"
+    },
+    {
+      "model": "cross-encoder/ms-marco-MiniLM-L6-v2",
+      "quantized": false,
+      "threads": 16,
+      "top10_p50_ms": 233.7,
+      "top10_max_ms": 240.1,
+      "top20_p50_ms": 493.0,
+      "top20_max_ms": 513.9,
+      "top30_p50_ms": 827.3,
+      "top30_max_ms": 844.7
+    },
+    {
+      "model": "cross-encoder/ms-marco-MiniLM-L6-v2",
+      "quantized": true,
+      "error": "AttributeError()"
+    }
+  ]
+}

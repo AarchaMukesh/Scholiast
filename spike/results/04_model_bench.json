@@ -1,0 +1,86 @@
+{
+  "n_chunks": 512,
+  "mean_chunk_chars": 1200,
+  "vram_total_gb": 7.96,
+  "vram_baseline_used_gb": 1.09,
+  "embedders": [
+    {
+      "model": "BAAI/bge-small-en-v1.5",
+      "device": "cuda",
+      "dim": 384,
+      "load_seconds": 35.41,
+      "vram_weights_gb": 0.14,
+      "throughput_chunks_per_s": {
+        "8": 196.0,
+        "16": 185.2,
+        "32": 176.6,
+        "64": 176.5
+      },
+      "peak_vram_gb": 2.37,
+      "query_embed_ms_p50": 7.2
+    },
+    {
+      "model": "BAAI/bge-base-en-v1.5",
+      "device": "cuda",
+      "dim": 768,
+      "load_seconds": 81.11,
+      "vram_weights_gb": 0.44,
+      "throughput_chunks_per_s": {
+        "8": 75.8,
+        "16": 68.9,
+        "32": 65.3,
+        "64": 64.4
+      },
+      "peak_vram_gb": 3.83,
+      "query_embed_ms_p50": 8.6
+    }
+  ],
+  "embedder_cpu": {
+    "model": "BAAI/bge-base-en-v1.5",
+    "device": "cpu",
+    "dim": 768,
+    "load_seconds": 6.52,
+    "vram_weights_gb": null,
+    "throughput_chunks_per_s": {
+      "8": 6.9,
+      "16": 6.2,
+      "32": 5.2,
+      "64": 5.3
+    },
+    "peak_vram_gb": null,
+    "query_embed_ms_p50": 29.1
+  },
+  "reranker_gpu": {
+    "model": "BAAI/bge-reranker-base",
+    "device": "cuda",
+    "load_seconds": 213.19,
+    "vram_weights_gb": 0.72,
+    "rerank_20_ms_p50": 293.8,
+    "rerank_20_ms_p95": 327.5,
+    "rerank_50_ms_p50": 739.1,
+    "rerank_50_ms_p95": 743.4,
+    "peak_vram_gb": 3.15
+  },
+  "reranker_cpu": {
+    "model": "BAAI/bge-reranker-base",
+    "device": "cpu",
+    "load_seconds": 7.22,
+    "vram_weights_gb": null,
+    "rerank_20_ms_p50": 3129.2,
+    "rerank_20_ms_p95": 3369.4,
+    "rerank_50_ms_p50": 9059.3,
+    "rerank_50_ms_p95": 9554.5,
+    "peak_vram_gb": null
+  },
+  "coresident": {
+    "baseline_gb": 1.14,
+    "both_resident_peak_gb": 3.5,
+    "models_cost_gb": 2.36
+  },
+  "verdicts": {
+    "nfr_p7_embedding": false,
+    "nfr_p2_rerank_gpu": true,
+    "dep2_rerank_cpu_top20": false,
+    "asm4_fits": true
+  }
+}

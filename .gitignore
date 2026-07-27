@@ -1,0 +1,41 @@
+# --- Design docs (D12: kept local, not committed) ---------------------------
+# Reversible: delete this line to publish the design docs.
+docs/
+
+# --- Spike artifacts --------------------------------------------------------
+# fixtures/ excluded: ~45 MB of re-downloadable arXiv PDFs.
+# results/ IS committed — the JSON files are the evidence behind SPIKE-FINDINGS.md.
+spike/fixtures/
+spike/.venv/
+
+# --- Python -----------------------------------------------------------------
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# --- Models / data caches ---------------------------------------------------
+models/
+.cache/
+*.gguf
+*.onnx
+
+# --- Secrets ----------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
+# --- Editors / OS -----------------------------------------------------------
+.idea/
+.vscode/
+*.swp
+Thumbs.db
+Desktop.ini

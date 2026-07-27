@@ -1,0 +1,81 @@
+{
+  "n_loadable": 3,
+  "qasper_verdict": {
+    "usable": false,
+    "reason": "failed to load"
+  },
+  "records": [
+    {
+      "dataset": "allenai/qasper",
+      "config": null,
+      "split": "validation",
+      "why": "Questions over NLP papers WITH evidence paragraphs \u2014 the closest fit to D-RET",
+      "ok": false,
+      "error": "RuntimeError: Dataset scripts are no longer supported, but found qasper.py",
+      "trace_tail": "RuntimeError: Dataset scripts are no longer supported, but found qasper.py"
+    },
+    {
+      "dataset": "BeIR/scifact",
+      "config": "corpus",
+      "split": "corpus",
+      "why": "Ready-made scientific retrieval corpus (BEIR)",
+      "ok": true,
+      "n_rows": 5183,
+      "columns": [
+        "_id",
+        "title",
+        "text"
+      ],
+      "first_row_shape": {
+        "_id": "str(len=4): '4983'",
+        "title": "str(len=131): 'Microstructural development of human newborn cerebral white matter assessed in vivo by dif'",
+        "text": "str(len=1809): 'Alterations of the architecture of cerebral white matter in the developing human brain can'"
+      }
+    },
+    {
+      "dataset": "BeIR/scifact-qrels",
+      "config": null,
+      "split": "test",
+      "why": "Relevance judgments for BeIR/scifact \u2014 queries x doc relevance",
+      "ok": true,
+      "n_rows": 339,
+      "columns": [
+        "query-id",
+        "corpus-id",
+        "score"
+      ],
+      "first_row_shape": {
+        "query-id": "int",
+        "corpus-id": "int",
+        "score": "int"
+      }
+    },
+    {
+      "dataset": "BeIR/scidocs",
+      "config": "corpus",
+      "split": "corpus",
+      "why": "Scientific document retrieval; citation-based relevance",
+      "ok": true,
+      "n_rows": 25657,
+      "columns": [
+        "_id",
+        "title",
+        "text"
+      ],
+      "first_row_shape": {
+        "_id": "str(len=40): '632589828c8b9fca2c3a59e97451fde8fa7d188d'",
+        "title": "str(len=90): 'A hybrid of genetic algorithm and particle swarm optimization for recurrent network design'",
+        "text": "str(len=1588): 'An evolutionary recurrent network which automates the design of recurrent neural/fuzzy net'"
+      }
+    },
+    {
+      "dataset": "allenai/scifact",
+      "config": null,
+      "split": "train",
+      "why": "Claim verification with evidence sentences \u2014 seeds D-UNANS / entailment",
+      "ok": false,
+      "error": "RuntimeError: Dataset scripts are no longer supported, but found scifact.py",
+      "trace_tail": "RuntimeError: Dataset scripts are no longer supported, but found scifact.py"
+    }
+  ]
+}

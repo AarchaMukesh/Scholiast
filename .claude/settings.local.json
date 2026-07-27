@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(claude-api)",
+      "Skill(claude-api:*)",
+      "PowerShell(foreach \\($c in 'python','py','uv','pip','docker','node','npm','git','nvidia-smi','ollama','java','wsl'\\) { $cmd = Get-Command $c -ErrorAction SilentlyContinue; if \\($cmd\\) { Write-Output \\(\"FOUND    {0,-12} {1}\" -f $c, $cmd.Source\\) } else { Write-Output \\(\"MISSING  {0}\" -f $c\\) } })",
+      "PowerShell(nvidia-smi)",
+      "PowerShell(python --version)",
+      "PowerShell(wsl --status)"
+    ]
+  }
+}

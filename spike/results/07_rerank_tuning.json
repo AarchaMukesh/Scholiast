@@ -1,0 +1,60 @@
+{
+  "records": [
+    {
+      "model": "BAAI/bge-reranker-base",
+      "precision": "fp32",
+      "vram_weights_gb": 1.09,
+      "top10_p50_ms": 126.3,
+      "top10_p95_ms": 152.4,
+      "top20_p50_ms": 297.4,
+      "top20_p95_ms": 309.3,
+      "top30_p50_ms": 437.3,
+      "top30_p95_ms": 440.3,
+      "top50_p50_ms": 742.7,
+      "top50_p95_ms": 746.6,
+      "note": "278M \u2014 the design's default"
+    },
+    {
+      "model": "BAAI/bge-reranker-base",
+      "precision": "fp16",
+      "vram_weights_gb": 0.0,
+      "top10_p50_ms": 39.8,
+      "top10_p95_ms": 41.8,
+      "top20_p50_ms": 91.2,
+      "top20_p95_ms": 95.3,
+      "top30_p50_ms": 135.8,
+      "top30_p95_ms": 140.1,
+      "top50_p50_ms": 224.3,
+      "top50_p95_ms": 228.4,
+      "note": "278M \u2014 the design's default"
+    },
+    {
+      "model": "cross-encoder/ms-marco-MiniLM-L6-v2",
+      "precision": "fp32",
+      "vram_weights_gb": 0.01,
+      "top10_p50_ms": 28.6,
+      "top10_p95_ms": 31.3,
+      "top20_p50_ms": 64.4,
+      "top20_p95_ms": 67.8,
+      "top30_p50_ms": 96.0,
+      "top30_p95_ms": 102.7,
+      "top50_p50_ms": 153.2,
+      "top50_p95_ms": 159.0,
+      "note": "22M \u2014 speed reference"
+    },
+    {
+      "model": "cross-encoder/ms-marco-MiniLM-L6-v2",
+      "precision": "fp16",
+      "vram_weights_gb": 0.01,
+      "top10_p50_ms": 13.8,
+      "top10_p95_ms": 17.3,
+      "top20_p50_ms": 25.9,
+      "top20_p95_ms": 27.5,
+      "top30_p50_ms": 40.0,
+      "top30_p95_ms": 41.2,
+      "top50_p50_ms": 59.3,
+      "top50_p95_ms": 62.7,
+      "note": "22M \u2014 speed reference"
+    }
+  ]
+}

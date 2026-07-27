@@ -1,0 +1,36 @@
+{
+  "chunk_level_available": true,
+  "doc_level_available": true,
+  "records": [
+    {
+      "route": "A: refs/convert/parquet",
+      "ok": true,
+      "n_rows": 281,
+      "columns": [
+        "id",
+        "title",
+        "abstract",
+        "full_text",
+        "qas",
+        "figures_and_tables"
+      ]
+    },
+    {
+      "route": "C: BEIR scifact (document-level)",
+      "ok": true,
+      "n_queries": 1109,
+      "n_corpus": 5183,
+      "n_qrels": 339,
+      "query_columns": [
+        "_id",
+        "title",
+        "text"
+      ],
+      "sample_query": "0-dimensional biomaterials lack inductive properties.",
+      "sample_doc_chars": 1809,
+      "graded": [
+        1
+      ]
+    }
+  ]
+}
