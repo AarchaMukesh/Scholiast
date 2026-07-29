@@ -199,17 +199,20 @@ advantage only applies to the QASPER-derived set.
 
 ---
 
-## Design revisions to apply before M1
+## Design revisions — **all applied 2026-07-27**
 
-| ID | Change | Docs affected |
-|---|---|---|
-| REV-1 | Delete NFR-P7's asserted 200 chunks/s; derive from NFR-P6 | 3 |
-| REV-2 | **Specify fp16 for all local inference** | 6 §6.16, 7 §7.4 |
-| REV-3 | VRAM budget → **~6.8 GB usable**, not 8 GB | 5 §5.7, 6 §6.16 |
-| REV-4 | Production reranker = two measurable options; drop the ONNX-int8 assumption | 10 §10.3 |
-| REV-5 | Downgrade GROBID from required to *pending comparison* | 7 §7.4, 10 DEP-5 |
-| REV-6 | QASPER via pinned parquet revision + vendored snapshot | 9 §9.2 |
-| REV-7 | Add bge-small vs bge-base to the M2 ablation axes | 6 §6.17, 9 §9.3 |
+| ID | Change | Docs updated | Status |
+|---|---|---|---|
+| REV-1 | Delete NFR-P7's asserted 200 chunks/s; derive from NFR-P6 | 3 (NFR-P6/P7) | ✅ applied |
+| REV-2 | **Specify fp16 for all local inference** | 5 §5.7, 6 §6.16 + ML-8, 7 §7.4 | ✅ applied (→ **D18**) |
+| REV-3 | VRAM budget → **~6.8 GB usable**, not 8 GB | 5 §5.7, 6 §6.16, 0 baseline | ✅ applied (→ **D21**) |
+| REV-4 | Production reranker = two measurable options; drop the ONNX-int8 assumption | 10 §10.3 + DEP-2, 9 §9.3 | ✅ applied |
+| REV-5 | Downgrade GROBID from required to *pending comparison* | 7 §7.4, 10 DEP-5 | ✅ applied (→ **D19**) |
+| REV-6 | QASPER via pinned parquet revision + vendored snapshot | 9 §9.2 | ✅ applied (→ **D20**) |
+| REV-7 | Add bge-small vs bge-base to the M2 ablation axes | 6 §6.17, 9 §9.3 | ✅ applied |
+
+Four findings were consequential enough to become binding decisions in their own right:
+**D18** (fp16), **D19** (GROBID pending), **D20** (D-RET source), **D21** (RSK-16 escalated).
 
 ---
 
