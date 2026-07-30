@@ -1,0 +1,202 @@
+[project]
+name = "scholiast"
+version = "0.1.0"
+description = "Retrieval-and-reasoning platform for academic literature, with measured retrieval quality"
+requires-python = ">=3.12,<3.13"
+
+# Core service dependencies. Deliberately excludes torch/sentence-transformers —
+# see the [ml] extra. The API image should not carry a 2.5 GB CUDA wheel it
+# cannot use (doc 10 §10.4).
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "pydantic>=2.10",
+    "pydantic-settings>=2.7",
+    "sqlalchemy[asyncio]>=2.0",
+    "alembic>=1.14",
+    "asyncpg>=0.30",
+    "qdrant-client>=1.12",
+    "redis>=5.2",
+    "celery>=5.4",
+    "httpx>=0.28",
+    "structlog>=25.1",
+    "pyjwt>=2.10",
+    "argon2-cffi>=23.1",
+    "pymupdf>=1.25",
+    "prometheus-client>=0.21",
+    "python-multipart>=0.0.20",
+]
+
+[project.optional-dependencies]
+# Local inference. Installed on the worker and in dev, not in the API image.
+# NOTE: torch must come from the CUDA 12.8+ index for Blackwell (sm_120) —
+# see README. A plain `pip install torch` may silently give a CPU-only build.
+ml = [
+    "torch>=2.6",
+    "sentence-transformers>=3.4",
+    "transformers>=4.48",
+]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.25",
+    "pytest-cov>=6.0",
+    "ruff>=0.9",
+    "mypy>=1.14",
+    "import-linter>=2.1",
+    "testcontainers[postgres,redis]>=4.9",
+    "respx>=0.22",
+    "hypothesis>=6.123",
+    "schemathesis>=3.39",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/scholiast"]
+
+
+# ---------------------------------------------------------------------------
+# Architecture enforcement (doc 5 §5.3, doc 7 §7.9)
+#
+# This is the tool that turns "clean architecture" from an aspiration into a
+# build gate. Without it, layer discipline erodes silently; with it, a violation
+# fails CI. Configured in the first commit deliberately — retrofitted layer
+# rules never actually get retrofitted.
+# ---------------------------------------------------------------------------
+[tool.importlinter]
+root_package = "scholiast"
+# Required for the "Domain is framework-free" contract, which forbids imports of
+# third-party packages rather than internal modules.
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Layers: dependencies point inward only"
+type = "layers"
+layers = [
+    "scholiast.api | scholiast.workers",
+    "scholiast.infrastructure",
+    "scholiast.application",
+    "scholiast.domain",
+]
+exhaustive = false
+
+[[tool.importlinter.contracts]]
+# The claim "swapping the vector store is an adapter change" is only credible if
+# use cases cannot reach infrastructure. This is the contract that proves it.
+name = "Application depends on ports, never on adapters"
+type = "forbidden"
+source_modules = ["scholiast.application"]
+forbidden_modules = ["scholiast.infrastructure", "scholiast.api", "scholiast.workers"]
+
+[[tool.importlinter.contracts]]
+# Domain purity: stdlib only. No ORM, no web framework, no ML runtime.
+# This is what makes the domain testable with zero setup, and it is the single
+# most falsifiable architectural claim in the project.
+name = "Domain is framework-free"
+type = "forbidden"
+source_modules = ["scholiast.domain"]
+forbidden_modules = [
+    "fastapi",
+    "sqlalchemy",
+    "pydantic",
+    "httpx",
+    "celery",
+    "redis",
+    "qdrant_client",
+    "torch",
+    "sentence_transformers",
+    "transformers",
+]
+
+
+# ---------------------------------------------------------------------------
+# Linting / formatting
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",    # pycodestyle
+    "F",         # pyflakes
+    "I",         # isort
+    "N",         # pep8-naming
+    "UP",        # pyupgrade
+    "B",         # bugbear
+    "C4",        # comprehensions
+    "SIM",       # simplify
+    "RUF",       # ruff-specific
+    "ASYNC",     # async correctness
+    "S",         # bandit (security)
+    "DTZ",       # naive-datetime misuse
+    "PTH",       # prefer pathlib
+    "RET",       # return simplification
+    "ARG",       # unused arguments
+    "TID",       # tidy imports
+]
+ignore = [
+    "S101",   # assert — used deliberately in tests and invariants
+    "B008",   # function call in default arg — FastAPI's Depends() idiom
+    # N818 requires an `Error` suffix on exception names. Deliberately ignored:
+    # domain exceptions read as statements about the domain, and
+    # `WorkspaceNotQueryable` / `InvariantViolation` are clearer than
+    # `WorkspaceNotQueryableError` / `InvariantViolationError`. The suffix adds
+    # no information a reader lacks — the class inherits from Exception.
+    "N818",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["ARG", "S105", "S106"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["scholiast"]
+
+
+# ---------------------------------------------------------------------------
+# Type checking — strict on the layers where correctness is cheapest to enforce
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+warn_return_any = true
+disallow_untyped_defs = true
+no_implicit_reexport = true
+plugins = []
+
+[[tool.mypy.overrides]]
+# Third-party packages without complete stubs. Scoped narrowly and listed
+# explicitly rather than globally silenced.
+module = ["fitz.*", "qdrant_client.*", "sentence_transformers.*", "celery.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_defs = false
+
+
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers --strict-config"
+asyncio_mode = "auto"
+markers = [
+    "integration: needs real backing services via testcontainers",
+    "gpu: needs a CUDA device; skipped in CI (doc 10 §10.6)",
+    "slow: excluded from the default fast feedback loop",
+]
+
+[tool.coverage.run]
+source = ["src/scholiast"]
+branch = true
+omit = ["*/migrations/*"]
+
+[tool.coverage.report]
+# NFR-T1: 75% is a floor on core packages, not a target to game.
+exclude_lines = ["pragma: no cover", "if TYPE_CHECKING:", "raise NotImplementedError"]

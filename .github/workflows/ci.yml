@@ -1,0 +1,118 @@
+# CI pipeline (doc 10 §10.6).
+#
+# Ordered fastest-failing-first so a formatting mistake costs 15 seconds, not
+# four minutes. Two gates are unusual and deliberate:
+#
+#   architecture   `import-linter` fails the build on a layer violation. Without
+#                  it, "clean architecture" is an aspiration rather than a
+#                  property (doc 7 §7.9).
+#
+#   no-network     the default test run makes zero outbound calls and spends zero
+#                  API quota (NFR-T3). Enforced, not trusted.
+#
+# GPU tests are marked and skipped here — there is no free GPU runner. ML code
+# therefore runs on the CPU path in CI, which continuously verifies the exact
+# inference path production depends on (DEP-9).
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  quality:
+    name: Lint · types · architecture
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Install project
+        run: uv sync --extra dev
+
+      - name: Format check
+        run: uv run ruff format --check src tests
+
+      - name: Lint
+        run: uv run ruff check src tests
+
+      - name: Type check
+        run: uv run mypy src
+
+      # The gate that turns a design claim into a build property.
+      - name: Architecture contracts
+        run: uv run lint-imports
+
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Install project
+        run: uv sync --extra dev
+
+      # `-m "not gpu"` is the only exclusion. Integration tests bring their own
+      # services up via testcontainers, so they need no separate job.
+      - name: Run tests
+        run: >-
+          uv run pytest -m "not gpu"
+          --cov=scholiast --cov-report=xml --cov-report=term
+          --cov-fail-under=75
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.xml
+          if-no-files-found: ignore
+
+  security:
+    name: Dependency & secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # gitleaks needs history to scan commits
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Install project
+        run: uv sync --extra dev
+
+      - name: Audit dependencies
+        run: uvx pip-audit --strict --progress-spinner off
+
+      - name: Scan for committed secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
