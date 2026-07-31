@@ -1,0 +1,15 @@
+{
+  "model": "llama3.2:latest",
+  "rerank_idle_p50_ms": 46.8,
+  "generation_placement": "100% GPU",
+  "rerank_during_generation_p50_ms": 96.2,
+  "generation_slowdown_x": 2.05,
+  "generation_tps_contended": 103.9,
+  "rerank_during_embedding_p50_ms": 429.3,
+  "embedding_slowdown_x": 9.17,
+  "verdict": {
+    "worst_contended_ms": 429.3,
+    "nfr_p2_budget_ms": 800,
+    "needs_management": false
+  }
+}

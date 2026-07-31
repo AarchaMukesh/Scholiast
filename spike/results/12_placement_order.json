@@ -1,0 +1,27 @@
+{
+  "model": "llama3.2:latest",
+  "ordering_a": {
+    "placement_before": {
+      "size_gb": "2.6",
+      "processor": "100% GPU"
+    },
+    "tps_before": 123.1,
+    "placement_after": {
+      "size_gb": "2.6",
+      "processor": "100% GPU"
+    },
+    "tps_after": 120.1
+  },
+  "ordering_b": {
+    "retrieval_gb_torch_view": 2.54,
+    "placement": {
+      "size_gb": "2.6",
+      "processor": "100% GPU"
+    },
+    "tps": 125.0
+  },
+  "verdict": {
+    "fallback_gets_gpu_in_degraded_state": true,
+    "silent_cpu_fallback": false
+  }
+}

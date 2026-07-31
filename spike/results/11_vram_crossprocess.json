@@ -1,0 +1,22 @@
+{
+  "model": "llama3.2:latest",
+  "usable_budget_gb": 6.8,
+  "measurement_note": "Windows WDDM virtualises VRAM; nvidia-smi reports 0 MiB used and [N/A] per process on this GPU. No authoritative device-wide figure is available, so co-residency is demonstrated empirically instead.",
+  "ollama_residency": {
+    "size_gb": "2.6",
+    "processor": "100% CPU"
+  },
+  "torch_view_with_retrieval_gb": 2.08,
+  "solo_generation_tps": 20.9,
+  "contended_generation_tps": 18.0,
+  "rerank20_ms_idle_p50": 50.5,
+  "rerank20_ms_contended_p50": 58.2,
+  "rerank_slowdown_x": 1.15,
+  "torch_view_peak_gb": 2.2,
+  "ollama_residency_after": {
+    "size_gb": "2.6",
+    "processor": "100% CPU"
+  },
+  "coexisted_without_oom": true,
+  "cpu_only_tps": 17.6
+}

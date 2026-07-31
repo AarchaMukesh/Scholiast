@@ -16,8 +16,8 @@ results under `spike/results/`. All of it is throwaway by design.
 | 2 | Paper fixture set | ✅ done | 20 papers + 3 synthetic pathological cases |
 | 3 | Parser evaluation | ⚠️ partial | PyMuPDF baseline **95% PASS**; GROBID **blocked** (no Docker/WSL2) |
 | 4 | Model benchmark | ✅ done | **2 assumptions refuted**, both recoverable |
-| 5 | Free-tier providers | ⛔ blocked | Harness written; needs API keys |
-| 6 | Local LLM fallback | ⛔ blocked | Needs Ollama install |
+| 5 | Free-tier providers | ⛔ blocked | Harness written; **still needs API keys in `spike/.env`** |
+| 6 | Local LLM fallback | ✅ done | **PASS** — D21 resolved; 3B fits on GPU co-resident |
 | 7 | Eval dataset feasibility | ✅ done | **PASS** — QASPER recovered; RSK-2 contained |
 | 8 | Hosting sanity check | ⛔ not started | — |
 | 9 | This document | ✅ done | — |
@@ -185,6 +185,73 @@ Confirms the concern raised in §1.
 independent document-level IR baseline that validates the retrieval stack end-to-end
 against published numbers. Note BEIR's relevance is **binary**, so nDCG's graded
 advantage only applies to the QASPER-derived set.
+
+---
+
+## 6. Local generation fallback — **PASS**, D21 resolved
+
+Model: `llama3.2` (3B, Q4, 2.6 GB) via Ollama. Retrieval models resident in fp16.
+
+### Placement — the question that mattered
+
+D21 predicted a 7B would not fit and named a 3B or CPU-only as the fallbacks. The
+3B does better than "fits": it keeps the **GPU** even in the production ordering,
+where the retrieval models load *first* and generation loads after them.
+
+| Ordering | Placement | Throughput |
+|---|---|---|
+| Generation on an empty GPU | 100% GPU | 123.1 tok/s |
+| Generation, retrieval loaded after | 100% GPU | 120.1 tok/s |
+| **Retrieval first, then generation** *(production case)* | **100% GPU** | **125.0 tok/s** |
+| Forced CPU-only | 100% CPU | 17.6 tok/s |
+
+**Grammar-constrained JSON works**, and produced correct output on the first try:
+`{"ndcg": 0.74, "chunking": "Structure-aware", "citations": ["C2"]}` — right value,
+right citation. FR-C4's schema is structurally guaranteed on the local path, which
+is genuinely stronger than the API path's validate-and-repair.
+
+> **⚠️ Operational gotcha — placement is sticky within `keep_alive`.** An
+> intermediate run reported `100% CPU` at ~21 tok/s and briefly looked like a
+> refutation. Cause: the previous script ended with a deliberate `num_gpu: 0`
+> request, and the next run **reused the already-CPU-placed model** inside the
+> 5-minute `keep_alive` window. One forced-CPU request poisons every subsequent
+> one until the model unloads.
+>
+> **Action for the adapter:** never mix `num_gpu` settings against the same
+> loaded model, and **report actual placement** (`ollama ps`) rather than assuming
+> it — otherwise a silent CPU fallback masquerades as a working GPU path, which is
+> precisely the undisclosed degradation NFR-R4 forbids.
+
+### §5.7 contention baseline — the number that justifies the priority semaphore
+
+Measured with generation confirmed GPU-resident (an earlier attempt measured it
+while generation had silently moved to CPU, which understated the problem):
+
+| Condition | rerank top-20 | vs. idle |
+|---|---|---|
+| GPU idle | 47 ms | — |
+| During generation (103.9 tok/s) | 96 ms | 2.05× |
+| **During bulk embedding** | **429 ms** | **9.17×** |
+
+**Ingestion, not generation, is the threat to query latency** — exactly what
+§5.7 argued, now with a number. At the measured top-20 depth 429 ms still fits the
+800 ms budget, but the design specifies **top-50**, which costs 224 ms idle
+(fp16). *Projecting* the same 9.17× gives **~2,050 ms against an 800 ms budget** —
+roughly 2.5× over.
+
+So the priority semaphore and bounded ingestion batches are load-bearing rather
+than defensive. **This is the baseline M3's implementation is measured against.**
+(The top-50 figure is a projection from the measured top-20 slowdown, not a direct
+measurement — worth confirming once the semaphore exists.)
+
+---
+
+## Environment findings (not deliverables, but they bite)
+
+| # | Finding | Consequence |
+|---|---|---|
+| E1 | **Windows WDDM exposes no reliable cross-process VRAM accounting.** `nvidia-smi` reports `0 MiB` used and `[N/A]` per process; `torch.cuda.mem_get_info()` only sees the calling context. | Co-residency claims must be demonstrated **empirically** (run both, confirm no OOM and no CPU spill) rather than by summing per-model figures. Any VRAM total quoted in the docs is an estimate — say so. |
+| E2 | **A Windows Application Control policy blocks pyarrow's `_dataset` DLL.** Reinstalling does not help. | `datasets` is unusable on this machine — and because `sentence-transformers` 5.x imports it at module load, **installing `datasets` breaks the core ML path**. Mitigation is already mandated by D20: extract QASPER once and **vendor the snapshot as plain JSON**, then drop the `datasets` dependency entirely. |
 
 ---
 

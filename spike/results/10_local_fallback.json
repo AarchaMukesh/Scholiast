@@ -1,0 +1,56 @@
+{
+  "usable_vram_gb": 6.8,
+  "model": "llama3.2:latest",
+  "alone": {
+    "wall_seconds": 0.59,
+    "tokens": 27,
+    "tokens_per_second": 128.0,
+    "response": "The authors reported an nDCG@10 of 0.74. They used structure-aware chunking. [C2]",
+    "vram_total_used_gb": 1.09,
+    "ollama_ps": [
+      {
+        "name": "llama3.2:latest",
+        "size": "2.6 GB",
+        "processor": "100% GPU 4096 4 minutes from"
+      }
+    ]
+  },
+  "co_resident": {
+    "wall_seconds": 0.73,
+    "tokens": 27,
+    "tokens_per_second": 117.2,
+    "response": "The authors reported an nDCG@10 of 0.74. They used structure-aware chunking. [C2]",
+    "vram_retrieval_only_gb": 2.08,
+    "vram_peak_gb": 2.08,
+    "rerank20_ms_p50": 11.7,
+    "ollama_ps": [
+      {
+        "name": "llama3.2:latest",
+        "size": "2.6 GB",
+        "processor": "100% GPU 4096 4 minutes from"
+      }
+    ]
+  },
+  "cpu_only": {
+    "wall_seconds": 5.88,
+    "tokens": 27,
+    "tokens_per_second": 17.7,
+    "response": "The authors reported an nDCG@10 of 0.74. They used structure-aware chunking. [C2]"
+  },
+  "structured_output": {
+    "ok": true,
+    "parsed": {
+      "ndcg": 0.74,
+      "chunking": "Structure-aware",
+      "citations": [
+        "C2"
+      ]
+    }
+  },
+  "verdict": {
+    "headroom_gb": 4.44,
+    "model_cost_gb": 0.0,
+    "fits_co_resident": true,
+    "fully_gpu_resident": true
+  }
+}
