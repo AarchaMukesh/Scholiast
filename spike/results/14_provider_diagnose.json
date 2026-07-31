@@ -1,0 +1,53 @@
+{
+  "gemini": {
+    "key_prefix": "AQ.A",
+    "looks_like_api_key": false,
+    "list_models_status": 200,
+    "reachable": true,
+    "sample_models": [
+      "models/gemini-2.5-flash",
+      "models/gemini-2.5-pro",
+      "models/gemini-2.0-flash",
+      "models/gemini-2.0-flash-001",
+      "models/gemini-2.0-flash-lite-001"
+    ]
+  },
+  "groq_structured": [
+    {
+      "mode": "json_object",
+      "model": "llama-3.3-70b-versatile",
+      "ok": false,
+      "status": 400,
+      "error": "{\"error\":{\"message\":\"'messages' must contain the word 'json' in some form, to use 'response_format' of type 'json_object'.\",\"type\":\"invalid_request_error\"}}\n"
+    },
+    {
+      "mode": "json_schema",
+      "model": "llama-3.3-70b-versatile",
+      "ok": false,
+      "status": 400,
+      "error": "{\"error\":{\"message\":\"This model does not support response format `json_schema`. See supported models at https://console.groq.com/docs/structured-outputs#supported-models\",\"type\":\"invalid_request_error\",\"param\":\"response_format\"}}\n"
+    },
+    {
+      "mode": "json_object",
+      "model": "llama-3.1-8b-instant",
+      "ok": false,
+      "status": 400,
+      "error": "{\"error\":{\"message\":\"'messages' must contain the word 'json' in some form, to use 'response_format' of type 'json_object'.\",\"type\":\"invalid_request_error\"}}\n"
+    },
+    {
+      "mode": "json_schema",
+      "model": "llama-3.1-8b-instant",
+      "ok": false,
+      "status": 400,
+      "error": "{\"error\":{\"message\":\"This model does not support response format `json_schema`. See supported models at https://console.groq.com/docs/structured-outputs#supported-models\",\"type\":\"invalid_request_error\",\"param\":\"response_format\"}}\n"
+    }
+  ],
+  "groq_limits": {
+    "x-ratelimit-limit-requests": "1000",
+    "x-ratelimit-limit-tokens": "12000",
+    "x-ratelimit-remaining-requests": "995",
+    "x-ratelimit-remaining-tokens": "11959",
+    "x-ratelimit-reset-requests": "7m12s",
+    "x-ratelimit-reset-tokens": "205ms"
+  }
+}

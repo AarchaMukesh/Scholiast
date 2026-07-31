@@ -1,0 +1,53 @@
+{
+  "n_working": 1,
+  "records": [
+    {
+      "provider": "gemini",
+      "configured": true,
+      "model": "gemini-2.0-flash",
+      "status": 429,
+      "rate_limit_headers": {},
+      "ok": false,
+      "error": "{\n  \"error\": {\n    \"code\": 429,\n    \"message\": \"You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \\n* Quota ex"
+    },
+    {
+      "provider": "groq",
+      "configured": true,
+      "model": "llama-3.3-70b-versatile",
+      "base": "https://api.groq.com/openai/v1",
+      "status": 200,
+      "rate_limit_headers": {
+        "x-ratelimit-limit-requests": "1000",
+        "x-ratelimit-limit-tokens": "12000",
+        "x-ratelimit-remaining-requests": "999",
+        "x-ratelimit-remaining-tokens": "11594",
+        "x-ratelimit-reset-requests": "1m26.4s",
+        "x-ratelimit-reset-tokens": "2.029s",
+        "x-request-id": "req_01kyvneatper0r8qbhaf3e41t1"
+      },
+      "ok": true,
+      "latency_ms_median": 421,
+      "sample_answer": "The authors reported an nDCG@10 of 0.74 [C2], and they used structure-aware chunking, which splits documents at section boundaries rather than at fixed token counts [C1].",
+      "cited_correctly": true,
+      "streaming": true,
+      "ttft_ms": 255,
+      "stream_chunks": 44,
+      "structured_output": "unsupported (HTTP 400)"
+    },
+    {
+      "provider": "cerebras",
+      "configured": false,
+      "hint": "set CEREBRAS_API_KEY in spike/.env"
+    },
+    {
+      "provider": "openrouter",
+      "configured": false,
+      "hint": "set OPENROUTER_API_KEY in spike/.env"
+    },
+    {
+      "provider": "mistral",
+      "configured": false,
+      "hint": "set MISTRAL_API_KEY in spike/.env"
+    }
+  ]
+}

@@ -16,7 +16,7 @@ results under `spike/results/`. All of it is throwaway by design.
 | 2 | Paper fixture set | ✅ done | 20 papers + 3 synthetic pathological cases |
 | 3 | Parser evaluation | ⚠️ partial | PyMuPDF baseline **95% PASS**; GROBID **blocked** (no Docker/WSL2) |
 | 4 | Model benchmark | ✅ done | **2 assumptions refuted**, both recoverable |
-| 5 | Free-tier providers | ⛔ blocked | Harness written; **still needs API keys in `spike/.env`** |
+| 5 | Free-tier providers | ⚠️ partial | Groq works well; **Gemini has no generation quota** → chain has no secondary rung |
 | 6 | Local LLM fallback | ✅ done | **PASS** — D21 resolved; 3B fits on GPU co-resident |
 | 7 | Eval dataset feasibility | ✅ done | **PASS** — QASPER recovered; RSK-2 contained |
 | 8 | Hosting sanity check | ⛔ not started | — |
@@ -185,6 +185,87 @@ Confirms the concern raised in §1.
 independent document-level IR baseline that validates the retrieval stack end-to-end
 against published numbers. Note BEIR's relevance is **binary**, so nDCG's graded
 advantage only applies to the QASPER-derived set.
+
+---
+
+## 5. Free-tier providers — **PARTIAL**, and one finding forces a requirement change
+
+### Groq — works, and the answer quality is right
+
+| Metric | Result |
+|---|---|
+| Model | `llama-3.3-70b-versatile` |
+| Latency (median, 3 calls) | **421 ms** |
+| Time to first token | **255 ms** — comfortably inside NFR-P3's 3 s |
+| Streaming | ✅ 44 chunks |
+| Citation correctness | ✅ cited `[C1]` and `[C2]` correctly, evidence-only |
+
+Verbatim output, which is what a grounded answer should look like:
+
+> "The authors reported an nDCG@10 of 0.74 **[C2]**, and they used structure-aware
+> chunking, which splits documents at section boundaries rather than at fixed
+> token counts **[C1]**."
+
+**Structured output (FR-C4):** `json_schema` strict mode is **not supported** on
+Groq's Llama models. `json_object` mode **is**, but only if the prompt contains the
+word "json" — an easy requirement to miss, and the first attempt failed on exactly
+that rather than on a capability gap. With it, both models returned complete,
+correct objects: `{"ndcg": 0.74, "chunking": "structure-aware", "citations": ["C1","C2"]}`.
+
+So FR-C4 on the API path is *JSON mode + client-side validation + bounded repair*,
+which is weaker than strict schema enforcement. The **local** path's
+grammar-constrained decoding is the stronger of the two — a nice inversion of the
+usual assumption that the hosted model is the more capable option.
+
+### ⚠️ Rate limits are the binding capacity constraint — NFR-S4 must change
+
+| Header | Value |
+|---|---|
+| `x-ratelimit-limit-requests` | 1000 |
+| **`x-ratelimit-limit-tokens`** | **12,000 / minute** |
+
+A RAG request here is roughly 4–6k tokens of evidence plus the question and answer
+— call it ~6k. **12,000 TPM ÷ 6k ≈ 2 sustained requests per minute.**
+
+NFR-S4 targets 20 concurrent users. That is **not achievable on free-tier
+generation**, by roughly an order of magnitude. This is exactly the outcome doc 7
+§7.5 predicted ("quota may turn out to be the binding capacity constraint rather
+than CPU or RAM, which is a finding worth reporting") — now measured rather than
+speculated.
+
+**This reframes the local model.** At 125 tok/s fully GPU-resident (deliverable 6),
+local generation is no longer just a *fallback for outages* — it is the only path
+that can absorb sustained load. The provider chain becomes: local for throughput,
+hosted for quality-sensitive requests, with quota spent deliberately rather than
+by default.
+
+### Gemini — credential valid, but no generation quota
+
+| Check | Result |
+|---|---|
+| Key prefix | `AQ.A` — AI Studio API keys begin `AIza` |
+| `GET /v1beta/models` | **200 OK**, real models listed (`gemini-2.5-flash`, `gemini-2.0-flash`, …) |
+| `generateContent` | **429** — "You exceeded your current quota… check your plan and billing details" |
+
+The credential authenticates, so this is **not a wrong or expired key** — the
+project behind it has no generation quota allocated. The `AQ.` prefix suggests an
+OAuth-style token rather than an AI Studio API key.
+
+**Fix:** mint a proper key at <https://aistudio.google.com/apikey> (free tier,
+~1 minute). Distinguishing 429-from-401 mattered here: a 401 would have meant "bad
+key", and the wasted effort would have gone into re-pasting rather than re-minting.
+
+### D14 status
+
+**One working provider.** The chain has a primary and no secondary, so
+provider-failover (the second rung of the degradation ladder) is currently
+untestable. Cheapest fixes: a proper Gemini key, or a Cerebras / OpenRouter key
+(both free, ~2 minutes each).
+
+> **RSK-15 still open.** Data-use terms cannot be probed programmatically. Groq's
+> and Google's policies need reading and recording before either is used with
+> user-uploaded manuscripts — it decides whether `private_papers_local_only`
+> defaults to on (D17).
 
 ---
 
