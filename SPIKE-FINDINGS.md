@@ -262,10 +262,36 @@ provider-failover (the second rung of the degradation ladder) is currently
 untestable. Cheapest fixes: a proper Gemini key, or a Cerebras / OpenRouter key
 (both free, ~2 minutes each).
 
-> **RSK-15 still open.** Data-use terms cannot be probed programmatically. Groq's
-> and Google's policies need reading and recording before either is used with
-> user-uploaded manuscripts — it decides whether `private_papers_local_only`
-> defaults to on (D17).
+### RSK-15 — data-use terms **read and recorded**, and they invert the provider preference
+
+The one M0 question that could not be probed programmatically. Both policies read
+2026-07-27; **terms change, so re-check before launch.**
+
+| Provider | Trains on submitted content? | Human review? |
+|---|---|---|
+| **Groq** (GroqCloud) | **No** — "Groq is not permitted to use Inputs or Outputs for training or fine-tuning any AI Model Services or other models, unless explicitly granted permission or instructed by Customer." Zero-data-retention is additionally available to eligible customers. | Not for model improvement |
+| **Google Gemini — free tier** | **Yes** — "Google uses the content you submit to the Services and any generated responses to provide, improve, and develop Google products and services." | **Yes** — "Human reviewers may read, annotate, and process your API input and output" (disconnected from account/key first) |
+| Google Gemini — **paid** tier | No — "Google doesn't use your prompts… or responses to improve our products" | Retained only for abuse detection and legal compliance |
+
+Sources: [Gemini API Additional Terms of Service](https://ai.google.dev/gemini-api/terms) ·
+[Groq Services Agreement](https://console.groq.com/docs/legal/services-agreement) ·
+[Your Data in GroqCloud](https://console.groq.com/docs/your-data)
+
+> **⚠️ This reverses doc 7 §7.5's assumption.** That section named Gemini the
+> "strong first candidate" on capability grounds — long context, native JSON
+> schema, generous limits. On **data terms** it is the worst option in the
+> shortlist for this product, because the free tier is exactly the tier we would
+> use, and this system ingests documents that may be **unpublished manuscripts**.
+> Sending those to a tier that trains on them and may put them in front of human
+> reviewers is not a theoretical privacy concern.
+>
+> **Groq becomes the preferred primary** — contractually prohibited from training
+> on Inputs/Outputs, which is a stronger guarantee than "we probably won't".
+
+**Consequences (D29, D30):** `private_papers_local_only` defaults **on** whenever a
+training-on-free-tier provider is in the chain; provider selection now weighs data
+terms alongside latency and quota; and the README must state plainly which
+provider sees user content.
 
 ---
 
