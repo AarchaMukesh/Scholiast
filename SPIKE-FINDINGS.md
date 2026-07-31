@@ -71,16 +71,68 @@ them makes the failure-taxonomy tests deterministic and reproducible.
 | FR-I9 pathological detection | **3/3** (encrypted → `UNPARSEABLE`; image-only + empty → `SCANNED_IMAGE`) |
 | Mean parse time | 339 ms/paper (worst 2.4 s on 75 pp) — far inside NFR-P6's 90 s |
 
-**This is PyMuPDF + heading heuristics alone, with no GROBID.**
+**This is PyMuPDF + heading heuristics alone, with no GROBID.** The caveat recorded
+at the time — *"the metric is heading detection, a proxy"* — turned out to be the
+whole story. See below.
 
-> **⚠️ REV-5 — GROBID's justification is weaker than doc 7 §7.4 assumed.** A 95% hit rate
-> from the fallback path substantially undercuts the case for adding a Java container,
-> which was also the awkward part of DEP-5's production story.
->
-> **Honest caveat:** the metric is *heading detection*, a proxy. GROBID additionally
-> provides section **boundaries**, hierarchy, reference parsing, and figure/table
-> captions — none measured here. **Do not drop GROBID on this evidence alone**; run the
-> comparison once Docker is available, then decide with both numbers.
+### GROBID comparison — **D19 resolved: adopt GROBID (CRF image)**
+
+Run against the same 20 fixtures. The proxy metric flattered PyMuPDF badly:
+
+| Capability | GROBID | PyMuPDF (as implemented) |
+|---|---|---|
+| Extraction success | 20/20 | 20/20 |
+| **Sections with body text** | **659 of 694 (95%)**, mean 55k chars/paper | **none** |
+| Structured title / abstract | 20/20 | — |
+| Parsed references | 20/20 (1,656 total, 37–194/paper) | — |
+| Figure/table elements | 20/20 (6–74/paper) | — |
+| Distinct canonical section kinds | 6.6 avg | **7.9 avg** |
+| Cost per paper | 3.1 s | 0.34 s |
+| Pathological PDFs | 3/3 rejected, typed codes | 3/3 detected |
+
+**The decisive result is the section-bodies row, and it is architectural.**
+`StructureAwareChunker` takes `ParsedSection(kind, path, blocks)` — it needs section
+*content*, not section *headings*. PyMuPDF as measured in script 03 cannot feed the
+chunker at all, so the 95% figure was measuring something that does not satisfy the
+input contract.
+
+*Honest qualification:* PyMuPDF **could** be extended to assign inter-heading text to
+sections. But we now have direct evidence its heading detection is unreliable — it
+reports **more** canonical kinds than GROBID (7.9 vs 6.6, i.e. it over-matches
+subsection and back-matter headings into taxonomy buckets), and it failed outright on
+`rag-survey` (1 canonical section, "poor") where GROBID found 5. Building boundaries
+on top of a detector with known false positives would propagate those errors into
+chunking, and chunking errors are what the attribution defence exists to prevent.
+
+**Two other things GROBID supplies that were not in the original justification:**
+structured title/authors (feeds FR-D3 deduplication) and parsed references
+(a prerequisite for any future citation-graph work).
+
+### ⚠️ Use the CRF image, not the default tag
+
+The obvious tag is a trap. `grobid/grobid:0.8.1` is the deep-learning build:
+**12.5 GB compressed / 32.5 GB on disk** — which is what made DEP-5's production
+story awkward. The CRF-only build is functionally equivalent here:
+
+| | `0.8.1` (full) | **`0.8.2.1-crf`** |
+|---|---|---|
+| Image size | 12.5 GB / 32.5 GB on disk | **0.41 GB / 1.46 GB on disk** |
+| Canonical sections/paper | 6.6 | **6.6** |
+| Section bodies · title · abstract · refs · figures | 20/20 | **20/20** |
+| Seconds per paper | 5.58 | **3.1** |
+| References parsed | 1,697 | 1,656 (−2%) |
+| Body chars extracted | 1,107,604 | **1,244,200 (+12%)** |
+
+Only 2 of 20 papers differ in canonical count. **30× smaller, 1.8× faster, no
+measurable loss** — the DL models mainly sharpen citation parsing, which is not a
+capability this project depends on. The deployment objection to GROBID largely
+evaporates at 0.41 GB.
+
+**Adopted:** GROBID `0.8.2.1-crf` for structure; **PyMuPDF retained** for page and
+character offsets, which TEI does not provide and FR-I5's exact-span citations
+require. Two tools, one job each — as doc 7 §7.4 originally proposed.
+
+At 3.1 s/paper, ingestion sits far inside NFR-P6's 90 s budget.
 
 ---
 
