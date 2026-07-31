@@ -19,7 +19,7 @@ results under `spike/results/`. All of it is throwaway by design.
 | 5 | Free-tier providers | ⚠️ partial | Groq works well; **Gemini has no generation quota** → chain has no secondary rung |
 | 6 | Local LLM fallback | ✅ done | **PASS** — D21 resolved; 3B fits on GPU co-resident |
 | 7 | Eval dataset feasibility | ✅ done | **PASS** — QASPER recovered; RSK-2 contained |
-| 8 | Hosting sanity check | ⛔ not started | — |
+| 8 | Hosting sanity check | ✅ done | **ASM-9 confirmed** — fits, but 2 ARM cores means production latency must be re-measured |
 | 9 | This document | ✅ done | — |
 
 ---
@@ -402,6 +402,98 @@ So the priority semaphore and bounded ingestion batches are load-bearing rather
 than defensive. **This is the baseline M3's implementation is measured against.**
 (The top-50 figure is a projection from the measured top-20 slowdown, not a direct
 measurement — worth confirming once the semaphore exists.)
+
+---
+
+## 8. Hosting (ASM-9) — **viable, but slower than the local numbers imply**
+
+Researched 2026-07-27. **Free tiers change constantly — re-verify before M6.**
+
+### What is actually available
+
+| Service | Free tier | Catch |
+|---|---|---|
+| **Oracle Cloud Always Free** | **2 OCPU / 12 GB RAM**, ARM Ampere A1, 200 GB disk | **Halved from 4/24 on 2026-06-15, unannounced** ([InfoQ](https://www.infoq.com/news/2026/07/oracle-cloud-free-tier-limits/)). ARM — needs `arm64` images. |
+| **Hugging Face Spaces** | 2 vCPU / **16 GB RAM**, 50 GB disk | Disk is **ephemeral**; persistent storage is paid |
+| **Neon** (Postgres) | 0.5 GB storage, 100 CU-hours/mo | **Scale-to-zero after 5 min idle** → cold start on first query |
+| **Supabase** (Postgres) | 500 MB, 2 projects | Always-on compute; pauses after ~1 week total inactivity |
+| **Upstash** (Redis) | 256 MB, **500K commands/month** | See the Celery warning below |
+| **Qdrant Cloud** | 0.5 vCPU / **1 GB RAM** / 4 GB disk | "Free forever", single node |
+
+### Does the workload fit?
+
+**Vector store — yes, and int8 quantization is what makes it fit.** At 768 dimensions:
+
+| Encoding | Bytes/vector | Fits in Qdrant's 1 GB |
+|---|---|---|
+| fp32 | 3,072 | ~330k vectors |
+| **int8 (REV-3 / §6.4)** | ~768 | **~1.3M vectors** |
+
+The demo corpus (~100k chunks) is 300 MB at fp32 or **75 MB at int8**. Either fits,
+but int8 is what keeps headroom for NFR-S3's 1M-vector design target. **Quantization
+was specified as a scaling nicety; on free-tier hosting it is load-bearing.**
+
+**Postgres — yes.** ~50 MB of chunk text per 100 papers, so 0.5 GB covers roughly a
+thousand papers. Neon's scale-to-zero is the real cost: the first query after idle
+pays a cold start, which is bad in a live demo. Supabase's always-on compute is the
+better trade for demo purposes despite less storage.
+
+> **⚠️ Celery on Upstash free will not work.** 500K commands/month is ~16k/day, and a
+> Celery broker **polls** — it burns commands while completely idle. This is the first
+> concrete argument for the Postgres-as-queue option (`SELECT … FOR UPDATE SKIP
+> LOCKED`) that doc 7 §7.3 considered and rejected. Rejecting it was right for local
+> development; for free-tier deployment it removes a dependency *and* a quota risk.
+> **Revisit at M3.**
+
+### The question D26 forced: where does generation run?
+
+With local generation now the throughput path, this is the decisive constraint —
+and no free tier offers a GPU.
+
+**Only Oracle's VM can host the local model at all**, and its 12 GB budget is the
+binding number:
+
+```
+Postgres/Qdrant/Redis  → managed, off-box (0 GB)
+API service                         ~0.5 GB
+Celery/worker                       ~1.0 GB
+GROBID CRF (JVM)                  ~2.0-4.0 GB
+Ollama 3B Q4                        ~3.0 GB
+OS + headroom                       ~1.5 GB
+                                   ─────────
+                                  ~8-10 GB of 12 GB   ✅ fits
+```
+
+**Recommended topology:** managed data services (Supabase + Qdrant Cloud + Upstash
+for cache only) + **one Oracle ARM VM** running API, worker, GROBID, and Ollama.
+Frontend on any static host.
+
+### ⚠️ The honest part: published latency must be re-derived, not reused
+
+Every CPU number in this document was measured on **16 logical x86 cores**. The
+target is **2 ARM cores**. Rough projections — *projections, not measurements*:
+
+| Operation | Measured (16-core x86) | Projected (2-core ARM) |
+|---|---|---|
+| Embedding | 6.9 chunks/s | ~1–2 chunks/s → ~2 min for a 150-chunk paper |
+| Rerank top-20 (MiniLM) | 493 ms | ~3–4 s → **over DEP-2's 2,000 ms budget** |
+| Generation (3B) | 17.6 tok/s | ~3–5 tok/s → ~45 s for a 200-token answer |
+
+So the deployed instance is **functional but slow**, and DEP-2's production budget
+will not survive contact with 2 ARM cores. Doc 10 §10.3 already commits to
+publishing separate production targets rather than reusing local ones — that
+commitment now has to be honoured with a third set of numbers, measured on the
+actual VM.
+
+**Consequence for the demo (doc 8 M6):** the roadmap's stated fallback — *reproducible
+local deployment plus a recorded walkthrough* — is now the **recommended primary**,
+not the contingency. Live-demo the GPU machine, where reranking is 224 ms and
+generation 125 tok/s; keep the deployed instance as proof the system runs on
+commodity infrastructure, serving a pre-ingested corpus with its own published
+(slower) numbers.
+
+That is a more honest artifact than a deployed demo that is quietly 10× slower than
+the numbers in the eval report.
 
 ---
 
