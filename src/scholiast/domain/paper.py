@@ -123,9 +123,15 @@ class PaperVisibility(StrEnum):
 class Provenance:
     """Exactly where a chunk came from (FR-I5).
 
-    Character offsets are into the parsed document text, not the PDF byte stream,
-    so they survive re-extraction with the same parser version. `parser_version`
-    is therefore part of the contract, not metadata.
+    Character offsets index the parsed **section** text (`sections.text`, D42),
+    not the PDF byte stream and not the whole document — so they survive
+    re-extraction with the same parser version, and `parser_version` is part of
+    the contract rather than metadata.
+
+    Section-relative is total rather than merely convenient: chunking rule 1
+    guarantees no chunk ever crosses a section boundary, so no span can straddle
+    two sections and become ambiguous. Resolving a citation is one join —
+    chunk → its section row → slice.
     """
 
     paper_id: str

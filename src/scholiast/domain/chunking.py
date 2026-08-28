@@ -71,10 +71,11 @@ class BlockKind(StrEnum):
 class ParsedBlock:
     """A contiguous run of text with a known kind and source position.
 
-    `char_start`/`char_end` are offsets into the **canonical parsed text** — the
-    document text the parser adapter assembles and persists, not the PDF byte
-    stream. That is what lets a citation highlight an exact span (FR-I5) while
-    surviving re-extraction by the same parser version.
+    `char_start`/`char_end` are offsets into the **canonical parsed section
+    text** — what the parser adapter assembles and persists as `sections.text`
+    (D42), not the PDF byte stream. Offsets restart at 0 in each section. That is
+    what lets a citation highlight an exact span (FR-I5) while surviving
+    re-extraction by the same parser version.
 
     The length invariant below is what makes offset arithmetic sound: chunk spans
     are derived by adding within-block positions to `char_start`, which is only
