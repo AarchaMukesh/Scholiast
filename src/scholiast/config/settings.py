@@ -36,6 +36,10 @@ class Settings(BaseSettings):
         default=PostgresDsn("postgresql+asyncpg://scholiast:scholiast@localhost:5432/scholiast"),
     )
     qdrant_url: str = "http://localhost:6333"
+    #: One collection for every tenant, filtered by payload (AD-4). Tenant count
+    #: is the dimension expected to grow, and per-tenant indexes are the classic
+    #: multi-tenancy scaling trap.
+    qdrant_collection: str = "scholiast_chunks"
     redis_url: str = "redis://localhost:6379/0"
     grobid_url: str = "http://localhost:8070"
 
@@ -50,6 +54,10 @@ class Settings(BaseSettings):
     #: fp16 is specified, not preferred (D18) — fp32 reranking is 3.3x slower
     #: and consumes ~93% of NFR-P2's whole-stage budget by itself.
     embedding_precision: str = "fp16"
+    #: Bounded ingestion batches (§5.7). M2 tightens this to the ~50-100 ms the
+    #: priority semaphore needs, once a reranker exists to contend for the GPU.
+    embedding_batch_size: int = 32
+    embedding_dimensions: int = 768
 
     # -- generation --------------------------------------------------------
     #: Local carries sustained load; hosted quota is a deliberate spend (D26).
