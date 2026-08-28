@@ -20,6 +20,11 @@ venv/
 htmlcov/
 .coverage
 
+# --- Local object store -----------------------------------------------------
+# OBJECT_STORE_PATH defaults to ./var/objects: uploaded PDFs and the canonical
+# parsed text. User content, and rebuildable — never committed.
+var/
+
 # --- Models / data caches ---------------------------------------------------
 models/
 .cache/

@@ -11,6 +11,7 @@ scores is the reason hybrid retrieval works at all here (doc 6 §6.6).
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum, unique
@@ -157,13 +158,27 @@ class CitationStatus(StrEnum):
 
 @dataclass(frozen=True, slots=True)
 class Citation:
-    """A link from an answer span to the chunk that supports it."""
+    """A link from an answer span to the chunk that supports it.
+
+    `chunk_id` is None exactly when the label was fabricated — there is no chunk
+    to point at. Tying the two together as an invariant means a fabricated
+    citation cannot be mistaken for a resolved one by a caller that forgot to
+    check `status`.
+    """
 
     label: str
-    chunk_id: str
+    chunk_id: str | None
     claim_text: str
     status: CitationStatus
     entailment_score: float | None = None
+
+    def __post_init__(self) -> None:
+        fabricated = self.status is CitationStatus.FABRICATED
+        if fabricated != (self.chunk_id is None):
+            raise InvariantViolation(
+                f"citation {self.label!r}: chunk_id must be None iff the label was "
+                f"fabricated (status={self.status}, chunk_id={self.chunk_id!r})"
+            )
 
     @property
     def is_trustworthy(self) -> bool:
@@ -264,3 +279,130 @@ class EvidenceSet:
         """
         top = self.top_score
         return top is None or top < threshold
+
+
+# ---------------------------------------------------------------------------
+# Citation integrity, layer 2 (doc 6 §6.11, FR-Q2)
+#
+# Layer 1 constrains the surface: the model may only cite [C1]…[Cn] labels that
+# were put in front of it. Layer 2 — here — checks that what came back is
+# actually from that set. It is deterministic, costs nothing, and catches the
+# crudest failure with certainty. Layer 3 (does the chunk *support* the claim?)
+# is entailment and arrives with the NLI adapter.
+#
+# The whole point is that a citation becomes a database lookup rather than a
+# string to be trusted.
+# ---------------------------------------------------------------------------
+
+#: A citation marker. Deliberately liberal about `[C1, C2]`: models emit it, it
+#: is unambiguous, and *dropping* it would be the worse failure — a real
+#: citation would silently vanish from the answer and inflate nothing, so the
+#: error would never surface.
+_CITATION_MARKER = re.compile(r"\[(C\d+(?:\s*,\s*C\d+)*)\]")
+_LABEL = re.compile(r"C\d+")
+
+#: Sentence boundaries, used only to attribute a claim to a citation. Kept
+#: separate from the chunker's splitter, which works on positioned blocks rather
+#: than on a plain string.
+_ANSWER_SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
+
+
+def _sentence_bounds(text: str) -> list[tuple[int, int]]:
+    bounds: list[tuple[int, int]] = []
+    cursor = 0
+    for match in _ANSWER_SENTENCE_END.finditer(text):
+        bounds.append((cursor, match.start()))
+        cursor = match.end()
+    bounds.append((cursor, len(text)))
+    return bounds
+
+
+def _claim_containing(text: str, position: int, bounds: Sequence[tuple[int, int]]) -> str:
+    for start, end in bounds:
+        if start <= position < end:
+            return text[start:end].strip()
+    return text.strip()
+
+
+@dataclass(frozen=True, slots=True)
+class CitationAudit:
+    """The outcome of checking an answer's citations against its evidence."""
+
+    citations: tuple[Citation, ...]
+
+    @property
+    def fabricated(self) -> tuple[Citation, ...]:
+        return tuple(c for c in self.citations if c.status is CitationStatus.FABRICATED)
+
+    @property
+    def resolved(self) -> tuple[Citation, ...]:
+        return tuple(c for c in self.citations if c.status is not CitationStatus.FABRICATED)
+
+    @property
+    def is_clean(self) -> bool:
+        """True when every emitted label resolved to real retrieved context."""
+        return not self.fabricated
+
+    @property
+    def fabricated_labels(self) -> tuple[str, ...]:
+        seen: dict[str, None] = {}
+        for citation in self.fabricated:
+            seen.setdefault(citation.label, None)
+        return tuple(seen)
+
+
+def audit_citations(answer: str, evidence: EvidenceSet) -> CitationAudit:
+    """Check every emitted `[Cn]` label against the evidence set (FR-Q2).
+
+    Returns one Citation per label *occurrence*, not per distinct label: the same
+    chunk cited for two different claims is two citations, because layer 3 will
+    have to judge each claim separately.
+
+    Resolved labels are UNVERIFIED rather than VERIFIED — passing layer 2 only
+    proves the label exists, not that the chunk supports the claim. Promoting
+    them here would launder a syntactic check as a semantic one, which is the
+    exact failure the three-layer design exists to avoid.
+    """
+    bounds = _sentence_bounds(answer)
+    citations: list[Citation] = []
+
+    for marker in _CITATION_MARKER.finditer(answer):
+        claim = _claim_containing(answer, marker.start(), bounds)
+        for label in _LABEL.findall(marker.group(1)):
+            chunk_id = evidence.resolve(label)
+            citations.append(
+                Citation(
+                    label=label,
+                    chunk_id=chunk_id,
+                    claim_text=claim,
+                    status=(
+                        CitationStatus.FABRICATED if chunk_id is None else CitationStatus.UNVERIFIED
+                    ),
+                )
+            )
+
+    return CitationAudit(citations=tuple(citations))
+
+
+def strip_labels(answer: str, labels: Sequence[str]) -> str:
+    """Remove specific citation labels from an answer, leaving the prose intact.
+
+    Used on fabricated labels: showing `[C7]` when no C7 exists invites the user
+    to click a citation that cannot resolve. A marker emptied of all its labels
+    is removed whole, and the spacing it leaves behind is tidied — otherwise the
+    answer acquires " ." artifacts that read as a rendering bug.
+
+    Surviving markers come back in canonical one-label-per-bracket form, so
+    `[C2, C1]` becomes `[C2][C1]`. That is deliberate: the UI has one shape to
+    parse when it makes citations clickable.
+    """
+    if not labels:
+        return answer
+    doomed = set(labels)
+
+    def replace(marker: re.Match[str]) -> str:
+        kept = [x for x in _LABEL.findall(marker.group(1)) if x not in doomed]
+        return "".join(f"[{label}]" for label in kept)
+
+    stripped = _CITATION_MARKER.sub(replace, answer)
+    return re.sub(r" +([.,;:])", r"\1", re.sub(r"[ \t]{2,}", " ", stripped)).strip()

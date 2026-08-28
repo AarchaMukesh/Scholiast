@@ -44,7 +44,11 @@ jobs:
         run: uv python install ${{ env.PYTHON_VERSION }}
 
       - name: Install project
-        run: uv sync --extra dev
+        # --locked fails the build if uv.lock is stale relative to
+        # pyproject.toml. Reproducible installs are an FR-E4 requirement
+        # (doc 7 §7.13), so a drifted lockfile is a build error, not a
+        # silent re-resolution.
+        run: uv sync --locked --extra dev
 
       - name: Format check
         run: uv run ruff format --check src tests
@@ -74,7 +78,11 @@ jobs:
         run: uv python install ${{ env.PYTHON_VERSION }}
 
       - name: Install project
-        run: uv sync --extra dev
+        # --locked fails the build if uv.lock is stale relative to
+        # pyproject.toml. Reproducible installs are an FR-E4 requirement
+        # (doc 7 §7.13), so a drifted lockfile is a build error, not a
+        # silent re-resolution.
+        run: uv sync --locked --extra dev
 
       # `-m "not gpu"` is the only exclusion. Integration tests bring their own
       # services up via testcontainers, so they need no separate job.
@@ -107,7 +115,11 @@ jobs:
         run: uv python install ${{ env.PYTHON_VERSION }}
 
       - name: Install project
-        run: uv sync --extra dev
+        # --locked fails the build if uv.lock is stale relative to
+        # pyproject.toml. Reproducible installs are an FR-E4 requirement
+        # (doc 7 §7.13), so a drifted lockfile is a build error, not a
+        # silent re-resolution.
+        run: uv sync --locked --extra dev
 
       - name: Audit dependencies
         run: uvx pip-audit --strict --progress-spinner off

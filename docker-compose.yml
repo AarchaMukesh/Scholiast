@@ -1,0 +1,88 @@
+# Backing services only.
+#
+# Dev topology (CLAUDE.md): Postgres, Qdrant, Redis and GROBID run in Docker;
+# the API and the worker run **natively on Windows** so they get direct GPU
+# access. Every service therefore publishes its port to localhost — the native
+# processes are clients, not compose members. CI runs the fully containerized
+# Linux path so the two topologies cannot silently diverge.
+#
+# Images are pinned by tag + digest (doc 7 §7.13). The digests were read from
+# `docker image inspect` after a real pull, not recalled — a guessed digest
+# fails opaquely, which is worse than no digest at all.
+
+name: scholiast
+
+services:
+  postgres:
+    image: postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-scholiast}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-scholiast}
+      POSTGRES_DB: ${POSTGRES_DB:-scholiast}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      # `pg_isready` alone reports ready during init; naming the user and db
+      # makes the check fail until the database it will actually connect to
+      # exists.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-scholiast} -d ${POSTGRES_DB:-scholiast}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  qdrant:
+# Server minor version tracks `qdrant-client` (1.18): the client refuses a
+    # gap wider than one minor and warns loudly on startup. A mismatched pair
+    # works for simple calls and fails on the ones added in between — exactly the
+    # kind of drift that surfaces as an inexplicable bug mid-milestone.
+    image: qdrant/qdrant:v1.18.0@sha256:b3063c673f3973877c038eeecc392bad5011f072ee7892b56c9a8e204a3bdea9
+    ports:
+      - "${QDRANT_PORT:-6333}:6333"   # REST
+      - "6334:6334"                   # gRPC
+    volumes:
+      - qdrant-data:/qdrant/storage
+    healthcheck:
+      # The image carries no curl/wget, so the check uses Qdrant's own binary.
+      test: ["CMD", "/qdrant/qdrant", "--version"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    # Not used by any M1 code path — cache is M4, rate limits and the Celery
+    # broker are M3. Present so the dev stack matches the deployed one from the
+    # start, and so nothing has to be added to compose mid-milestone.
+    image: redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  grobid:
+    # ⚠️ The CRF image, NOT the default `0.8.1` tag (D31). The default is the
+    # deep-learning build: 32.5 GB on disk versus 0.41 GB here, 1.8× slower, and
+    # functionally identical on this fixture set — the DL models mainly sharpen
+    # citation parsing, which this project does not depend on.
+    image: grobid/grobid:0.8.2.1-crf@sha256:ede61849550ed700885317f772ebb1c6149ec4e5e21ea309003c6131af56dc84
+    ports:
+      - "${GROBID_PORT:-8070}:8070"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8070/api/isalive"]
+      interval: 15s
+      timeout: 5s
+      # GROBID's JVM start is slow; a short start_period produces a spurious
+      # `unhealthy` on a cold boot.
+      retries: 10
+      start_period: 60s
+
+volumes:
+  postgres-data:
+  qdrant-data:
+  redis-data:

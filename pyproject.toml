@@ -43,11 +43,34 @@ dev = [
     "ruff>=0.9",
     "mypy>=1.14",
     "import-linter>=2.1",
+    # Pinned below 3.15 deliberately. Windows Smart App Control (enforced on the
+    # dev machine) blocks grimp 3.15's `_rustgrimp` DLL by reputation, which
+    # takes the `lint-imports` gate offline entirely. 3.14 is identical for our
+    # three contracts and loads fine. Same class of trap as D25's pyarrow block.
+    "grimp<3.15",
     "testcontainers[postgres,redis]>=4.9",
     "respx>=0.22",
     "hypothesis>=6.123",
     "schemathesis>=3.39",
 ]
+
+# ---------------------------------------------------------------------------
+# torch must come from the CUDA 12.8 index — the RTX 5060 is Blackwell (sm_120),
+# and PyPI's default wheel would silently give a build with no sm_120 kernels.
+# Without this, `uv lock` records the default-index torch and a later `uv sync`
+# quietly downgrades the whole ML path; `torch.cuda.is_available()` would still
+# return True, which is exactly why this fails silently. Verify with
+# `'sm_120' in torch.cuda.get_arch_list()`.
+#
+# `explicit = true` keeps this index out of resolution for every other package.
+# ---------------------------------------------------------------------------
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cu128" }]
 
 [build-system]
 requires = ["hatchling"]

@@ -103,6 +103,7 @@ Every one of these cost real time in M0. Do not rediscover them.
 |---|---|
 | **`uv pip install` targets the wrong Python** | Always pass `--python .venv\Scripts\python.exe`, or it silently installs into the system interpreter |
 | **`datasets` breaks the ML stack** | A Windows Application Control policy blocks pyarrow's `_dataset` DLL, and `sentence-transformers` imports `datasets` at module load. **Do not install it** (D25). QASPER is vendored as plain JSON (D20). |
+| **Smart App Control blocks `_rustgrimp`** | Windows SAC is *enforced* on this machine and blocks grimp 3.15's DLL by reputation, killing the `lint-imports` gate. Pinned `grimp<3.15`; 3.14 loads and keeps all three contracts. Same class as the `datasets` trap |
 | **torch must be a CUDA 12.8+ build** | RTX 5060 is Blackwell (`sm_120`). Verify with `'sm_120' in torch.cuda.get_arch_list()` — `torch.cuda.is_available()` is not sufficient |
 | **fp16 for all local inference** | fp32 reranking is 3.3× slower (743 ms vs 224 ms @ top-50) and blows NFR-P2 (D18) |
 | **GROBID image tag** | `grobid/grobid:0.8.2.1-crf` (0.41 GB) on :8070 — **not** the default `0.8.1` (32.5 GB) (D31) |

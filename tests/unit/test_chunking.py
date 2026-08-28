@@ -239,6 +239,86 @@ class TestContextualHeaders:
         assert "None" not in header
 
 
+def multipage_section(pages: tuple[int, ...] = (4, 5, 6)) -> tuple[ParsedSection, str]:
+    """A section spanning several pages, plus the canonical text its offsets index."""
+    blocks: list[ParsedBlock] = []
+    cursor = 0
+    for page in pages:
+        text = f"Sentence about retrieval quality on page {page} with enough words. " * 20
+        blocks.append(block(text, page=page, start=cursor))
+        cursor += len(text)
+    document = "".join(b.text for b in blocks)
+    return ParsedSection(SectionKind.METHOD, "Method", tuple(blocks)), document
+
+
+class TestChildProvenanceIsItsOwn:
+    """A citation must point at the chunk that was cited, not at its neighbourhood."""
+
+    def test_child_span_is_narrower_than_its_parent_window(self) -> None:
+        # Prevents: every child in a window inheriting the window's span, so
+        # clicking a citation highlights ~1000 tokens of which ~300 are the
+        # actual evidence. FR-I5 asks for the span, not the vicinity.
+        sec, _ = multipage_section()
+        result = StructureAwareChunker().chunk(PAPER, [sec])
+        parent = result.parents[0]
+        children = result.children
+        assert len(children) > 1, "need several children for this to mean anything"
+        for child in children:
+            assert child.provenance.length < parent.provenance.length
+
+    def test_children_do_not_all_share_one_span(self) -> None:
+        # Prevents the specific regression: identical provenance on every child,
+        # which looks correct in isolation and is wrong for all but one of them.
+        sec, _ = multipage_section()
+        children = StructureAwareChunker().chunk(PAPER, [sec]).children
+        spans = {(c.provenance.char_start, c.provenance.char_end) for c in children}
+        assert len(spans) == len(children)
+
+    def test_child_page_is_where_the_chunk_starts(self) -> None:
+        # Prevents: sending the reader to the first page of the window when the
+        # cited text is three pages further in.
+        sec, _ = multipage_section()
+        children = StructureAwareChunker().chunk(PAPER, [sec]).children
+        assert {c.provenance.page for c in children} != {4}, (
+            "every child reported the window's first page — pages are not being tracked"
+        )
+
+    def test_child_text_is_recoverable_from_its_span(self) -> None:
+        # FR-I5's round trip: given a chunk, locate the exact source text. The
+        # contract is containment, not equality — joining sentences normalises
+        # inter-sentence whitespace — but every sentence must lie inside.
+        sec, document = multipage_section()
+        for child in StructureAwareChunker().chunk(PAPER, [sec]).children:
+            source = document[child.provenance.char_start : child.provenance.char_end]
+            for sentence in child.text.split(". "):
+                assert sentence.strip(". ") in source
+
+    def test_overlapping_children_have_overlapping_spans(self) -> None:
+        # The 15% overlap exists so a claim straddling a boundary survives. If
+        # the spans did not overlap too, the offsets would be describing a
+        # different chunking than the one that was embedded.
+        sec, _ = multipage_section()
+        children = StructureAwareChunker().chunk(PAPER, [sec]).children
+        pairs = list(itertools.pairwise(children))
+        assert any(b.provenance.char_start < a.provenance.char_end for a, b in pairs)
+
+
+class TestBlockOffsetsAreTrustworthy:
+    def test_block_offsets_must_match_its_own_text(self) -> None:
+        # Prevents a parser recording offsets against the raw PDF text while
+        # handing over normalised text: chunk spans are derived by adding
+        # within-block positions to char_start, so the two must describe the
+        # same string. A mismatch would shift every citation silently.
+        with pytest.raises(InvariantViolation, match="canonical parsed text"):
+            ParsedBlock(
+                kind=BlockKind.PARAGRAPH,
+                text="short text",
+                page=1,
+                char_start=0,
+                char_end=9999,
+            )
+
+
 class TestProvenanceAndVersioning:
     def test_every_chunk_carries_resolvable_provenance(self) -> None:
         # FR-I5: without this a citation is a gesture, not a reference.
