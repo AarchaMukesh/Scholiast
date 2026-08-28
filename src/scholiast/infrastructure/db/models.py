@@ -50,7 +50,13 @@ from sqlalchemy import text as sa_text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
-from scholiast.domain.paper import ChunkRole, PaperVisibility, SectionKind
+from scholiast.domain.errors import FailureClass
+from scholiast.domain.paper import (
+    ChunkRole,
+    PaperVisibility,
+    ParseStatus,
+    SectionKind,
+)
 from scholiast.domain.workspace import PaperState, WorkspaceState
 
 
@@ -132,7 +138,16 @@ class Paper(Base):
     venue: Mapped[str | None] = mapped_column(Text, nullable=True)
     abstract: Mapped[str | None] = mapped_column(Text, nullable=True)
     citation_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    parse_status: Mapped[str] = mapped_column(Text, nullable=False)
+    parse_status: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=ParseStatus.PENDING.value
+    )
+    #: Set exactly when parse_status is 'failed' (D44). Reuses the §4.4.1
+    #: FailureClass taxonomy rather than duplicating three of its values, so the
+    #: retry decision and the user message come from one place. Lives on the
+    #: paper because parsing happens once per paper: a second workspace adding an
+    #: already-failed paper must see why without re-parsing, and without reading
+    #: another tenant's membership row.
+    parse_failure_class: Mapped[str | None] = mapped_column(Text, nullable=True)
     parser_version: Mapped[str | None] = mapped_column(Text, nullable=True)
     #: Object-store key for the retained GROBID TEI (D43). Kept so re-chunking
     #: ablations are instant and bit-for-bit reproducible across a GROBID
@@ -142,6 +157,18 @@ class Paper(Base):
 
     __table_args__ = (
         CheckConstraint(_one_of("visibility", PaperVisibility), name="ck_papers_visibility"),
+        CheckConstraint(_one_of("parse_status", ParseStatus), name="ck_papers_parse_status"),
+        CheckConstraint(
+            f"parse_failure_class IS NULL OR {_one_of('parse_failure_class', FailureClass)}",
+            name="ck_papers_parse_failure_class",
+        ),
+        # The equivalence, mirroring the domain invariant on Paper. A failure
+        # with no class cannot produce a retry decision or a user message; a
+        # class with no failure claims a problem that did not happen.
+        CheckConstraint(
+            "(parse_status = 'failed') = (parse_failure_class IS NOT NULL)",
+            name="ck_papers_parse_failure_iff_failed",
+        ),
         # The §4.4.2 invariant, in the database. Written as an equivalence so it
         # catches both directions: a private paper with no owner, and a public
         # paper that is owner-scoped.
@@ -195,6 +222,13 @@ class WorkspacePaper(Base):
 
     __table_args__ = (
         CheckConstraint(_one_of("state", PaperState), name="ck_workspace_papers_state"),
+        # Same gap as parse_status had: an unconstrained taxonomy column. Applied
+        # here too so every taxonomy in the schema is generated from its domain
+        # enum rather than trusted to the writer.
+        CheckConstraint(
+            f"failure_class IS NULL OR {_one_of('failure_class', FailureClass)}",
+            name="ck_workspace_papers_failure_class",
+        ),
         # A failure without a class cannot produce a retry decision or a user
         # message, which defeats the entire taxonomy (doc 4 §4.4.1).
         CheckConstraint(

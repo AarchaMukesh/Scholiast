@@ -41,7 +41,9 @@ def prose(n_sentences: int, *, word: str = "retrieval") -> str:
 
 
 def section(kind: SectionKind, text: str, *, path: str | None = None) -> ParsedSection:
-    return ParsedSection(kind=kind, path=path or kind.value.title(), blocks=(block(text),))
+    return ParsedSection(
+        kind=kind, path=path or kind.value.title(), blocks=(block(text),), text=text
+    )
 
 
 class TestSectionBoundaries:
@@ -55,9 +57,15 @@ class TestSectionBoundaries:
                 SectionKind.RELATED_WORK,
                 "Related Work",
                 (block("Prior work established baselines.", start=0),),
+                text="Prior work established baselines.",
             ),
             ParsedSection(
-                SectionKind.METHOD, "Method", (block("We propose a new approach.", start=100),)
+                SectionKind.METHOD,
+                "Method",
+                # Section-relative (D42): a new section restarts at 0, it does
+                # not continue the previous section's offsets.
+                (block("We propose a new approach.", start=0),),
+                text="We propose a new approach.",
             ),
         ]
         result = StructureAwareChunker().chunk(PAPER, sections)
@@ -157,19 +165,40 @@ class TestParentChildWindows:
             assert all(c.token_count >= cfg.min_child_tokens for c in children[:-1])
 
 
+def two_block_section(
+    kind: SectionKind, path: str, prose_text: str, other: str, *, other_kind: BlockKind
+) -> ParsedSection:
+    """A prose block followed by an atomic block, with consistent offsets.
+
+    The blocks and the section text are built from the same join, so they cannot
+    disagree — which is exactly what the D42 invariant checks.
+    """
+    joiner = "\n\n"
+    text = f"{prose_text}{joiner}{other}"
+    start = len(prose_text) + len(joiner)
+    return ParsedSection(
+        kind=kind,
+        path=path,
+        blocks=(
+            block(prose_text, start=0),
+            block(other, kind=other_kind, start=start),
+        ),
+        text=text,
+    )
+
+
 class TestTablesAreAtomic:
     """Rule 3: tables hold the facts users ask for, and must survive intact."""
 
     def test_table_becomes_its_own_chunk(self) -> None:
         table = "| Model | nDCG@10 |\n| BM25 | 0.61 |\n| Hybrid | 0.74 |"
         sections = [
-            ParsedSection(
+            two_block_section(
                 SectionKind.RESULTS,
                 "Results",
-                (
-                    block("We report results below.", start=0),
-                    block(table, kind=BlockKind.TABLE, start=100),
-                ),
+                "We report results below.",
+                table,
+                other_kind=BlockKind.TABLE,
             )
         ]
         result = StructureAwareChunker().chunk(PAPER, sections)
@@ -184,10 +213,8 @@ class TestTablesAreAtomic:
         # produces confidently wrong numbers.
         table = "| A | B |\n| 1 | 2 |"
         sections = [
-            ParsedSection(
-                SectionKind.RESULTS,
-                "Results",
-                (block(prose(5), start=0), block(table, kind=BlockKind.TABLE, start=1000)),
+            two_block_section(
+                SectionKind.RESULTS, "Results", prose(5), table, other_kind=BlockKind.TABLE
             )
         ]
         result = StructureAwareChunker().chunk(PAPER, sections)
@@ -202,6 +229,7 @@ class TestTablesAreAtomic:
                 SectionKind.RESULTS,
                 "Results",
                 (block(big_table, kind=BlockKind.TABLE, start=0),),
+                text=big_table,
             )
         ]
         result = StructureAwareChunker().chunk(PAPER, sections)
@@ -248,7 +276,7 @@ def multipage_section(pages: tuple[int, ...] = (4, 5, 6)) -> tuple[ParsedSection
         blocks.append(block(text, page=page, start=cursor))
         cursor += len(text)
     document = "".join(b.text for b in blocks)
-    return ParsedSection(SectionKind.METHOD, "Method", tuple(blocks)), document
+    return ParsedSection(SectionKind.METHOD, "Method", tuple(blocks), text=document), document
 
 
 class TestChildProvenanceIsItsOwn:
@@ -319,6 +347,44 @@ class TestBlockOffsetsAreTrustworthy:
             )
 
 
+class TestSectionTextIsTheOffsetGround:
+    """D42/D45: a section owns the text its chunk offsets index."""
+
+    def test_blocks_must_index_the_section_text(self) -> None:
+        # Prevents the silent version of the whole provenance failure: a parser
+        # that assembles text and offsets in separate passes produces citations
+        # that highlight the wrong span, with nothing raising anywhere. Failing
+        # at construction is the only place it is still diagnosable.
+        with pytest.raises(InvariantViolation, match="does not index its own text"):
+            ParsedSection(
+                SectionKind.METHOD,
+                "Method",
+                (block("the actual block text", start=0),),
+                text="completely different section text",
+            )
+
+    def test_document_relative_offsets_are_rejected(self) -> None:
+        # The specific regression D42 replaced: a second section continuing the
+        # first section's offsets instead of restarting at 0.
+        body = "We propose a new approach."
+        with pytest.raises(InvariantViolation, match=r"does not index its own text"):
+            ParsedSection(SectionKind.METHOD, "Method", (block(body, start=100),), text=body)
+
+    def test_consistent_offsets_are_accepted(self) -> None:
+        # Positive control, so the two tests above are not passing merely because
+        # every ParsedSection raises.
+        body = "First block.\n\nSecond block."
+        assert (
+            ParsedSection(
+                SectionKind.METHOD,
+                "Method",
+                (block("First block.", start=0), block("Second block.", start=14)),
+                text=body,
+            ).text
+            == body
+        )
+
+
 class TestProvenanceAndVersioning:
     def test_every_chunk_carries_resolvable_provenance(self) -> None:
         # FR-I5: without this a citation is a gesture, not a reference.
@@ -378,7 +444,7 @@ class TestEdgeCases:
         assert StructureAwareChunker().chunk(PAPER, []).chunks == []
 
     def test_empty_sections_are_ignored(self) -> None:
-        sections = [ParsedSection(SectionKind.METHOD, "Method", ())]
+        sections = [ParsedSection(SectionKind.METHOD, "Method", (), text="")]
         assert StructureAwareChunker().chunk(PAPER, sections).chunks == []
 
     def test_single_short_paragraph_yields_one_child(self) -> None:

@@ -29,11 +29,13 @@ from sqlalchemy import CursorResult, Executable, Select, delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from scholiast.application.ports.tenancy import Scope, TenantIsolationViolation
+from scholiast.domain.errors import FailureClass
 from scholiast.domain.paper import (
     Chunk,
     ChunkRole,
     Paper,
     PaperVisibility,
+    ParseStatus,
     Provenance,
     SectionKind,
 )
@@ -256,10 +258,10 @@ class SqlPaperRepository(ScopedRepository):
             venue=paper.venue,
             abstract=paper.abstract,
             citation_count=paper.citation_count,
-            # The domain Paper has no parse_status field — parsing is a pipeline
-            # concern, not an identity one. A stamped parser_version is the
-            # evidence that parsing happened.
-            parse_status="parsed" if paper.parser_version else "pending",
+            parse_status=paper.parse_status.value,
+            parse_failure_class=(
+                paper.parse_failure_class.value if paper.parse_failure_class else None
+            ),
             parser_version=paper.parser_version,
         )
         self._session.add(row)
@@ -453,6 +455,10 @@ def _to_paper(row: models.Paper) -> Paper:
         citation_count=row.citation_count,
         external_ids=dict(row.external_ids or {}),
         owner_id=str(row.owner_id) if row.owner_id else None,
+        parse_status=ParseStatus(row.parse_status),
+        parse_failure_class=(
+            FailureClass(row.parse_failure_class) if row.parse_failure_class else None
+        ),
         parser_version=row.parser_version,
         created_at=row.created_at,
     )

@@ -25,6 +25,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 from testcontainers.community.postgres import PostgresContainer
 
+from scholiast.domain.errors import FailureClass
+
 pytestmark = [pytest.mark.integration]
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -78,15 +80,25 @@ async def _paper(
     visibility: str,
     content_hash: str,
     owner_id: uuid.UUID | None,
+    parse_status: str = "parsed",
+    parse_failure_class: str | None = None,
 ) -> uuid.UUID:
     paper_id = uuid.uuid4()
     await conn.execute(
         text(
             "INSERT INTO papers (id, visibility, owner_id, content_hash, external_ids, "
-            "title, authors, parse_status) VALUES (:id, :vis, :owner, :hash, '{}'::jsonb, "
-            "'A Paper', '[]'::jsonb, 'indexed')"
+            "title, authors, parse_status, parse_failure_class) VALUES "
+            "(:id, :vis, :owner, :hash, '{}'::jsonb, 'A Paper', '[]'::jsonb, "
+            ":status, :failure)"
         ),
-        {"id": paper_id, "vis": visibility, "owner": owner_id, "hash": content_hash},
+        {
+            "id": paper_id,
+            "vis": visibility,
+            "owner": owner_id,
+            "hash": content_hash,
+            "status": parse_status,
+            "failure": parse_failure_class,
+        },
     )
     return paper_id
 
@@ -197,6 +209,167 @@ class TestTaxonomiesMatchTheDomain:
                     "VALUES (:ws, :paper, 'processing')"
                 ),
                 {"ws": workspace, "paper": paper},
+            )
+        await conn.rollback()
+
+
+class TestParseStatusVocabulary:
+    """D44's four constraints, each verified by attempting the violation.
+
+    Written because migration 0002 adds these by hand — `--autogenerate` does
+    not compare CHECK constraints, so a constraint that silently failed to be
+    created looks exactly like one that is working, right up until something bad
+    gets in. Only an attempted violation tells the two apart.
+    """
+
+    async def test_an_unknown_parse_status_is_rejected(self, conn: AsyncConnection) -> None:
+        # 'indexed' is not hypothetical: it was one of three ad-hoc values in
+        # circulation before D44 fixed the vocabulary, and it is what this
+        # constraint caught the day it was added.
+        with pytest.raises(IntegrityError, match="ck_papers_parse_status"):
+            await _paper(
+                conn,
+                visibility="public",
+                content_hash="bad-status",
+                owner_id=None,
+                parse_status="indexed",
+            )
+        await conn.rollback()
+
+    async def test_an_unknown_parse_failure_class_is_rejected(self, conn: AsyncConnection) -> None:
+        # The class drives the retry decision and the user message (§4.4.1). A
+        # value outside the taxonomy produces neither, so the paper would fail
+        # with no way to tell the user why or whether to retry.
+        with pytest.raises(IntegrityError, match="ck_papers_parse_failure_class"):
+            await _paper(
+                conn,
+                visibility="public",
+                content_hash="bad-class",
+                owner_id=None,
+                parse_status="failed",
+                parse_failure_class="something_went_wrong",
+            )
+        await conn.rollback()
+
+    async def test_a_failed_parse_without_a_class_is_rejected(self, conn: AsyncConnection) -> None:
+        with pytest.raises(IntegrityError, match="ck_papers_parse_failure_iff_failed"):
+            await _paper(
+                conn,
+                visibility="public",
+                content_hash="failed-no-class",
+                owner_id=None,
+                parse_status="failed",
+            )
+        await conn.rollback()
+
+    async def test_a_successful_parse_carrying_a_class_is_rejected(
+        self, conn: AsyncConnection
+    ) -> None:
+        # The reverse direction, which a plain NOT NULL check would miss: a
+        # parsed paper claiming a failure class would surface a scary reason on
+        # a perfectly healthy paper.
+        with pytest.raises(IntegrityError, match="ck_papers_parse_failure_iff_failed"):
+            await _paper(
+                conn,
+                visibility="public",
+                content_hash="parsed-with-class",
+                owner_id=None,
+                parse_status="parsed",
+                parse_failure_class="scanned_image",
+            )
+        await conn.rollback()
+
+    async def test_valid_combinations_are_accepted(self, conn: AsyncConnection) -> None:
+        # Positive control. Without it these tests would pass just as happily if
+        # the constraints rejected everything, including what they should allow.
+        for status in ("pending", "parsing", "parsed"):
+            await _paper(
+                conn,
+                visibility="public",
+                content_hash=f"ok-{status}",
+                owner_id=None,
+                parse_status=status,
+            )
+        await _paper(
+            conn,
+            visibility="public",
+            content_hash="ok-failed",
+            owner_id=None,
+            parse_status="failed",
+            parse_failure_class="scanned_image",
+        )
+        await conn.rollback()
+
+    async def test_every_failure_class_the_domain_defines_is_accepted(
+        self, conn: AsyncConnection
+    ) -> None:
+        # The claim in models.py is that CHECKs are generated from the domain
+        # enums so the two cannot drift. Rejecting one bad value does not test
+        # that: adding a FailureClass member would be silently rejected by the
+        # database with every existing test still green. This walks the whole
+        # enum, so the drift fails loudly the way the docstring promises.
+        for member in FailureClass:
+            await _paper(
+                conn,
+                visibility="public",
+                content_hash=f"class-{member.value}",
+                owner_id=None,
+                parse_status="failed",
+                parse_failure_class=member.value,
+            )
+        await conn.rollback()
+
+    async def test_an_unknown_membership_failure_class_is_rejected(
+        self, conn: AsyncConnection
+    ) -> None:
+        # Same taxonomy, same gap, same fix — on the membership row this time.
+        user = await _user(conn, f"membership-class-{uuid.uuid4()}@example.com")
+        workspace = uuid.uuid4()
+        await conn.execute(
+            text(
+                "INSERT INTO workspaces (id, owner_id, name, state) "
+                "VALUES (:id, :owner, 'W', 'active')"
+            ),
+            {"id": workspace, "owner": user},
+        )
+        paper = await _paper(
+            conn, visibility="public", content_hash="member-bad-class", owner_id=None
+        )
+        with pytest.raises(IntegrityError, match="ck_workspace_papers_failure_class"):
+            await conn.execute(
+                text(
+                    "INSERT INTO workspace_papers (workspace_id, paper_id, state, "
+                    "failure_class) VALUES (:ws, :paper, 'failed', 'gremlins')"
+                ),
+                {"ws": workspace, "paper": paper},
+            )
+        await conn.rollback()
+
+    async def test_every_membership_failure_class_the_domain_defines_is_accepted(
+        self, conn: AsyncConnection
+    ) -> None:
+        user = await _user(conn, f"membership-ok-{uuid.uuid4()}@example.com")
+        workspace = uuid.uuid4()
+        await conn.execute(
+            text(
+                "INSERT INTO workspaces (id, owner_id, name, state) "
+                "VALUES (:id, :owner, 'W', 'active')"
+            ),
+            {"id": workspace, "owner": user},
+        )
+        for member in FailureClass:
+            paper = await _paper(
+                conn,
+                visibility="public",
+                content_hash=f"member-{member.value}",
+                owner_id=None,
+            )
+            await conn.execute(
+                text(
+                    "INSERT INTO workspace_papers (workspace_id, paper_id, state, "
+                    "failure_class) VALUES (:ws, :paper, 'failed', :cls)"
+                ),
+                {"ws": workspace, "paper": paper, "cls": member.value},
             )
         await conn.rollback()
 

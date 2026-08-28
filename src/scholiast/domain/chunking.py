@@ -109,11 +109,35 @@ class ParsedBlock:
 
 @dataclass(frozen=True, slots=True)
 class ParsedSection:
-    """One section of a parsed document, with its blocks in reading order."""
+    """One section of a parsed document, with its blocks in reading order.
+
+    `text` is the canonical section text — what gets persisted as `sections.text`
+    and what every chunk offset in this section indexes (D42, D45).
+
+    The invariant below turns FR-I5's round trip into a constructor-time
+    assertion instead of a docstring. A parser that normalises text after
+    recording offsets, or that assembles `text` and `blocks` from different
+    passes, fails *here* — at the boundary where it can still be diagnosed —
+    rather than downstream, where the only symptom is citations that highlight
+    slightly the wrong span and nothing raises at all.
+    """
 
     kind: SectionKind
     path: str
     blocks: tuple[ParsedBlock, ...]
+    #: Required, not defaulted: an invariant that can be skipped by omitting a
+    #: field is not an invariant.
+    text: str
+
+    def __post_init__(self) -> None:
+        for block in self.blocks:
+            found = self.text[block.char_start : block.char_end]
+            if found != block.text:
+                raise InvariantViolation(
+                    f"section {self.path!r}: block at ({block.char_start}, {block.char_end}) "
+                    f"does not index its own text — offsets must be relative to this "
+                    f"section's text (D42). Found {found[:40]!r}, expected {block.text[:40]!r}"
+                )
 
     @property
     def is_empty(self) -> bool:
