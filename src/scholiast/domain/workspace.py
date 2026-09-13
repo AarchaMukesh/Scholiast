@@ -19,6 +19,7 @@ from datetime import datetime
 from enum import StrEnum, unique
 
 from scholiast.domain.errors import (
+    FailureClass,
     IllegalStateTransition,
     InsufficientPapersForComparison,
     InvariantViolation,
@@ -93,6 +94,31 @@ _PAPER_TRANSITIONS: dict[PaperState, frozenset[PaperState]] = {
 
 _FAILABLE: frozenset[PaperState] = _IN_FLIGHT | {PaperState.CANDIDATE}
 
+#: The only two states a membership may be *created* in. See `add_paper`.
+_ENTRY_STATES: frozenset[PaperState] = frozenset({PaperState.QUEUED, PaperState.INDEXED})
+
+
+#: Classes for which retrying cannot help *and* the user has no remedy either —
+#: the file is what it is. §4.4.1 calls this UNSUPPORTED: "no false hope of
+#: retry". SOURCE_UNAVAILABLE is deliberately absent: it is equally
+#: non-retryable, but the user *can* fix it by uploading the PDF, and §4.4.1
+#: offers a manual retry from FAILED and none from UNSUPPORTED.
+_UNSUPPORTED_CLASSES: frozenset[FailureClass] = frozenset(
+    {FailureClass.UNPARSEABLE, FailureClass.SCANNED_IMAGE, FailureClass.TOO_LARGE}
+)
+
+
+def terminal_state_for(failure_class: FailureClass) -> PaperState:
+    """Where a membership lands when this class is final (§4.4.1).
+
+    §4.4.1 tabulates retryability per class and tabulates the two terminal states
+    separately, but never joins them — so the mapping had been left to whichever
+    call site was writing the transition. Stating it once means the difference
+    that matters to a user, "try again yourself" versus "this will never work",
+    is decided in one place instead of being re-derived per caller.
+    """
+    return PaperState.UNSUPPORTED if failure_class in _UNSUPPORTED_CLASSES else PaperState.FAILED
+
 
 def paper_transition_allowed(current: PaperState, requested: PaperState) -> bool:
     """Single source of truth for legal paper-state moves."""
@@ -102,6 +128,15 @@ def paper_transition_allowed(current: PaperState, requested: PaperState) -> bool
         return not current.is_terminal or current is PaperState.UNSUPPORTED
     if requested in (PaperState.FAILED, PaperState.UNSUPPORTED):
         return current in _FAILABLE
+    if requested is PaperState.QUEUED:
+        # Back to the start of the pipeline. Two callers need this and the
+        # §4.4.1 diagram only draws one of them: a manual or automatic retry
+        # from FAILED, and — the undrawn case — a job redelivered after its
+        # worker died mid-stage. An at-least-once queue guarantees that second
+        # case will happen (§5.7.4), and the attempt genuinely restarts from
+        # the beginning, so a membership stuck at CHUNKING must be able to say
+        # so rather than forcing the pipeline to fake forward progress.
+        return current in _FAILABLE or current is PaperState.FAILED
     return requested in _PAPER_TRANSITIONS[current]
 
 
@@ -170,7 +205,11 @@ class PaperMembership:
             # A failure without a class cannot produce a retry decision or a user
             # message, which defeats the entire taxonomy.
             raise InvariantViolation(f"transition to {requested} requires a failure_class")
-        if requested is PaperState.QUEUED and self.state is PaperState.FAILED:
+        if requested is PaperState.QUEUED and self.state is not PaperState.CANDIDATE:
+            # Any return to QUEUED is a fresh attempt — a retry after failure, or
+            # a restart after a redelivery. Counting only the first would make
+            # the user-visible attempt count disagree with reality precisely in
+            # the case where a paper keeps dying mid-pipeline.
             self.attempts += 1
             self.failure_class = None
             self.failure_detail = None
@@ -237,12 +276,26 @@ class Workspace:
         if not self.can_compare:
             raise InsufficientPapersForComparison(len(self.queryable_paper_ids))
 
-    def add_paper(self, paper_id: str, *, now: datetime) -> PaperMembership:
+    def add_paper(
+        self, paper_id: str, *, now: datetime, state: PaperState = PaperState.QUEUED
+    ) -> PaperMembership:
         """Add a paper, or return the existing membership unchanged.
 
         Idempotent by design (FR-I7): re-adding must not duplicate work or reset
         a paper that is already indexed.
+
+        `state` exists because §5.4.2 has two entry points, not one. A new upload
+        enters QUEUED; a paper the registry has already parsed *and* embedded
+        enters INDEXED with no work queued at all — "create membership only". The
+        second case cannot be expressed by adding at QUEUED and transitioning,
+        because QUEUED -> INDEXED is not a legal move and should not become one:
+        skipping the pipeline is a property of the *paper* already being done,
+        not of a membership fast-forwarding through stages it never ran.
         """
+        if state not in _ENTRY_STATES:
+            raise InvariantViolation(
+                f"a membership may only be created QUEUED or INDEXED, not {state}"
+            )
         for m in self.memberships:
             if m.paper_id == paper_id and m.state is not PaperState.REMOVED:
                 return m
@@ -253,7 +306,7 @@ class Workspace:
         membership = PaperMembership(
             workspace_id=self.id,
             paper_id=paper_id,
-            state=PaperState.QUEUED,
+            state=state,
             added_at=now,
         )
         self.memberships.append(membership)

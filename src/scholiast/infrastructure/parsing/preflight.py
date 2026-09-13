@@ -22,10 +22,13 @@ import fitz
 
 from scholiast.application.ports.parsing import DocumentUnparseable
 from scholiast.domain.errors import FailureClass
+from scholiast.domain.upload import MAX_PDF_BYTES
 
-#: NFR-P8. Matches the limit quoted in FailureClass.TOO_LARGE's user message —
-#: a mismatch there would tell the user a number the system does not enforce.
-MAX_PDF_BYTES = 50 * 1024 * 1024
+__all__ = ["MAX_PDF_BYTES", "MIN_EXTRACTABLE_CHARS", "preflight"]
+
+# NFR-P8. Re-exported from the domain rather than redeclared (D55): the edge
+# check and this one must refuse the same byte, and two constants that agree by
+# coincidence agree only until one of them is edited.
 
 #: Below this many extractable characters a PDF has no usable text layer. M0
 #: measured both pathological fixtures at exactly 0; the margin is for PDFs that

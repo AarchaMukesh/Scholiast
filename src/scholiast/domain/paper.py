@@ -179,7 +179,17 @@ class Provenance:
 
 @dataclass(frozen=True, slots=True)
 class Section:
-    """A node in the document's section hierarchy."""
+    """A node in the document's section hierarchy, with its canonical text.
+
+    `text` is what every chunk offset in this section indexes (D42) — the
+    entity owns it because `sections.text` is where a citation is resolved, and
+    a Section that could be persisted without its text would make the round trip
+    unsatisfiable one row at a time (D52).
+
+    `path` is unique within a paper (D51). That is not decoration: chunks are
+    mapped back onto section rows by path, so two sections sharing one would
+    silently attribute a chunk to the wrong text and highlight the wrong span.
+    """
 
     id: str
     paper_id: str
@@ -189,6 +199,7 @@ class Section:
     order_index: int
     page_start: int
     page_end: int
+    text: str
     parent_id: str | None = None
 
     @property
@@ -296,6 +307,12 @@ class Paper:
     #: the retry decision and the user message come from one place (D44).
     parse_failure_class: FailureClass | None = None
     parser_version: str | None = None
+    #: Object-store key for the retained TEI (D43, D49). Persisted identity in
+    #: the same sense as `content_hash` and `parser_version`: it records which
+    #: parse output is actually on disk, so a re-chunk ablation reads the bytes
+    #: that produced today's chunks rather than re-running a GROBID that may
+    #: have moved underneath it.
+    tei_key: str | None = None
     created_at: datetime | None = None
 
     def __post_init__(self) -> None:

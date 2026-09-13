@@ -46,7 +46,18 @@ from scholiast.domain.paper import (
 # than inheriting the parent window's. Chunk *text* is unchanged, so this is
 # a provenance-only re-index — which is exactly the targeted case NFR-M5's
 # version stamps exist to make possible.
-CHUNKER_VERSION = "structure-aware/1.1.0"
+# 1.2.0: a short trailing fragment merged backwards no longer repeats the
+# overlap sentences it already shares with the chunk it joins. Chunk text
+# changes for the affected children, so this one *is* a re-embed — found by the
+# FR-I5 round trip on a real paper, where a chunk's text came out 161 characters
+# longer than the span it claimed to occupy.
+CHUNKER_VERSION = "structure-aware/1.2.0"
+
+#: How a breadcrumb path joins a parent to a child ("Results > Ablations").
+#: Named here because two layers depend on it agreeing: the parser builds paths
+#: with it and the ingestion use case splits them on it to resolve
+#: `sections.parent_id`.
+SECTION_PATH_SEPARATOR = " > "
 
 #: ~4 characters per token for English prose. Good enough for boundary decisions;
 #: production injects the real tokenizer for anything that must be exact.
@@ -123,11 +134,19 @@ class ParsedSection:
     """
 
     kind: SectionKind
+    #: Unique within a document (D51) — chunks are mapped back onto section rows
+    #: by path, so a duplicate silently attributes a chunk to another section's
+    #: text and highlights the wrong span.
     path: str
     blocks: tuple[ParsedBlock, ...]
     #: Required, not defaulted: an invariant that can be skipped by omitting a
     #: field is not an invariant.
     text: str
+    #: The heading as the document wrote it, before path disambiguation. Carried
+    #: rather than derived from `path`: the last breadcrumb segment is the raw
+    #: title *until* D51 appends a counter to it, and a derivation that is
+    #: correct only most of the time is the kind that fails silently (D52).
+    raw_title: str
 
     def __post_init__(self) -> None:
         for block in self.blocks:
@@ -406,7 +425,10 @@ class StructureAwareChunker:
         target = self._config.child_target_tokens
         overlap_target = int(target * self._config.overlap_ratio)
 
-        children: list[_Span] = []
+        # Groups of sentences, joined only at the end. Joining as we go would
+        # throw away which sentences a child is made of — and that is exactly
+        # what the backward merge below needs in order not to repeat them.
+        groups: list[list[_Span]] = []
         current: list[_Span] = []
         current_tokens = 0
 
@@ -414,7 +436,7 @@ class StructureAwareChunker:
             sentence_tokens = self._count(sentence.text)
 
             if current and current_tokens + sentence_tokens > target:
-                children.append(self._join(current))
+                groups.append(current)
                 # Rule: carry a tail of the previous chunk forward so a claim
                 # straddling the boundary survives in at least one chunk. The
                 # tail's offsets come with it, so overlapping children have
@@ -426,15 +448,26 @@ class StructureAwareChunker:
             current_tokens += sentence_tokens
 
         if current:
-            tail = self._join(current)
             # A short trailing fragment is merged backwards rather than left to
             # stand alone with too little context to retrieve well.
-            if children and self._count(tail.text) < self._config.min_child_tokens:
-                children[-1] = self._join([children[-1], tail])
+            merge_back = (
+                groups and self._count(self._join(current).text) < self._config.min_child_tokens
+            )
+            if merge_back:
+                # The fragment opens with the overlap tail of the chunk it is
+                # being merged into, so those sentences are already there. Naive
+                # concatenation repeats them: the chunk's *text* grows while its
+                # character span — a min/max over the same sentences — does not,
+                # so the chunk ends up claiming a span it does not fit in, and
+                # the duplicated prose inflates the token count and skews the
+                # embedding. Dropping what is already present is what keeps
+                # FR-I5's round trip sound.
+                already = {span.char_start for span in groups[-1]}
+                groups[-1] = groups[-1] + [s for s in current if s.char_start not in already]
             else:
-                children.append(tail)
+                groups.append(current)
 
-        return children
+        return [self._join(group) for group in groups]
 
     @staticmethod
     def _join(spans: Sequence[_Span]) -> _Span:

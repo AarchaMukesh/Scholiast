@@ -38,6 +38,22 @@ def build_session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSessio
     return async_sessionmaker(engine, expire_on_commit=False)
 
 
+class SqlUnitOfWork:
+    """The `UnitOfWork` adapter: a named commit point on one session.
+
+    Nothing more, deliberately. The use case needs to say "this stage is
+    durable" (§5.4.2); it does not need a transaction manager, and giving it one
+    would let business logic start deciding about savepoints and isolation
+    levels — decisions that belong to the layer that owns the connection.
+    """
+
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
+
+    async def commit(self) -> None:
+        await self._session.commit()
+
+
 @asynccontextmanager
 async def session_scope(
     factory: async_sessionmaker[AsyncSession],

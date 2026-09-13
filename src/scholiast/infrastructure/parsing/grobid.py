@@ -36,7 +36,12 @@ from scholiast.application.ports.parsing import (
     DocumentUnparseable,
     ParsedDocument,
 )
-from scholiast.domain.chunking import BlockKind, ParsedBlock, ParsedSection
+from scholiast.domain.chunking import (
+    SECTION_PATH_SEPARATOR,
+    BlockKind,
+    ParsedBlock,
+    ParsedSection,
+)
 from scholiast.domain.errors import FailureClass
 from scholiast.domain.paper import SectionKind, normalise_section
 from scholiast.infrastructure.parsing.preflight import preflight
@@ -45,7 +50,11 @@ TEI_NS = {"tei": "http://www.tei-c.org/ns/1.0"}
 
 #: Bump whenever anything here changes what offsets or sections come out.
 #: Stamped onto the paper, and offsets are only meaningful with it (FR-I5).
-PARSER_VERSION = "grobid-crf-0.8.2.1/tei/1.0.0"
+# 1.1.0: section paths are made unique within a document (D51) and the raw
+# heading is carried alongside the path. Paths reach the contextual header, so
+# this changes embedding input for colliding sections — free today because
+# nothing is indexed yet, a re-index if it had been deferred.
+PARSER_VERSION = "grobid-crf-0.8.2.1/tei/1.1.0"
 
 #: Structures worth coordinates. `s` is the load-bearing one — a child chunk is a
 #: run of sentences, so sentence-level pages are what make per-chunk pages exact.
@@ -54,6 +63,10 @@ COORD_ELEMENTS = ("p", "s", "head", "figure", "table")
 #: Blocks are joined by this, and the section text is built from the same join,
 #: so `ParsedSection`'s invariant holds by construction rather than by care.
 BLOCK_JOINER = "\n\n"
+
+#: What a `<div>` with no `<head>` is called. GROBID emits these for orphan
+#: prose, and they are the main source of path collisions (D51).
+UNTITLED_SECTION = "Untitled section"
 
 _WHITESPACE = re.compile(r"\s+")
 
@@ -80,6 +93,30 @@ def _first_page(coords: str | None) -> int | None:
         return None
     head = coords.split(";")[0].split(",")[0]
     return int(head) if head.isdigit() else None
+
+
+def _unique_path(base: str, claimed: set[str]) -> str:
+    """Make a section path unique within its document (D51).
+
+    Paths are how chunks find their section row: the chunk carries
+    `provenance.section_path` and the repository maps it to a `sections.id`. Two
+    sections sharing a path therefore do not collide loudly — one section's
+    chunks are attributed to the other's text, and a citation highlights a span
+    from the wrong part of the paper with nothing raising anywhere.
+
+    Collisions are not exotic. Only ~29% of GROBID heads carry numbering, so most
+    paths are a bare title, and every head-less `<div>` produces the same
+    "Untitled section". The counter is deliberately visible — it reaches the
+    breadcrumb and the contextual header (ML-3) — because a reader seeing
+    "Results (2)" learns something true about the document, while a silently
+    merged section teaches them nothing.
+    """
+    if base not in claimed:
+        return base
+    suffix = 2
+    while f"{base} ({suffix})" in claimed:
+        suffix += 1
+    return f"{base} ({suffix})"
 
 
 def _table_markdown(figure: ET.Element) -> str:
@@ -210,19 +247,26 @@ class GrobidParser:
         sections: list[ParsedSection] = []
         # Maps a heading number ("3") to its path, so "3.1" can find its parent.
         paths_by_number: dict[str, str] = {}
+        # Paths already emitted for this document. Uniqueness is enforced here
+        # rather than hoped for downstream — see `_unique_path` (D51).
+        claimed: set[str] = set()
 
         for div, tables in self._grouped(body):
             head = div.find("tei:head", TEI_NS)
             raw_title = _flatten(head)
             number = head.get("n", "").rstrip(".") if head is not None else ""
 
-            path = self._path_for(raw_title, number, paths_by_number)
+            path = _unique_path(self._path_for(raw_title, number, paths_by_number), claimed)
             if number:
                 paths_by_number[number] = path
 
             section = self._section(div, tables, raw_title=raw_title, path=path)
             if section is not None:
                 sections.append(section)
+                # Claimed only once the section survives: a div with no text is
+                # never persisted, so reserving its path would push a counter
+                # onto the next real section for no reason.
+                claimed.add(path)
 
         return tuple(sections)
 
@@ -259,12 +303,12 @@ class GrobidParser:
         is the title alone, which is honest: an unknown parent is better than an
         invented one.
         """
-        title = raw_title or "Untitled section"
+        title = raw_title or UNTITLED_SECTION
         if "." not in number:
             return title
         parent_number = number.rsplit(".", 1)[0]
         parent_path = paths_by_number.get(parent_number)
-        return f"{parent_path} > {title}" if parent_path else title
+        return f"{parent_path}{SECTION_PATH_SEPARATOR}{title}" if parent_path else title
 
     def _section(
         self,
@@ -323,6 +367,10 @@ class GrobidParser:
             path=path,
             blocks=tuple(blocks),
             text=BLOCK_JOINER.join(pieces),
+            # The heading as written, not the disambiguated path: `sections`
+            # stores both, and a reader view showing "Results (2)" as the
+            # heading would report a document that does not exist.
+            raw_title=raw_title or UNTITLED_SECTION,
         )
 
     @staticmethod

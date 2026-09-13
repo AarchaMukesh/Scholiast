@@ -268,6 +268,76 @@ class TestSectionHierarchy:
         assert section.kind.describes_other_work
 
 
+class TestSectionPathsAreUniqueWithinADocument:
+    """D51 — the property chunk-to-section mapping silently depends on.
+
+    Chunks carry `provenance.section_path` and the repository resolves it to a
+    `sections.id`. Two sections sharing a path do not collide loudly: one
+    section's chunks are attributed to the other's text, and the citation
+    highlights a span from the wrong part of the paper with nothing raising.
+    """
+
+    def test_two_headless_divs_do_not_share_a_path(self) -> None:
+        # The common case: GROBID emits a head-less <div> for orphan prose, and
+        # every one of them would otherwise be called "Untitled section".
+        doc = parse(
+            "<div><p><s>First orphan paragraph here.</s></p></div>"
+            "<div><p><s>Second orphan paragraph here.</s></p></div>"
+        )
+        first, second = doc.sections  # type: ignore[attr-defined]
+        assert first.path == "Untitled section"
+        assert second.path == "Untitled section (2)"
+
+    def test_repeated_headings_are_disambiguated_in_order(self) -> None:
+        doc = parse(
+            "<div><head>Results</head><p><s>Main results here.</s></p></div>"
+            "<div><head>Results</head><p><s>Appendix results here.</s></p></div>"
+            "<div><head>Results</head><p><s>Further results here.</s></p></div>"
+        )
+        assert [s.path for s in doc.sections] == [  # type: ignore[attr-defined]
+            "Results",
+            "Results (2)",
+            "Results (3)",
+        ]
+
+    def test_the_raw_heading_is_kept_unsuffixed(self) -> None:
+        # The suffix belongs to the path, which is an identifier. A reader view
+        # showing "Results (2)" as the *heading* would report a document that
+        # does not exist.
+        doc = parse(
+            "<div><head>Results</head><p><s>Main results here.</s></p></div>"
+            "<div><head>Results</head><p><s>Appendix results here.</s></p></div>"
+        )
+        assert [s.raw_title for s in doc.sections] == ["Results", "Results"]  # type: ignore[attr-defined]
+
+    def test_a_dropped_section_does_not_consume_a_path(self) -> None:
+        # A head-only div is never persisted, so reserving its path would push a
+        # counter onto the next real section for no reason.
+        doc = parse(
+            "<div><head>Results</head></div>"
+            "<div><head>Results</head><p><s>The real results are here.</s></p></div>"
+        )
+        (section,) = doc.sections  # type: ignore[attr-defined]
+        assert section.path == "Results"
+
+    def test_distinct_headings_are_left_alone(self) -> None:
+        # Positive control: a disambiguator that suffixed everything would pass
+        # every test above while making all breadcrumbs wrong.
+        doc = parse(
+            "<div><head>Method</head><p><s>We propose something.</s></p></div>"
+            "<div><head>Results</head><p><s>It works well enough.</s></p></div>"
+        )
+        assert [s.path for s in doc.sections] == ["Method", "Results"]  # type: ignore[attr-defined]
+
+    def test_subsections_inherit_the_disambiguated_parent(self) -> None:
+        doc = parse(
+            '<div><head n="3">Results</head><p><s>First results block.</s></p></div>'
+            '<div><head n="3">Results</head><p><s>Second results block.</s></p></div>'
+            '<div><head n="3.1">Ablations</head><p><s>Ablation details here.</s></p></div>'
+        )
+        assert doc.sections[2].path == "Results (2) > Ablations"  # type: ignore[attr-defined]
+
+
 class TestTables:
     """D41: caption-first, because captions are what survive and what people search."""
 

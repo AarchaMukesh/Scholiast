@@ -59,6 +59,16 @@ class Settings(BaseSettings):
     embedding_batch_size: int = 32
     embedding_dimensions: int = 768
 
+    # -- ingestion worker --------------------------------------------------
+    #: The cost of not having a broker (D47): with jobs in Postgres there is
+    #: nothing to push, so the loop asks. Imperceptible against NFR-P6's 90 s.
+    worker_poll_seconds: float = 1.0
+    #: Visibility timeout. Must exceed the slowest stage by a wide margin so only
+    #: a genuinely dead worker loses its claim; a live one refreshes it at every
+    #: stage transition.
+    worker_lease_seconds: float = 300.0
+    worker_batch_size: int = 1
+
     # -- generation --------------------------------------------------------
     #: Local carries sustained load; hosted quota is a deliberate spend (D26).
     generation_provider: str = "ollama"

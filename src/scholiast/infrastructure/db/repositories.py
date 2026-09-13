@@ -37,6 +37,7 @@ from scholiast.domain.paper import (
     PaperVisibility,
     ParseStatus,
     Provenance,
+    Section,
     SectionKind,
 )
 from scholiast.domain.workspace import (
@@ -263,10 +264,48 @@ class SqlPaperRepository(ScopedRepository):
                 paper.parse_failure_class.value if paper.parse_failure_class else None
             ),
             parser_version=paper.parser_version,
+            tei_key=paper.tei_key,
         )
         self._session.add(row)
         await self._session.flush()
         return _to_paper(row)
+
+    async def update(self, paper: Paper) -> bool:
+        """Write back what a parse produced. Identity columns are not touched.
+
+        Scoped like every other access here: the ingestion worker reaches a
+        paper through the membership it is ingesting for, so the predicate costs
+        it nothing and closes the alternative — an unscoped write that any scope
+        could aim at any paper id.
+
+        `content_hash`, `visibility` and `owner_id` are deliberately absent from
+        the SET list. Changing one would change which paper this *is*, and the
+        partial unique indexes encoding §4.4.2 are not something an update path
+        should be able to move a row across.
+        """
+        target = _as_uuid(paper.id)
+        if target is None:
+            return False
+        affected = await self._affected_rows(
+            update(models.Paper)
+            .where(models.Paper.id == target, models.Paper.id.in_(self._reachable_papers()))
+            .values(
+                title=paper.title,
+                authors=list(paper.authors),
+                abstract=paper.abstract,
+                year=paper.year,
+                venue=paper.venue,
+                citation_count=paper.citation_count,
+                external_ids=dict(paper.external_ids),
+                parse_status=paper.parse_status.value,
+                parse_failure_class=(
+                    paper.parse_failure_class.value if paper.parse_failure_class else None
+                ),
+                parser_version=paper.parser_version,
+                tei_key=paper.tei_key,
+            )
+        )
+        return affected > 0
 
     async def add_to_workspace(
         self, workspace_id: str, paper_id: str, state: PaperState
@@ -359,6 +398,83 @@ class SqlPaperRepository(ScopedRepository):
         return tuple(str(r) for r in rows)
 
 
+class SqlSectionRepository(ScopedRepository):
+    async def replace_for_paper(self, paper_id: str, sections: Sequence[Section]) -> int:
+        """Delete this paper's sections, then write the new ones (D52).
+
+        The delete cascades to `chunks`, which is what makes re-parsing
+        converge: section ids are UUIDs, so a second parse cannot upsert onto
+        the first, and appending would leave two copies of every section with
+        chunks attached to whichever the path mapping happened to choose.
+        """
+        target = _as_uuid(paper_id)
+        if target is None:
+            return 0
+        # Scoped, because this one *deletes* — and cascades to `chunks`. An
+        # unscoped variant would let any scope that guessed a paper id wipe
+        # another tenant's parsed content, which is a worse outcome than the
+        # read leaks layer 2 is usually guarding against.
+        await self._session.execute(
+            delete(models.Section).where(
+                models.Section.paper_id == target,
+                models.Section.paper_id.in_(self._reachable_papers()),
+            )
+        )
+        if not await self._can_reach(target):
+            return 0
+        for section in sections:
+            self._session.add(
+                models.Section(
+                    id=_as_uuid(section.id) or uuid.uuid4(),
+                    paper_id=target,
+                    parent_id=_as_uuid(section.parent_id) if section.parent_id else None,
+                    kind=section.kind.value,
+                    raw_title=section.raw_title,
+                    path=section.path,
+                    order_index=section.order_index,
+                    page_start=section.page_start,
+                    page_end=section.page_end,
+                    text=section.text,
+                )
+            )
+        await self._session.flush()
+        return len(sections)
+
+    async def list_for_paper(self, paper_id: str) -> list[Section]:
+        target = _as_uuid(paper_id)
+        if target is None:
+            return []
+        rows = (
+            (
+                await self._session.execute(
+                    select(models.Section)
+                    .where(
+                        models.Section.paper_id == target,
+                        models.Section.paper_id.in_(self._reachable_papers()),
+                    )
+                    .order_by(models.Section.order_index)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        return [_to_section(row) for row in rows]
+
+    async def _can_reach(self, paper_id: uuid.UUID) -> bool:
+        """Whether this scope holds a membership for the paper.
+
+        Checked before the insert half of `replace_for_paper`: the delete is
+        already filtered, but writing rows for a paper the scope cannot reach
+        would leave orphan sections nothing can read or clean up.
+        """
+        found = (
+            await self._session.execute(
+                self._reachable_papers().where(models.WorkspacePaper.paper_id == paper_id).limit(1)
+            )
+        ).scalar_one_or_none()
+        return found is not None
+
+
 class SqlChunkRepository(ScopedRepository):
     async def add_many(self, chunks: Sequence[Chunk], *, section_ids: Mapping[str, str]) -> int:
         written = 0
@@ -404,6 +520,19 @@ class SqlChunkRepository(ScopedRepository):
             )
         ).all()
         return [_to_chunk(chunk, section) for chunk, section in rows]
+
+    async def stamp_embedded(self, chunk_ids: Sequence[str], version: str) -> int:
+        """Mark chunks as having vectors, after the upsert succeeded (D53)."""
+        if not chunk_ids:
+            return 0
+        return await self._affected_rows(
+            update(models.Chunk)
+            .where(
+                models.Chunk.id.in_(list(chunk_ids)),
+                models.Chunk.paper_id.in_(self._reachable_papers()),
+            )
+            .values(embedder_version=version)
+        )
 
     async def list_for_paper(self, paper_id: str) -> list[Chunk]:
         target = _as_uuid(paper_id)
@@ -460,7 +589,23 @@ def _to_paper(row: models.Paper) -> Paper:
             FailureClass(row.parse_failure_class) if row.parse_failure_class else None
         ),
         parser_version=row.parser_version,
+        tei_key=row.tei_key,
         created_at=row.created_at,
+    )
+
+
+def _to_section(row: models.Section) -> Section:
+    return Section(
+        id=str(row.id),
+        paper_id=str(row.paper_id),
+        kind=SectionKind(row.kind),
+        raw_title=row.raw_title,
+        path=row.path,
+        order_index=row.order_index,
+        page_start=row.page_start,
+        page_end=row.page_end,
+        text=row.text,
+        parent_id=str(row.parent_id) if row.parent_id else None,
     )
 
 

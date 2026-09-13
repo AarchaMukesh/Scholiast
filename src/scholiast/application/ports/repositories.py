@@ -20,7 +20,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Protocol, runtime_checkable
 
-from scholiast.domain.paper import Chunk, Paper
+from scholiast.domain.paper import Chunk, Paper, Section
 from scholiast.domain.workspace import PaperMembership, PaperState, Workspace
 
 
@@ -78,6 +78,22 @@ class PaperRepository(Protocol):
 
     async def add(self, paper: Paper) -> Paper: ...
 
+    async def update(self, paper: Paper) -> bool:
+        """Persist a paper's mutable metadata — what a parse produced.
+
+        A whole entity rather than a keyword-per-column setter: a parse changes
+        title, authors, abstract, `parse_status`, `parse_failure_class`,
+        `parser_version` and `tei_key` together, and the domain invariant tying
+        status to failure class is checked on the entity. Splitting them into
+        setters would let a caller persist half a parse.
+
+        Identity fields (`content_hash`, `visibility`, `owner_id`) are not
+        written: changing one would change which paper this is, and the partial
+        unique indexes that encode §4.4.2 are not something an update path
+        should be able to move a row across.
+        """
+        ...
+
     async def add_to_workspace(
         self, workspace_id: str, paper_id: str, state: PaperState
     ) -> PaperMembership | None: ...
@@ -103,6 +119,38 @@ class PaperRepository(Protocol):
 
 
 @runtime_checkable
+class SectionRepository(Protocol):
+    """Parsed sections — the rows chunk offsets are measured against (D42).
+
+    Separate from `PaperRepository` for the same reason `ChunkRepository` is:
+    sections live under a paper but are written and read on their own schedule,
+    and one repository per entity keeps the scoped-query surface small enough to
+    audit.
+    """
+
+    async def replace_for_paper(self, paper_id: str, sections: Sequence[Section]) -> int:
+        """Replace this paper's sections wholesale, returning how many were written.
+
+        Replace rather than insert, because re-parsing must *converge* rather
+        than accumulate (FR-I7). Section ids are UUIDs — unlike chunk ids, which
+        are deterministic — so a second parse cannot upsert onto the first, and
+        appending would leave the paper with two copies of every section and
+        chunks pointing at whichever the mapping happened to pick. The
+        `ON DELETE CASCADE` from `sections` to `chunks` makes the replacement
+        total: stale chunks cannot outlive the section they indexed.
+        """
+        ...
+
+    async def list_for_paper(self, paper_id: str) -> list[Section]:
+        """This paper's sections in document order, or empty if out of scope.
+
+        Carries `text`, because this is what resolves a citation: chunk → its
+        section row → slice (D42), with no second store on the request path.
+        """
+        ...
+
+
+@runtime_checkable
 class ChunkRepository(Protocol):
     """Chunks, reachable only through a paper the scope can reach."""
 
@@ -123,6 +171,19 @@ class ChunkRepository(Protocol):
         that is already workspace-filtered, so an unreachable id means the two
         stores disagree — and serving it would be the leak layer 2 exists to
         stop.
+        """
+        ...
+
+    async def stamp_embedded(self, chunk_ids: Sequence[str], version: str) -> int:
+        """Record that these chunks now have vectors (NFR-M5, D53).
+
+        The second half of a two-phase write. Chunks are persisted with
+        `embedder_version` NULL, the vectors are upserted, and only then are the
+        rows stamped — so `Chunk.is_indexed` means "a vector exists for this
+        chunk" rather than "we intended to make one". A crash between the two
+        leaves vectors with unstamped rows, which is the orphan direction
+        §5.6.4's sweep detects; the reverse ordering would leave a chunk that
+        claims to be searchable and is not, with nothing reporting it.
         """
         ...
 
