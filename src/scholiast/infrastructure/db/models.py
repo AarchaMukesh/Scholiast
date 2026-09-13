@@ -351,6 +351,13 @@ class Message(Base):
         UUID(as_uuid=True), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False
     )
     role: Mapped[str] = mapped_column(Text, nullable=False)
+    #: Position within the conversation, 0-based. Not in §5.6.3, added
+    #: deliberately: `created_at`'s server default is `now()`, which is
+    #: *transaction* time in Postgres, so the two turns of one QA exchange share
+    #: a timestamp exactly and ordering falls through to a random UUID. A
+    #: conversation is a sequence and is stored as one, the same way
+    #: `chunks.ordinal` is.
+    ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     evidence: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     citations: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB, nullable=True)
@@ -364,7 +371,13 @@ class Message(Base):
     degraded: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = _created_at()
 
-    __table_args__ = (CheckConstraint("role IN ('user', 'assistant')", name="ck_messages_role"),)
+    __table_args__ = (
+        CheckConstraint("role IN ('user', 'assistant')", name="ck_messages_role"),
+        CheckConstraint("ordinal >= 0", name="ck_messages_ordinal_non_negative"),
+        # A concurrent double-append must fail loudly rather than quietly
+        # producing two messages that claim the same position.
+        Index("uq_messages_conversation_ordinal", "conversation_id", "ordinal", unique=True),
+    )
 
 
 class IngestionJob(Base):

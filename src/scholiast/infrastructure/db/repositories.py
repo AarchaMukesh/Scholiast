@@ -25,10 +25,11 @@ from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from typing import Any, cast
 
-from sqlalchemy import CursorResult, Executable, Select, delete, select, update
+from sqlalchemy import CursorResult, Executable, Select, delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from scholiast.application.ports.tenancy import Scope, TenantIsolationViolation
+from scholiast.domain.conversation import Conversation, StageTimings, Turn, TurnRole
 from scholiast.domain.errors import FailureClass
 from scholiast.domain.paper import (
     Chunk,
@@ -40,6 +41,7 @@ from scholiast.domain.paper import (
     Section,
     SectionKind,
 )
+from scholiast.domain.retrieval import Citation, CitationStatus, RetrievalArm, ScoredChunk
 from scholiast.domain.workspace import (
     PaperMembership,
     PaperState,
@@ -398,6 +400,135 @@ class SqlPaperRepository(ScopedRepository):
         return tuple(str(r) for r in rows)
 
 
+class SqlConversationRepository(ScopedRepository):
+    """Conversations and their turns, scoped through the owning workspace (D59)."""
+
+    async def create(self, workspace_id: str, *, title: str | None = None) -> str | None:
+        target = _as_uuid(workspace_id)
+        if target is None:
+            return None
+        # Membership in a workspace this scope owns is the whole predicate: a
+        # conversation grafted into someone else's workspace would make every
+        # later read of it legitimate-looking.
+        owned = (
+            await self._session.execute(
+                self._visible_workspaces().where(models.Workspace.id == target)
+            )
+        ).scalar_one_or_none()
+        if owned is None:
+            return None
+
+        row = models.Conversation(id=uuid.uuid4(), workspace_id=target, title=title)
+        self._session.add(row)
+        await self._session.flush()
+        return str(row.id)
+
+    async def get(self, conversation_id: str) -> Conversation | None:
+        target = _as_uuid(conversation_id)
+        if target is None:
+            return None
+        row = (
+            await self._session.execute(
+                select(models.Conversation).where(
+                    models.Conversation.id == target,
+                    models.Conversation.workspace_id.in_(self._visible_workspaces()),
+                )
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            return None
+
+        turns = (
+            (
+                await self._session.execute(
+                    select(models.Message)
+                    .where(models.Message.conversation_id == target)
+                    # By ordinal, not by timestamp: `created_at` defaults to
+                    # `now()`, which is transaction time, so both turns of one
+                    # exchange share it exactly.
+                    .order_by(models.Message.ordinal)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        return Conversation(
+            id=str(row.id),
+            workspace_id=str(row.workspace_id),
+            title=row.title,
+            turns=[_to_turn(t) for t in turns],
+            created_at=row.created_at,
+        )
+
+    async def append(self, conversation_id: str, turn: Turn) -> str | None:
+        target = _as_uuid(conversation_id)
+        if target is None:
+            return None
+        reachable = (
+            await self._session.execute(
+                select(models.Conversation.id).where(
+                    models.Conversation.id == target,
+                    models.Conversation.workspace_id.in_(self._visible_workspaces()),
+                )
+            )
+        ).scalar_one_or_none()
+        if reachable is None:
+            return None
+
+        # The next position, read inside the caller's transaction. The unique
+        # index on (conversation_id, ordinal) is what turns a lost race into an
+        # IntegrityError rather than two messages claiming one position.
+        used = (
+            await self._session.execute(
+                select(func.max(models.Message.ordinal)).where(
+                    models.Message.conversation_id == target
+                )
+            )
+        ).scalar_one_or_none()
+
+        row = models.Message(
+            id=uuid.uuid4(),
+            conversation_id=target,
+            ordinal=0 if used is None else used + 1,
+            role=turn.role.value,
+            content=turn.content,
+            # Stored as the scored chunks the model was shown, which is what
+            # FR-Q6 makes inspectable — not the rendered passages, which are
+            # reconstructable from the chunk rows and would duplicate them.
+            evidence={
+                "chunks": [
+                    {"chunk_id": c.chunk_id, "paper_id": c.paper_id, "score": c.score}
+                    for c in turn.evidence
+                ]
+            }
+            if turn.evidence
+            else None,
+            citations=[
+                {
+                    "label": c.label,
+                    "chunk_id": c.chunk_id,
+                    "status": c.status.value,
+                    "claim_text": c.claim_text,
+                }
+                for c in turn.citations
+            ]
+            or None,
+            prompt_version=turn.prompt_version,
+            provider=turn.provider,
+            model=turn.model,
+            latency_ms=turn.timings.as_dict() if turn.timings else None,
+            token_usage=(
+                {"prompt": turn.prompt_tokens, "completion": turn.completion_tokens}
+                if turn.prompt_tokens is not None or turn.completion_tokens is not None
+                else None
+            ),
+            degraded=list(turn.degraded) or None,
+        )
+        self._session.add(row)
+        await self._session.flush()
+        return str(row.id)
+
+
 class SqlSectionRepository(ScopedRepository):
     async def replace_for_paper(self, paper_id: str, sections: Sequence[Section]) -> int:
         """Delete this paper's sections, then write the new ones (D52).
@@ -606,6 +737,57 @@ def _to_section(row: models.Section) -> Section:
         page_end=row.page_end,
         text=row.text,
         parent_id=str(row.parent_id) if row.parent_id else None,
+    )
+
+
+def _to_turn(row: models.Message) -> Turn:
+    """One message row back to a domain turn.
+
+    Citations are rebuilt through the `Citation` constructor rather than around
+    it, so its invariant — `chunk_id` is None exactly when the label was
+    fabricated — is re-checked on the way out. A row that violated it would
+    otherwise become an unresolvable citation the UI renders as clickable.
+    """
+    citations = tuple(
+        Citation(
+            label=str(c["label"]),
+            chunk_id=c.get("chunk_id"),
+            claim_text=str(c.get("claim_text", "")),
+            status=CitationStatus(c["status"]),
+        )
+        for c in (row.citations or [])
+    )
+    evidence = tuple(
+        ScoredChunk(
+            chunk_id=str(c["chunk_id"]),
+            paper_id=str(c["paper_id"]),
+            score=float(c["score"]),
+            arm=RetrievalArm.DENSE,
+        )
+        for c in ((row.evidence or {}).get("chunks") or [])
+    )
+    latency = row.latency_ms or {}
+    usage = row.token_usage or {}
+    return Turn(
+        role=TurnRole(row.role),
+        content=row.content,
+        citations=citations,
+        evidence=evidence,
+        degraded=tuple(row.degraded or ()),
+        prompt_version=row.prompt_version,
+        provider=row.provider,
+        model=row.model,
+        timings=StageTimings(
+            retrieval_ms=int(latency.get("retrieval_ms", 0)),
+            assembly_ms=int(latency.get("assembly_ms", 0)),
+            first_token_ms=int(latency.get("first_token_ms", 0)),
+            generation_ms=int(latency.get("generation_ms", 0)),
+        )
+        if latency
+        else None,
+        prompt_tokens=usage.get("prompt"),
+        completion_tokens=usage.get("completion"),
+        created_at=row.created_at,
     )
 
 

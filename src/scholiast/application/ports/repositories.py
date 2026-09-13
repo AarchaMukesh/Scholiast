@@ -20,6 +20,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Protocol, runtime_checkable
 
+from scholiast.domain.conversation import Conversation, Turn
 from scholiast.domain.paper import Chunk, Paper, Section
 from scholiast.domain.workspace import PaperMembership, PaperState, Workspace
 
@@ -115,6 +116,31 @@ class PaperRepository(Protocol):
         it is a scoped query rather than a value the caller supplies: the id set
         is *derived from* the tenant predicate rather than passed alongside it.
         """
+        ...
+
+
+@runtime_checkable
+class ConversationRepository(Protocol):
+    """Conversations and their turns (FR-Q6, FR-Q9, §5.4.3, D59).
+
+    A turn is persisted in full — evidence, citations, prompt version, provider
+    and model, per-stage latency and token usage. The accounting is not
+    decoration: AP-8's claim is that a stage breakdown turns "it's slow" into
+    "reranking is 60% of p95", and M2's latency profiling needs those numbers to
+    have been recorded all along rather than retrofitted onto messages that
+    never had them.
+    """
+
+    async def create(self, workspace_id: str, *, title: str | None = None) -> str | None:
+        """Start a conversation, returning its id, or None if out of scope."""
+        ...
+
+    async def get(self, conversation_id: str) -> Conversation | None:
+        """A conversation with its turns, or None if the scope cannot reach it."""
+        ...
+
+    async def append(self, conversation_id: str, turn: Turn) -> str | None:
+        """Record one turn, returning its message id, or None if out of scope."""
         ...
 
 
