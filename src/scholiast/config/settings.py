@@ -68,6 +68,13 @@ class Settings(BaseSettings):
     #: stage transition.
     worker_lease_seconds: float = 300.0
     worker_batch_size: int = 1
+    #: D63: the composition root runs the worker alongside the API, so
+    #: `uvicorn scholiast.main:app` is the single command M1's acceptance
+    #: criterion asks for. Not `scholiast.api.app` — that module exposes only a
+    #: factory, and deliberately knows nothing about the worker, because the
+    #: layers contract makes `api` and `workers` independent siblings. M3 turns
+    #: this off when Celery arrives: a configuration change, not a restructuring.
+    worker_in_process: bool = True
 
     # -- generation --------------------------------------------------------
     #: Local carries sustained load; hosted quota is a deliberate spend (D26).

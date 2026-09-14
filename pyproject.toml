@@ -50,6 +50,10 @@ dev = [
     "grimp<3.15",
     "testcontainers[postgres,redis]>=4.9",
     "respx>=0.22",
+    # Runs an ASGI app's lifespan under test, so the acceptance suite
+    # exercises the real startup path — the singletons, the Qdrant
+    # collection check — rather than a hand-assembled stand-in.
+    "asgi-lifespan>=2.1",
     "hypothesis>=6.123",
     "schemathesis>=3.39",
 ]

@@ -1,0 +1,126 @@
+/* M1 interface styling (CON-11).
+ *
+ * "Credible and clean, not a design showcase." System fonts, one accent, no
+ * framework — effort spent here is effort not spent on retrieval quality, and
+ * doc 4 §4.7 says so in as many words.
+ */
+
+:root {
+  --bg: #fbfbfa;
+  --panel: #ffffff;
+  --ink: #1c1c1a;
+  --muted: #6b6b66;
+  --line: #e2e2dd;
+  --accent: #2f5d8a;
+  --warn: #8a5a2f;
+  --bad: #8a2f2f;
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+header {
+  padding: 20px 24px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--panel);
+}
+h1 { margin: 0; font-size: 20px; letter-spacing: -0.01em; }
+.sub { margin: 4px 0 0; color: var(--muted); font-size: 13px; max-width: 60ch; }
+
+main {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr) 320px;
+  gap: 16px;
+  padding: 16px 24px 32px;
+  align-items: start;
+}
+@media (max-width: 1000px) {
+  main { grid-template-columns: 1fr; }
+}
+
+section {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 14px 16px;
+}
+h2 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.hint { margin: 0 0 10px; font-size: 12px; color: var(--muted); }
+
+.row { display: flex; gap: 6px; margin-bottom: 12px; }
+select, input[type="text"], input[type="file"] {
+  flex: 1; min-width: 0; padding: 6px 8px;
+  border: 1px solid var(--line); border-radius: 4px;
+  background: #fff; color: inherit; font: inherit;
+}
+button {
+  padding: 6px 12px; border: 1px solid var(--accent); border-radius: 4px;
+  background: var(--accent); color: #fff; font: inherit; cursor: pointer;
+}
+button:hover { filter: brightness(1.08); }
+button:disabled { opacity: 0.5; cursor: default; filter: none; }
+
+form { display: flex; flex-direction: column; gap: 6px; margin: 0 0 12px; }
+form label { font-size: 12px; color: var(--muted); }
+#ask-form { flex-direction: row; }
+
+.papers { list-style: none; margin: 0; padding: 0; }
+.papers li { padding: 8px 0; border-top: 1px solid var(--line); font-size: 13px; }
+.papers .title { display: block; }
+.papers .state {
+  display: inline-block; margin-top: 3px; padding: 1px 6px; border-radius: 3px;
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em;
+  background: #eef2f6; color: var(--accent);
+}
+.papers .state[data-state="indexed"] { background: #eaf3ea; color: #2f6b34; }
+.papers .state[data-state="failed"],
+.papers .state[data-state="unsupported"] { background: #f6eded; color: var(--bad); }
+/* NFR-U2: a failed paper says what the user can do, not which stage raised. */
+.papers .why { display: block; margin-top: 3px; color: var(--bad); font-size: 12px; }
+.papers .remove { float: right; padding: 1px 6px; font-size: 11px; background: none; color: var(--muted); border-color: var(--line); }
+
+.transcript { min-height: 120px; margin-bottom: 12px; }
+.turn { margin-bottom: 14px; }
+.turn .who { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.turn .body { white-space: pre-wrap; }
+
+/* Citations are the product's differentiating surface, so they read as
+ * interactive rather than as punctuation (NFR-U3). */
+.cite {
+  display: inline; padding: 0 3px; border-radius: 3px; cursor: pointer;
+  background: #eef2f6; color: var(--accent); font-size: 12px; font-weight: 600;
+  border: none; font-family: inherit;
+}
+.cite:hover { background: var(--accent); color: #fff; }
+
+.disclosure {
+  border-left: 3px solid var(--warn); padding: 6px 10px;
+  background: #fdf8f2; color: var(--warn); font-size: 12px;
+}
+
+.evidence { list-style: none; margin: 0; padding: 0; }
+.evidence li { padding: 8px 0; border-top: 1px solid var(--line); font-size: 12px; }
+.evidence .label { font-weight: 600; color: var(--accent); }
+.evidence .where { color: var(--muted); }
+.evidence .snippet { display: block; margin-top: 4px; max-height: 3.2em; overflow: hidden; }
+.evidence .other-work { color: var(--warn); font-style: italic; }
+
+dialog { max-width: 760px; width: 90vw; border: 1px solid var(--line); border-radius: 6px; padding: 18px; }
+dialog h3 { margin: 0 0 4px; font-size: 15px; }
+.meta { margin: 0 0 10px; color: var(--muted); font-size: 12px; }
+#reader-text { white-space: pre-wrap; font: 13px/1.6 ui-monospace, "Cascadia Code", monospace; max-height: 55vh; overflow: auto; margin: 0; }
+/* The cited span, marked in place — "never somewhere in this 12-page PDF". */
+#reader-text mark { background: #fdf0c0; padding: 1px 0; }
+
+.toast {
+  position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+  background: var(--ink); color: #fff; padding: 8px 14px; border-radius: 4px; font-size: 13px;
+}
+.toast[data-kind="error"] { background: var(--bad); }

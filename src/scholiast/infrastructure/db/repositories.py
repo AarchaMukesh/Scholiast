@@ -380,6 +380,47 @@ class SqlPaperRepository(ScopedRepository):
         )
         return affected > 0
 
+    async def has_any_membership(self, paper_id: str) -> bool:
+        """Whether any workspace anywhere still holds this paper (FR-W2, AD-8).
+
+        The one read in this class that is deliberately NOT scope-filtered. A
+        scoped answer would report "no memberships" as soon as the *caller's*
+        workspaces had none, and the caller would then delete derived data
+        another tenant is still retrieving from. It returns a boolean about
+        existence and never a row, so it cannot disclose whose workspace, what
+        it is called, or that it is the same paper.
+        """
+        target = _as_uuid(paper_id)
+        if target is None:
+            return False
+        found = (
+            await self._session.execute(
+                select(models.WorkspacePaper.paper_id)
+                .join(
+                    models.Workspace,
+                    models.Workspace.id == models.WorkspacePaper.workspace_id,
+                )
+                .where(
+                    models.WorkspacePaper.paper_id == target,
+                    models.WorkspacePaper.state != PaperState.REMOVED.value,
+                    # A soft-deleted workspace is on its way out (§5.6.4), so it
+                    # does not count as a holder — otherwise a paper could never
+                    # be purged while a deleted workspace lingered.
+                    models.Workspace.deleted_at.is_(None),
+                )
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        return found is not None
+
+    async def delete(self, paper_id: str) -> bool:
+        """Delete the paper row; sections and chunks cascade by foreign key."""
+        target = _as_uuid(paper_id)
+        if target is None:
+            return False
+        affected = await self._affected_rows(delete(models.Paper).where(models.Paper.id == target))
+        return affected > 0
+
     async def queryable_paper_ids(self, workspace_id: str) -> tuple[str, ...]:
         target = _as_uuid(workspace_id)
         if target is None:

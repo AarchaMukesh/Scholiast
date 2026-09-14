@@ -286,9 +286,10 @@ class TestCitationAudit:
 
     def test_uncited_answer_is_clean_but_that_is_not_groundedness(self) -> None:
         # `is_clean` means "no fabricated labels", NOT "adequately cited". An
-        # answer with no citations at all passes layer 2 trivially while failing
-        # FR-Q2's actual intent — citation *coverage* is a separate check, and
-        # conflating them would let an uncited answer report as verified.
+        # answer with no citations at all passes layer 2 trivially — it satisfies
+        # FR-Q2 (citation *validity*) while saying nothing about FR-Q11 (citation
+        # *coverage*), which is measured in M5 (D66). Conflating them would let
+        # an uncited answer report as verified.
         audit = audit_citations("Transformers are popular.", self.evidence())
         assert audit.is_clean
         assert audit.citations == ()

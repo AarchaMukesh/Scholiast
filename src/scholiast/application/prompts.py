@@ -2,10 +2,19 @@
 
 Prompts live here rather than in `infrastructure/llm/` as §5.3's tree suggests,
 because these six constraints are the product's grounding rules, not a vendor's
-dialect — they are the same whichever model serves the tokens, and they are what
-makes FR-Q2 and FR-Q4 true rather than aspirational. A provider-specific
-fragment (Groq's `json_object` mode requiring the literal word "json", measured
-in M0) stays in the adapter that needs it.
+dialect — they are the same whichever model serves the tokens. A
+provider-specific fragment (Groq's `json_object` mode requiring the literal word
+"json", measured in M0) stays in the adapter that needs it.
+
+**These constraints instruct; they do not guarantee** (D66). The prompt asks the
+model to cite every non-trivial claim, and a model may simply not — measured in
+phase 7 against a real 3B, which answered a broad question with no citations at
+all. What the *system* guarantees is FR-Q2, citation **validity**: a label that
+resolves to nothing is detected and stripped, deterministically, whatever the
+model does. Whether claims actually receive citations is FR-Q11, citation
+**coverage**, which is a measured property of generation and is reported in M5.
+Writing a rule here is an intervention to be evaluated, not a requirement
+discharged.
 
 **Versioned, and the version is stamped onto every message** (NFR-M5). Doc 6
 calls prompts "configuration, not code" for a reason: a prompt that lives inline

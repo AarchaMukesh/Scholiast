@@ -1,0 +1,95 @@
+<!doctype html>
+<!--
+  The M1 interface (D37, CON-11).
+
+  Vanilla HTML, one file of CSS, one of JS, no build step. D37 deferred doc 7
+  §7.7's React/Vite/Tailwind stack to M3 deliberately: building it here would
+  spend four or five days scaffolding against an API that M2 and M3 will change,
+  while M1's actual risk was parsing and provenance. M1's own definition is
+  "ugly is fine, broken end-to-end is not".
+
+  Three of §4.7's eight surfaces, which is what M1's deliverable names: the
+  workspace with its upload dropzone, the chat with a streamed answer, and the
+  evidence panel that makes a citation clickable.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Scholiast</title>
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Scholiast</h1>
+      <p class="sub">
+        Grounded question answering over your own papers. Every citation
+        resolves to a span you can read, checked rather than trusted.
+      </p>
+    </header>
+
+    <main>
+      <section id="library" aria-labelledby="library-heading">
+        <h2 id="library-heading">Workspace</h2>
+
+        <div class="row">
+          <select id="workspace-select" aria-label="Workspace"></select>
+          <button id="new-workspace" type="button">New</button>
+        </div>
+
+        <form id="upload-form">
+          <label for="pdf">Add a paper (PDF, max 50 MB)</label>
+          <input id="pdf" type="file" accept="application/pdf" required />
+          <button type="submit">Upload</button>
+        </form>
+
+        <!-- NFR-U1: long operations show state. Papers appear here the moment
+             they are queued and update as ingestion moves through its stages. -->
+        <ul id="papers" class="papers"></ul>
+      </section>
+
+      <section id="chat" aria-labelledby="chat-heading">
+        <h2 id="chat-heading">Ask</h2>
+        <div id="transcript" class="transcript" aria-live="polite"></div>
+
+        <form id="ask-form">
+          <input
+            id="question"
+            type="text"
+            placeholder="What problem does this paper address?"
+            autocomplete="off"
+            required
+          />
+          <button type="submit">Ask</button>
+        </form>
+
+        <!-- NFR-U4: uncertainty is visible rather than buried. Degradation
+             flags and excluded papers land here, next to the answer. -->
+        <div id="disclosure" class="disclosure" hidden></div>
+      </section>
+
+      <section id="evidence-panel" aria-labelledby="evidence-heading">
+        <h2 id="evidence-heading">Evidence</h2>
+        <p class="hint">
+          The passages the answer was built from. Click one to read it in place.
+        </p>
+        <ol id="evidence" class="evidence"></ol>
+      </section>
+    </main>
+
+    <!-- The citation target (NFR-U3). Opened by clicking a citation or an
+         evidence item; shows the section's text with the cited span marked. -->
+    <dialog id="reader">
+      <article>
+        <h3 id="reader-title"></h3>
+        <p id="reader-meta" class="meta"></p>
+        <pre id="reader-text"></pre>
+      </article>
+      <form method="dialog"><button>Close</button></form>
+    </dialog>
+
+    <div id="toast" class="toast" hidden role="status"></div>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>

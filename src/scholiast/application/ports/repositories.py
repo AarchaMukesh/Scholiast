@@ -109,6 +109,37 @@ class PaperRepository(Protocol):
         failure_detail: str | None = None,
     ) -> bool: ...
 
+    async def remove_from_workspace(self, workspace_id: str, paper_id: str) -> bool:
+        """Drop a membership, reporting whether one was there (FR-W2).
+
+        False for "not a member" rather than an error: removal is idempotent
+        (NFR-R5), and a retried delete must not fail for having already
+        succeeded.
+        """
+        ...
+
+    async def has_any_membership(self, paper_id: str) -> bool:
+        """Whether ANY workspace still holds this paper — across all tenants.
+
+        Deliberately not scope-filtered, and it is the one read here that must
+        not be. §4.4.2's registry shares a public paper across tenants and AD-8
+        exists so it is parsed once; a scoped answer would say "no memberships"
+        whenever the *caller's* workspaces had none, and the caller would then
+        delete a paper another tenant is still reading from. Safe because it
+        returns a boolean about existence, never a row: it cannot leak what the
+        other workspace is, who owns it, or that it is the same paper.
+        """
+        ...
+
+    async def delete(self, paper_id: str) -> bool:
+        """Delete the paper row, cascading to its sections and chunks.
+
+        Only called once `has_any_membership` is False. The cascade is the
+        database's (`ON DELETE CASCADE`), so there is no window where sections
+        outlive their paper.
+        """
+        ...
+
     async def queryable_paper_ids(self, workspace_id: str) -> tuple[str, ...]:
         """Exactly the corpus a query may retrieve from — the D36 filter input.
 
