@@ -1,6 +1,15 @@
 # --- Design docs (D12: kept local, not committed) ---------------------------
-# Reversible: delete this line to publish the design docs.
-docs/
+# Reversible: delete these lines to publish the design docs.
+#
+# `docs/*` rather than `docs/`, because git cannot re-include a path whose
+# parent DIRECTORY is excluded — the negation below is unreachable otherwise.
+docs/*
+# D67: milestone logs are the exception. A design doc is a living draft; a
+# milestone log is written once at a milestone's close, reports measurements
+# taken against a specific commit, and is never edited after. Evidence that
+# describes a commit belongs in history with it — the same reason M0 committed
+# SPIKE-FINDINGS.md.
+!docs/milestone-logs/
 
 # --- Spike artifacts --------------------------------------------------------
 # fixtures/ excluded: ~45 MB of re-downloadable arXiv PDFs.
