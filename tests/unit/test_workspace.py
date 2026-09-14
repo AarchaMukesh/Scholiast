@@ -13,6 +13,7 @@ from datetime import UTC, datetime
 import pytest
 
 from scholiast.domain.errors import (
+    FailureClass,
     IllegalStateTransition,
     InsufficientPapersForComparison,
     InvariantViolation,
@@ -25,6 +26,7 @@ from scholiast.domain.workspace import (
     Workspace,
     WorkspaceState,
     paper_transition_allowed,
+    terminal_state_for,
     workspace_transition_allowed,
 )
 
@@ -234,3 +236,106 @@ class TestWorkspaceDeletion:
         ws.mark_deleting(now=NOW)
         ws.add_paper("p-1", now=NOW)
         assert ws.state is WorkspaceState.DELETING
+
+
+class TestRedeliveryRestartsTheAttempt:
+    """§5.7.4's at-least-once guarantee, in the state machine.
+
+    A worker that dies mid-stage leaves a membership stranded at CHUNKING. The
+    queue will redeliver that job, and the pipeline restarts from the beginning
+    because every step is idempotent — so the membership has to be able to say
+    it is back at the start. Without this the redelivered job raises
+    IllegalStateTransition on its first move and dead-letters a paper that was
+    only ever unlucky.
+    """
+
+    @pytest.mark.parametrize(
+        "stranded",
+        [
+            PaperState.FETCHING,
+            PaperState.PARSING,
+            PaperState.CHUNKING,
+            PaperState.EMBEDDING,
+        ],
+    )
+    def test_an_in_flight_membership_can_return_to_queued(self, stranded: PaperState) -> None:
+        assert paper_transition_allowed(stranded, PaperState.QUEUED)
+
+    def test_a_finished_paper_cannot_be_dragged_back_to_queued(self) -> None:
+        # The guard that keeps the previous test from being a licence to reset
+        # anything: an INDEXED paper is done, and re-queueing it would re-embed
+        # a corpus FR-I7 says must not be re-embedded.
+        assert not paper_transition_allowed(PaperState.INDEXED, PaperState.QUEUED)
+        assert not paper_transition_allowed(PaperState.UNSUPPORTED, PaperState.QUEUED)
+        assert not paper_transition_allowed(PaperState.REMOVED, PaperState.QUEUED)
+
+    def test_restarting_counts_as_an_attempt(self) -> None:
+        # Counting only failures would make the user-visible attempt count
+        # disagree with reality precisely where a paper keeps dying mid-pipeline.
+        membership = PaperMembership(
+            workspace_id="w", paper_id="p", state=PaperState.QUEUED, added_at=NOW
+        )
+        membership.transition_to(PaperState.PARSING)
+        membership.transition_to(PaperState.QUEUED)
+        assert membership.attempts == 1
+
+    def test_restarting_clears_the_previous_failure(self) -> None:
+        membership = PaperMembership(
+            workspace_id="w", paper_id="p", state=PaperState.QUEUED, added_at=NOW
+        )
+        membership.transition_to(PaperState.FAILED, failure_class="transient", failure_detail="x")
+        membership.transition_to(PaperState.QUEUED)
+        assert membership.failure_class is None
+        assert membership.failure_detail is None
+
+
+class TestWhereAFailureLands:
+    """§4.4.1 tabulates retryability and the terminal states, but never joins them."""
+
+    @pytest.mark.parametrize(
+        "failure_class",
+        [FailureClass.UNPARSEABLE, FailureClass.SCANNED_IMAGE, FailureClass.TOO_LARGE],
+    )
+    def test_a_hopeless_file_is_unsupported(self, failure_class: FailureClass) -> None:
+        # §4.4.1: UNSUPPORTED exists to give "no false hope of retry".
+        assert terminal_state_for(failure_class) is PaperState.UNSUPPORTED
+
+    def test_a_missing_source_is_failed_because_the_user_can_fix_it(self) -> None:
+        # Equally non-retryable by the system, but the remedy is a manual
+        # upload — and §4.4.1 offers that from FAILED and not from UNSUPPORTED.
+        assert terminal_state_for(FailureClass.SOURCE_UNAVAILABLE) is PaperState.FAILED
+
+    @pytest.mark.parametrize(
+        "failure_class", [FailureClass.TRANSIENT, FailureClass.RESOURCE_EXHAUSTED]
+    )
+    def test_a_retryable_class_lands_on_failed_when_exhausted(
+        self, failure_class: FailureClass
+    ) -> None:
+        assert terminal_state_for(failure_class) is PaperState.FAILED
+
+    def test_every_class_has_a_landing_state(self) -> None:
+        # Walks the whole enum, so adding a class without deciding where it
+        # lands fails here rather than defaulting silently.
+        assert all(
+            terminal_state_for(c) in (PaperState.FAILED, PaperState.UNSUPPORTED)
+            for c in FailureClass
+        )
+
+
+class TestMembershipEntryStates:
+    """§5.4.2 has two entry points into a workspace, not one."""
+
+    def test_an_already_ingested_paper_may_join_indexed(self) -> None:
+        ws = workspace()
+        membership = ws.add_paper("p-1", now=NOW, state=PaperState.INDEXED)
+        assert membership.state is PaperState.INDEXED
+        assert ws.is_queryable
+
+    def test_a_membership_cannot_be_created_mid_pipeline(self) -> None:
+        # Creating a membership at EMBEDDING would claim work that never ran.
+        ws = workspace()
+        with pytest.raises(InvariantViolation):
+            ws.add_paper("p-1", now=NOW, state=PaperState.EMBEDDING)
+
+    def test_the_default_entry_is_still_queued(self) -> None:
+        assert workspace().add_paper("p-1", now=NOW).state is PaperState.QUEUED

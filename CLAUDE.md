@@ -5,29 +5,53 @@ and groundedness are **measured rather than asserted**. Portfolio project for ML
 Engineer interviews; the measurement discipline *is* the differentiator, not the
 feature list.
 
-**Status:** M0 (validation spike) complete. M1 (walking skeleton) in progress —
-foundation done, adapters and the end-to-end slice remain.
+**Status:** M0 and **M1 complete** on `m1-walking-skeleton` (not yet merged to `master`),
+built one phase per commit — schema + migrations, tenant-scoped repositories, GROBID
+parser, embedder + Qdrant index, ingestion pipeline, retrieval + generation, API + UI.
+All 7 acceptance criteria pass; 543 tests, five gates green. **M2 is next** and is the
+project's thesis: the labelled eval set, the metric pipeline, and the ablation table.
+
+**Read `docs/milestone-logs/M1-MILESTONE-LOG.md` before starting M2.** It is the only
+tracked file under `docs/` (D67) and records what M1 deliberately did *not* establish —
+retrieval quality, citation coverage and latency are all unmeasured, and M1's QA path is
+M2's ablation **baseline**, not the adopted design (D56). `git log` carries the per-phase
+rationale and the debt deferred to M2/M3/M5.
 
 ---
 
 ## Read this first
 
-**`docs/00-decisions-log.md` is the source of truth.** D1–D35, and several *reverse*
-what the earlier design docs say. Reading doc 7 without the log will lead you to
-recommend things already measured against:
+**`docs/00-decisions-log.md` is the source of truth.** D1–D67, and several *reverse*
+what the earlier design docs say — including two that reverse *other decisions*.
+Reading doc 5, 6 or 7 without the log will lead you to recommend things already
+measured against:
 
 - GROBID: required → pending → **required again** (D19) — the 95% PyMuPDF figure
   measured heading *detection*; the chunker needs section *bodies*
+- Provenance: "TEI lacks page offsets" → **false** (D39, reverses D19) — M0 simply
+  never sent `teiCoordinates`. With it, 10,621/10,621 sentences carry coordinates
+- Chunk offsets: document-relative → **section-relative** (D42) — they index
+  `sections.text`, and `ParsedSection` enforces the round trip at construction
 - Gemini: "strong first candidate" → **unsuitable** (D29) — its free tier trains on
   submitted content, and this system ingests possibly-unpublished manuscripts
 - Local model: fallback → **throughput path** (D26) — free-tier quota is ~2 requests
   per minute
+- Vector filtering: `workspace_id` → **`paper_id` set** (D36) — a public paper is one
+  shared row, so a workspace filter would duplicate every vector per tenant
+- Chat transport: `EventSource` → **POST + `fetch`** (D61, narrows D37) — `EventSource`
+  can only GET, which would put the question in a URL; the SSE wire format is kept
+- FR-Q2: one requirement → **two** (D66) — citation *validity* is M1 and guaranteed;
+  citation *coverage* is FR-Q11, measured in M5. A real 3B cited nothing on a broad
+  question, and the requirement as written could not tell the difference
 
-`docs/` is **gitignored (D12)** — read it from disk; it is not in git history.
+`docs/` is **gitignored (D12)** — read it from disk. The one exception is
+`docs/milestone-logs/`, which **is** committed (D67): a milestone log reports
+measurements against a specific commit, so it belongs in history with it.
 
 | File | What it holds |
 |---|---|
-| `docs/00-decisions-log.md` | D1–D35 + measured hardware baseline. **Start here.** |
+| `docs/00-decisions-log.md` | D1–D67 + measured hardware baseline. **Start here.** |
+| `docs/milestone-logs/M1-MILESTONE-LOG.md` | M1's close-out: 7/7 criteria, what is *not* measured, debt to M2/M3/M5 |
 | `docs/03-requirements.md` | FR/NFR IDs referenced throughout the code |
 | `docs/05-system-architecture.md` | §5.3 layering · §5.6 schema · §5.7 GPU contention |
 | `docs/06-ml-system-design.md` | chunking, retrieval, citation integrity, ablations |
@@ -72,8 +96,15 @@ src/scholiast/
 ├── infrastructure/  adapters — the ONLY layer that knows vendor names
 ├── api/             HTTP surface
 ├── workers/         async pipeline tasks
-└── eval/            evaluation harness (a real package, not a script folder)
+├── eval/            evaluation harness (a real package, not a script folder)
+└── main.py          composition root — in NO layer, wires api + workers (D63)
 ```
+
+`main.py` exists because `import-linter` rejected an API lifespan that constructed
+the worker: `api` and `workers` are independent siblings, and an HTTP layer that
+imports a background worker cannot be deployed without one. `uvicorn scholiast.main:app`
+is the one command M1's acceptance criterion asks for — **not** `scholiast.api.app`,
+which exposes only a factory.
 
 Repositories require a `TenantContext` by constructor — a repository that cannot
 filter by tenant will not type-check. `SystemContext` is the single sanctioned
@@ -91,23 +122,30 @@ bypass; it demands a stated reason so it stays greppable.
 - **Reference requirement IDs in comments** where behaviour is non-obvious (FR-I5,
   NFR-P2, D18…). The docs explain *why*; the code should point at them.
 - **If a measurement contradicts a doc, the measurement wins.** Update the doc and add
-  a decisions-log entry — that is what M0 did (REV-1…7, D18–D35).
+  a decisions-log entry — that is what M0 did (REV-1…7, D18–D35) and M1 kept doing
+  (D36–D46, two of which reverse M0's own conclusions).
 
 ---
 
 ## ⚠️ Environment traps
 
-Every one of these cost real time in M0. Do not rediscover them.
+Every one of these cost real time in M0 or M1. Do not rediscover them.
 
 | Trap | Rule |
 |---|---|
 | **`uv pip install` targets the wrong Python** | Always pass `--python .venv\Scripts\python.exe`, or it silently installs into the system interpreter |
-| **`datasets` breaks the ML stack** | A Windows Application Control policy blocks pyarrow's `_dataset` DLL, and `sentence-transformers` imports `datasets` at module load. **Do not install it** (D25). QASPER is vendored as plain JSON (D20). |
+| **`datasets` breaks the ML stack** | A Windows Application Control policy blocks pyarrow's `_dataset` DLL, and `sentence-transformers` imports `datasets` at module load. **Do not install it** (D25). QASPER must therefore be vendored as plain JSON (D20) — M0 validated the `refs/convert/parquet` route (281 papers) but **vendored nothing**; doing it is M2 deliverable 1. |
+| **Smart App Control blocks `_rustgrimp`** | Windows SAC is *enforced* on this machine and blocks grimp 3.15's DLL by reputation, killing the `lint-imports` gate. Pinned `grimp<3.15`; 3.14 loads and keeps all three contracts. Same class as the `datasets` trap |
+| **A model download is a network call** | Tests that load a real encoder must skip unless it is already in the local HF cache. `bge-base` is 419 MB, and NFR-T3 requires the default test run to make **zero** network calls. A warm cache on the dev machine hides this completely — CI is where it bites |
+| **Alembic does not compare CHECK constraints** | Neither `--autogenerate` nor `alembic check` sees them. Write them by hand in the migration and cover each with an *attempted violation* — a constraint that silently failed to be created looks identical to one that works |
+| **GROBID nests nothing** | `<figure>` is a **sibling** of `<div>` under `<body>`, never inside it, and the body has zero nested divs. Looking for tables inside a div finds exactly zero and raises nothing; section hierarchy comes from `head/@n` numbering |
 | **torch must be a CUDA 12.8+ build** | RTX 5060 is Blackwell (`sm_120`). Verify with `'sm_120' in torch.cuda.get_arch_list()` — `torch.cuda.is_available()` is not sufficient |
 | **fp16 for all local inference** | fp32 reranking is 3.3× slower (743 ms vs 224 ms @ top-50) and blows NFR-P2 (D18) |
 | **GROBID image tag** | `grobid/grobid:0.8.2.1-crf` (0.41 GB) on :8070 — **not** the default `0.8.1` (32.5 GB) (D31) |
 | **Ollama placement is sticky** | Within `keep_alive`, one `num_gpu: 0` request pins the model to CPU for later requests. Read actual placement, never assume (D23) |
 | **No cross-process VRAM accounting** | Windows WDDM: `nvidia-smi` returns `0 MiB`/`[N/A]`, torch sees only its own context. Demonstrate co-residency empirically (D24) |
+| **Coverage under-reports async DB code** | `[tool.coverage.run]` has no `concurrency`, and SQLAlchemy's asyncio layer runs inside greenlets — coverage.py's default `thread` tracer does not follow a greenlet switch, so lines executing under an `await` on the database read as dead. Measured: one passing test covers `remove_paper.py` at 72% (`thread`) vs 86% (`greenlet,thread`). **Do not read a low number on a repository or use case as a missing test** until re-run with `concurrency = greenlet, thread`. Unfixed on purpose — changing it changes what CI computes (M1 log §7) |
+| **`.gitignore` cannot re-include under an excluded directory** | `docs/` + `!docs/milestone-logs/` silently does nothing: git never descends into an excluded *directory*, so the negation is unreachable. It must be `docs/*` + `!docs/milestone-logs/` (D67). Verify with `git check-ignore -v <path>`, never by eye |
 
 **Dev topology:** backing services in Docker; **API and worker run natively on Windows**
 for direct GPU access. CI runs the fully containerized Linux path so the two cannot

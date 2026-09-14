@@ -10,9 +10,14 @@
 #   no-network     the default test run makes zero outbound calls and spends zero
 #                  API quota (NFR-T3). Enforced, not trusted.
 #
-# GPU tests are marked and skipped here — there is no free GPU runner. ML code
-# therefore runs on the CPU path in CI, which continuously verifies the exact
-# inference path production depends on (DEP-9).
+# GPU tests are marked and skipped here — there is no free GPU runner.
+#
+# Tests that load a real encoder are also skipped, because the model is a 419 MB
+# download and NFR-T3 requires the default test run to make zero network calls.
+# They run on any machine whose HuggingFace cache already holds it. The cost is
+# real and worth stating plainly: CI does NOT verify the CPU inference path
+# DEP-9 describes — it verifies everything around it (prefixes, precision
+# selection, version stamping, batching) with the model itself skipped.
 
 name: CI
 
@@ -44,7 +49,11 @@ jobs:
         run: uv python install ${{ env.PYTHON_VERSION }}
 
       - name: Install project
-        run: uv sync --extra dev
+        # --locked fails the build if uv.lock is stale relative to
+        # pyproject.toml. Reproducible installs are an FR-E4 requirement
+        # (doc 7 §7.13), so a drifted lockfile is a build error, not a
+        # silent re-resolution.
+        run: uv sync --locked --extra dev
 
       - name: Format check
         run: uv run ruff format --check src tests
@@ -74,7 +83,11 @@ jobs:
         run: uv python install ${{ env.PYTHON_VERSION }}
 
       - name: Install project
-        run: uv sync --extra dev
+        # --locked fails the build if uv.lock is stale relative to
+        # pyproject.toml. Reproducible installs are an FR-E4 requirement
+        # (doc 7 §7.13), so a drifted lockfile is a build error, not a
+        # silent re-resolution.
+        run: uv sync --locked --extra dev
 
       # `-m "not gpu"` is the only exclusion. Integration tests bring their own
       # services up via testcontainers, so they need no separate job.
@@ -107,7 +120,11 @@ jobs:
         run: uv python install ${{ env.PYTHON_VERSION }}
 
       - name: Install project
-        run: uv sync --extra dev
+        # --locked fails the build if uv.lock is stale relative to
+        # pyproject.toml. Reproducible installs are an FR-E4 requirement
+        # (doc 7 §7.13), so a drifted lockfile is a build error, not a
+        # silent re-resolution.
+        run: uv sync --locked --extra dev
 
       - name: Audit dependencies
         run: uvx pip-audit --strict --progress-spinner off

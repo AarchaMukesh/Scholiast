@@ -12,13 +12,16 @@ import pytest
 from scholiast.domain.errors import InvariantViolation
 from scholiast.domain.retrieval import (
     RRF_K,
+    Citation,
     CitationStatus,
     EvidenceSet,
     Query,
     QueryIntent,
     RetrievalArm,
     ScoredChunk,
+    audit_citations,
     reciprocal_rank_fusion,
+    strip_labels,
 )
 
 
@@ -161,15 +164,24 @@ class TestCitationResolution:
         assert ev.resolve("C99") is None
 
     def test_citation_status_gates_trust(self) -> None:
-        from scholiast.domain.retrieval import Citation
-
         verified = Citation("C1", "a", "claim", CitationStatus.VERIFIED, 0.95)
         unverified = Citation("C1", "a", "claim", CitationStatus.UNVERIFIED, 0.3)
-        fabricated = Citation("C9", "?", "claim", CitationStatus.FABRICATED)
+        fabricated = Citation("C9", None, "claim", CitationStatus.FABRICATED)
 
         assert verified.is_trustworthy
         assert not unverified.is_trustworthy
         assert not fabricated.is_trustworthy
+
+    def test_fabricated_citation_cannot_carry_a_chunk_id(self) -> None:
+        # Prevents a sentinel chunk id ("?", "", "unknown") on a fabricated
+        # citation, which a caller that checks `chunk_id is not None` instead of
+        # `status` would treat as a real reference.
+        with pytest.raises(InvariantViolation, match="fabricated"):
+            Citation("C9", "chunk-1", "claim", CitationStatus.FABRICATED)
+
+    def test_resolved_citation_must_name_its_chunk(self) -> None:
+        with pytest.raises(InvariantViolation, match="fabricated"):
+            Citation("C1", None, "claim", CitationStatus.UNVERIFIED)
 
 
 class TestAbstention:
@@ -220,3 +232,86 @@ class TestQueryValidation:
         plain = Query(text="what is RAG?", workspace_id="ws-1", paper_ids=("p-1",))
         assert not plain.was_rewritten
         assert plain.intent is QueryIntent.LOOKUP
+
+
+class TestCitationAudit:
+    """Layer 2: every emitted label is checked, never trusted (FR-Q2)."""
+
+    def evidence(self) -> EvidenceSet:
+        return EvidenceSet.assemble(ranked("chunk-a", "chunk-b"), limit=5)
+
+    def test_fabricated_label_is_caught(self) -> None:
+        # The M1 acceptance criterion in one test: "every emitted citation ID
+        # exists in the retrieved context (validated, not trusted)". A model
+        # citing [C7] over a two-chunk context is the crudest failure there is,
+        # and catching it costs nothing.
+        audit = audit_citations("Transformers scale well [C7].", self.evidence())
+        assert not audit.is_clean
+        assert audit.fabricated_labels == ("C7",)
+        assert audit.fabricated[0].chunk_id is None
+
+    def test_resolved_label_is_not_promoted_to_verified(self) -> None:
+        # Prevents laundering a syntactic check as a semantic one. Passing layer
+        # 2 proves the label exists, not that the chunk supports the claim —
+        # that is layer 3's job, and marking these VERIFIED would mean the
+        # groundedness number counts unchecked claims.
+        audit = audit_citations("Attention is quadratic [C1].", self.evidence())
+        assert audit.citations[0].status is CitationStatus.UNVERIFIED
+        assert not audit.citations[0].is_trustworthy
+
+    def test_comma_grouped_labels_are_not_dropped(self) -> None:
+        # Prevents the silent failure: a model emits [C1, C2], a strict regex
+        # matches neither, and two real citations vanish from the answer with no
+        # error anywhere. Losing a citation is worse than accepting sloppy
+        # syntax, because nothing surfaces it.
+        audit = audit_citations("Both report gains [C1, C2].", self.evidence())
+        assert [c.label for c in audit.citations] == ["C1", "C2"]
+        assert audit.is_clean
+
+    def test_one_label_cited_for_two_claims_yields_two_citations(self) -> None:
+        # Layer 3 judges (evidence, claim) pairs, so the same chunk supporting
+        # two different claims has to be two entailment checks, not one.
+        answer = "It uses masked LM [C1]. It trains on BooksCorpus [C1]."
+        audit = audit_citations(answer, self.evidence())
+        assert len(audit.citations) == 2
+        assert {c.claim_text for c in audit.citations} == {
+            "It uses masked LM [C1].",
+            "It trains on BooksCorpus [C1].",
+        }
+
+    def test_claim_text_is_the_sentence_that_cited_it(self) -> None:
+        answer = "Retrieval is hard. BM25 beats dense on rare entities [C2]. That matters."
+        audit = audit_citations(answer, self.evidence())
+        assert audit.citations[0].claim_text == "BM25 beats dense on rare entities [C2]."
+
+    def test_uncited_answer_is_clean_but_that_is_not_groundedness(self) -> None:
+        # `is_clean` means "no fabricated labels", NOT "adequately cited". An
+        # answer with no citations at all passes layer 2 trivially — it satisfies
+        # FR-Q2 (citation *validity*) while saying nothing about FR-Q11 (citation
+        # *coverage*), which is measured in M5 (D66). Conflating them would let
+        # an uncited answer report as verified.
+        audit = audit_citations("Transformers are popular.", self.evidence())
+        assert audit.is_clean
+        assert audit.citations == ()
+
+    def test_fabricated_labels_are_stripped_without_leaving_artifacts(self) -> None:
+        # Showing [C7] invites a click that cannot resolve. Stripping it must not
+        # leave " ." behind, which reads to a user as a rendering bug rather than
+        # as a removed citation.
+        answer = "Masked LM works [C1]. MMLU is 86.4 [C7]."
+        audit = audit_citations(answer, self.evidence())
+        assert strip_labels(answer, audit.fabricated_labels) == (
+            "Masked LM works [C1]. MMLU is 86.4."
+        )
+
+    def test_stripping_keeps_the_valid_half_of_a_mixed_marker(self) -> None:
+        # A marker holding one real and one fabricated label must lose only the
+        # fabricated one — dropping the whole marker would discard a citation
+        # that resolved perfectly well.
+        answer = "Both agree [C1, C9]."
+        audit = audit_citations(answer, self.evidence())
+        assert strip_labels(answer, audit.fabricated_labels) == "Both agree [C1]."
+
+    def test_stripping_nothing_leaves_the_answer_alone(self) -> None:
+        answer = "Masked LM works [C1]."
+        assert strip_labels(answer, ()) == answer

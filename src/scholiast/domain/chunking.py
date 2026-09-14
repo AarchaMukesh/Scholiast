@@ -42,7 +42,22 @@ from scholiast.domain.paper import (
 #: Bump on ANY behavioural change here. Stamped onto every chunk (NFR-M5) so a
 #: quality shift can be attributed to chunking rather than to embeddings or the
 #: reranker — and so re-indexing can target only affected chunks.
-CHUNKER_VERSION = "structure-aware/1.0.0"
+# 1.1.0: child chunks carry their own character span and start page rather
+# than inheriting the parent window's. Chunk *text* is unchanged, so this is
+# a provenance-only re-index — which is exactly the targeted case NFR-M5's
+# version stamps exist to make possible.
+# 1.2.0: a short trailing fragment merged backwards no longer repeats the
+# overlap sentences it already shares with the chunk it joins. Chunk text
+# changes for the affected children, so this one *is* a re-embed — found by the
+# FR-I5 round trip on a real paper, where a chunk's text came out 161 characters
+# longer than the span it claimed to occupy.
+CHUNKER_VERSION = "structure-aware/1.2.0"
+
+#: How a breadcrumb path joins a parent to a child ("Results > Ablations").
+#: Named here because two layers depend on it agreeing: the parser builds paths
+#: with it and the ingestion use case splits them on it to resolve
+#: `sections.parent_id`.
+SECTION_PATH_SEPARATOR = " > "
 
 #: ~4 characters per token for English prose. Good enough for boundary decisions;
 #: production injects the real tokenizer for anything that must be exact.
@@ -67,8 +82,18 @@ class BlockKind(StrEnum):
 class ParsedBlock:
     """A contiguous run of text with a known kind and source position.
 
-    `char_start`/`char_end` are offsets into the parsed document text, which is
-    what lets a citation highlight an exact span (FR-I5).
+    `char_start`/`char_end` are offsets into the **canonical parsed section
+    text** — what the parser adapter assembles and persists as `sections.text`
+    (D42), not the PDF byte stream. Offsets restart at 0 in each section. That is
+    what lets a citation highlight an exact span (FR-I5) while surviving
+    re-extraction by the same parser version.
+
+    The length invariant below is what makes offset arithmetic sound: chunk spans
+    are derived by adding within-block positions to `char_start`, which is only
+    correct if the block's text *is* the text at that range. A parser that
+    normalises text after recording offsets (de-hyphenation, header stripping)
+    would violate it, and would produce citations that highlight the wrong span
+    — silently. Failing loudly here is the point.
     """
 
     kind: BlockKind
@@ -80,6 +105,12 @@ class ParsedBlock:
     def __post_init__(self) -> None:
         if self.char_end <= self.char_start:
             raise InvariantViolation("block char_end must exceed char_start")
+        if self.char_end - self.char_start != len(self.text):
+            raise InvariantViolation(
+                f"block span ({self.char_start}, {self.char_end}) is "
+                f"{self.char_end - self.char_start} chars but its text is {len(self.text)} — "
+                "offsets must index the canonical parsed text this block came from"
+            )
 
     @property
     def is_atomic(self) -> bool:
@@ -89,11 +120,43 @@ class ParsedBlock:
 
 @dataclass(frozen=True, slots=True)
 class ParsedSection:
-    """One section of a parsed document, with its blocks in reading order."""
+    """One section of a parsed document, with its blocks in reading order.
+
+    `text` is the canonical section text — what gets persisted as `sections.text`
+    and what every chunk offset in this section indexes (D42, D45).
+
+    The invariant below turns FR-I5's round trip into a constructor-time
+    assertion instead of a docstring. A parser that normalises text after
+    recording offsets, or that assembles `text` and `blocks` from different
+    passes, fails *here* — at the boundary where it can still be diagnosed —
+    rather than downstream, where the only symptom is citations that highlight
+    slightly the wrong span and nothing raises at all.
+    """
 
     kind: SectionKind
+    #: Unique within a document (D51) — chunks are mapped back onto section rows
+    #: by path, so a duplicate silently attributes a chunk to another section's
+    #: text and highlights the wrong span.
     path: str
     blocks: tuple[ParsedBlock, ...]
+    #: Required, not defaulted: an invariant that can be skipped by omitting a
+    #: field is not an invariant.
+    text: str
+    #: The heading as the document wrote it, before path disambiguation. Carried
+    #: rather than derived from `path`: the last breadcrumb segment is the raw
+    #: title *until* D51 appends a counter to it, and a derivation that is
+    #: correct only most of the time is the kind that fails silently (D52).
+    raw_title: str
+
+    def __post_init__(self) -> None:
+        for block in self.blocks:
+            found = self.text[block.char_start : block.char_end]
+            if found != block.text:
+                raise InvariantViolation(
+                    f"section {self.path!r}: block at ({block.char_start}, {block.char_end}) "
+                    f"does not index its own text — offsets must be relative to this "
+                    f"section's text (D42). Found {found[:40]!r}, expected {block.text[:40]!r}"
+                )
 
     @property
     def is_empty(self) -> bool:
@@ -156,17 +219,60 @@ class ChunkingResult:
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+(?=[A-Z(\[])")
 
 
-def _split_sentences(text: str) -> list[str]:
-    """Cheap sentence split, good enough for chunk boundaries.
+@dataclass(frozen=True, slots=True)
+class _Span:
+    """A unit of text that still knows where it came from.
+
+    Sentence splitting used to return bare strings, which threw away position —
+    and that loss is what made every child chunk in a window report the *window's*
+    span and first page (FR-I5 says "character offsets sufficient to render an
+    exact citation and highlight the source span"; a 1000-token highlight is not
+    that). Positions are carried through the split so they can be carried through
+    the chunking.
+    """
+
+    text: str
+    page: int
+    char_start: int
+    char_end: int
+
+
+def _split_sentences(block: ParsedBlock) -> list[_Span]:
+    """Cheap sentence split that preserves absolute offsets.
 
     Not linguistically correct — "et al." and "Fig. 3" will fool it. That is
     acceptable: the cost of a slightly misplaced boundary is small, and the cost
     of a spaCy dependency in the domain layer is a framework import the
     architecture contract forbids.
     """
-    # A block with no sentence-ending punctuation still yields one unit.
-    parts = [s.strip() for s in _SENTENCE_END.split(text) if s.strip()]
-    return parts or ([text.strip()] if text.strip() else [])
+    text = block.text
+    # The regex matches the whitespace *between* sentences, so the sentences are
+    # the gaps between matches — plus the tail after the last one.
+    bounds: list[tuple[int, int]] = []
+    cursor = 0
+    for match in _SENTENCE_END.finditer(text):
+        bounds.append((cursor, match.start()))
+        cursor = match.end()
+    bounds.append((cursor, len(text)))
+
+    spans: list[_Span] = []
+    for start, end in bounds:
+        raw = text[start:end]
+        stripped = raw.strip()
+        if not stripped:
+            continue
+        # Stripping moves the start; the offsets must move with it or the span
+        # would include leading whitespace and drift by that amount.
+        offset = block.char_start + start + (len(raw) - len(raw.lstrip()))
+        spans.append(
+            _Span(
+                text=stripped,
+                page=block.page,
+                char_start=offset,
+                char_end=offset + len(stripped),
+            )
+        )
+    return spans
 
 
 class StructureAwareChunker:
@@ -259,16 +365,25 @@ class StructureAwareChunker:
 
         children: list[Chunk] = []
         if prose:
-            for i, text in enumerate(self._child_texts(prose)):
+            for i, child in enumerate(self._child_spans(prose)):
                 children.append(
                     Chunk(
                         id=f"{parent_id}:c{i}",
-                        text=text,
+                        text=child.text,
                         role=ChunkRole.CHILD,
                         ordinal=start_ordinal + 1 + i,
-                        provenance=self._provenance(paper_id, section, prose),
+                        # Per-child, not per-window: a citation on this chunk
+                        # must highlight *this* chunk (FR-I5).
+                        provenance=Provenance(
+                            paper_id=paper_id,
+                            section_path=section.path,
+                            section_kind=section.kind,
+                            page=child.page,
+                            char_start=child.char_start,
+                            char_end=child.char_end,
+                        ),
                         chunker_version=CHUNKER_VERSION,
-                        token_count=self._count(text),
+                        token_count=self._count(child.text),
                         parent_id=parent_id,
                     )
                 )
@@ -299,52 +414,88 @@ class StructureAwareChunker:
 
         return parent, children, tables
 
-    def _child_texts(self, blocks: Sequence[ParsedBlock]) -> list[str]:
+    def _child_spans(self, blocks: Sequence[ParsedBlock]) -> list[_Span]:
         """Split prose into overlapping child-sized units on sentence boundaries."""
-        sentences: list[str] = []
+        sentences: list[_Span] = []
         for block in blocks:
-            sentences.extend(_split_sentences(block.text))
+            sentences.extend(_split_sentences(block))
         if not sentences:
             return []
 
         target = self._config.child_target_tokens
         overlap_target = int(target * self._config.overlap_ratio)
 
-        chunks: list[str] = []
-        current: list[str] = []
+        # Groups of sentences, joined only at the end. Joining as we go would
+        # throw away which sentences a child is made of — and that is exactly
+        # what the backward merge below needs in order not to repeat them.
+        groups: list[list[_Span]] = []
+        current: list[_Span] = []
         current_tokens = 0
 
         for sentence in sentences:
-            sentence_tokens = self._count(sentence)
+            sentence_tokens = self._count(sentence.text)
 
             if current and current_tokens + sentence_tokens > target:
-                chunks.append(" ".join(current))
+                groups.append(current)
                 # Rule: carry a tail of the previous chunk forward so a claim
-                # straddling the boundary survives in at least one chunk.
+                # straddling the boundary survives in at least one chunk. The
+                # tail's offsets come with it, so overlapping children have
+                # genuinely overlapping spans.
                 current = self._overlap_tail(current, overlap_target)
-                current_tokens = sum(self._count(s) for s in current)
+                current_tokens = sum(self._count(s.text) for s in current)
 
             current.append(sentence)
             current_tokens += sentence_tokens
 
         if current:
-            tail = " ".join(current)
             # A short trailing fragment is merged backwards rather than left to
             # stand alone with too little context to retrieve well.
-            if chunks and self._count(tail) < self._config.min_child_tokens:
-                chunks[-1] = f"{chunks[-1]} {tail}"
+            merge_back = (
+                groups and self._count(self._join(current).text) < self._config.min_child_tokens
+            )
+            if merge_back:
+                # The fragment opens with the overlap tail of the chunk it is
+                # being merged into, so those sentences are already there. Naive
+                # concatenation repeats them: the chunk's *text* grows while its
+                # character span — a min/max over the same sentences — does not,
+                # so the chunk ends up claiming a span it does not fit in, and
+                # the duplicated prose inflates the token count and skews the
+                # embedding. Dropping what is already present is what keeps
+                # FR-I5's round trip sound.
+                already = {span.char_start for span in groups[-1]}
+                groups[-1] = groups[-1] + [s for s in current if s.char_start not in already]
             else:
-                chunks.append(tail)
+                groups.append(current)
 
-        return chunks
+        return [self._join(group) for group in groups]
 
-    def _overlap_tail(self, sentences: list[str], overlap_tokens: int) -> list[str]:
+    @staticmethod
+    def _join(spans: Sequence[_Span]) -> _Span:
+        """Merge adjacent spans into one, keeping the covering character range.
+
+        The range is the *minimal range containing* every constituent sentence,
+        not a guarantee that slicing the parsed text reproduces `text` verbatim:
+        joining normalises inter-sentence whitespace, and a child may bridge two
+        prose blocks with an excluded table between them. Containment is the
+        honest contract, and it is what a highlight needs.
+
+        `page` is the page the chunk *starts* on — sentences are in reading
+        order, so that is where a reader should be sent.
+        """
+        return _Span(
+            text=" ".join(s.text for s in spans),
+            page=spans[0].page,
+            char_start=min(s.char_start for s in spans),
+            char_end=max(s.char_end for s in spans),
+        )
+
+    def _overlap_tail(self, sentences: list[_Span], overlap_tokens: int) -> list[_Span]:
         if overlap_tokens <= 0:
             return []
-        tail: list[str] = []
+        tail: list[_Span] = []
         total = 0
         for sentence in reversed(sentences):
-            sentence_tokens = self._count(sentence)
+            sentence_tokens = self._count(sentence.text)
             if total + sentence_tokens > overlap_tokens and tail:
                 break
             tail.insert(0, sentence)

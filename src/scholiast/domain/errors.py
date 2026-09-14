@@ -91,6 +91,21 @@ class IllegalStateTransition(InvariantViolation):
         self.requested = requested
 
 
+class WorkspaceNotAvailable(DomainError):
+    """The target workspace is not one this scope can act on.
+
+    Deliberately does not distinguish "does not exist" from "belongs to someone
+    else": telling them apart is how an API leaks which ids are real, which is
+    why FR-A2 asks for 404 rather than 403. Its own class rather than a generic
+    invariant violation, because the two map to different HTTP statuses and
+    conflating them would answer a missing workspace with a 500.
+    """
+
+    def __init__(self, workspace_id: str) -> None:
+        super().__init__(f"Workspace {workspace_id!r} was not found.")
+        self.workspace_id = workspace_id
+
+
 class WorkspaceNotQueryable(DomainError):
     """A query arrived before any paper finished indexing (FR-W5).
 

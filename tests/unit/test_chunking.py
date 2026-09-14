@@ -41,7 +41,8 @@ def prose(n_sentences: int, *, word: str = "retrieval") -> str:
 
 
 def section(kind: SectionKind, text: str, *, path: str | None = None) -> ParsedSection:
-    return ParsedSection(kind=kind, path=path or kind.value.title(), blocks=(block(text),))
+    title = path or kind.value.title()
+    return ParsedSection(kind=kind, path=title, blocks=(block(text),), text=text, raw_title=title)
 
 
 class TestSectionBoundaries:
@@ -55,9 +56,17 @@ class TestSectionBoundaries:
                 SectionKind.RELATED_WORK,
                 "Related Work",
                 (block("Prior work established baselines.", start=0),),
+                text="Prior work established baselines.",
+                raw_title="Related Work",
             ),
             ParsedSection(
-                SectionKind.METHOD, "Method", (block("We propose a new approach.", start=100),)
+                SectionKind.METHOD,
+                "Method",
+                # Section-relative (D42): a new section restarts at 0, it does
+                # not continue the previous section's offsets.
+                (block("We propose a new approach.", start=0),),
+                text="We propose a new approach.",
+                raw_title="Method",
             ),
         ]
         result = StructureAwareChunker().chunk(PAPER, sections)
@@ -157,19 +166,41 @@ class TestParentChildWindows:
             assert all(c.token_count >= cfg.min_child_tokens for c in children[:-1])
 
 
+def two_block_section(
+    kind: SectionKind, path: str, prose_text: str, other: str, *, other_kind: BlockKind
+) -> ParsedSection:
+    """A prose block followed by an atomic block, with consistent offsets.
+
+    The blocks and the section text are built from the same join, so they cannot
+    disagree — which is exactly what the D42 invariant checks.
+    """
+    joiner = "\n\n"
+    text = f"{prose_text}{joiner}{other}"
+    start = len(prose_text) + len(joiner)
+    return ParsedSection(
+        kind=kind,
+        path=path,
+        blocks=(
+            block(prose_text, start=0),
+            block(other, kind=other_kind, start=start),
+        ),
+        text=text,
+        raw_title=path,
+    )
+
+
 class TestTablesAreAtomic:
     """Rule 3: tables hold the facts users ask for, and must survive intact."""
 
     def test_table_becomes_its_own_chunk(self) -> None:
         table = "| Model | nDCG@10 |\n| BM25 | 0.61 |\n| Hybrid | 0.74 |"
         sections = [
-            ParsedSection(
+            two_block_section(
                 SectionKind.RESULTS,
                 "Results",
-                (
-                    block("We report results below.", start=0),
-                    block(table, kind=BlockKind.TABLE, start=100),
-                ),
+                "We report results below.",
+                table,
+                other_kind=BlockKind.TABLE,
             )
         ]
         result = StructureAwareChunker().chunk(PAPER, sections)
@@ -184,10 +215,8 @@ class TestTablesAreAtomic:
         # produces confidently wrong numbers.
         table = "| A | B |\n| 1 | 2 |"
         sections = [
-            ParsedSection(
-                SectionKind.RESULTS,
-                "Results",
-                (block(prose(5), start=0), block(table, kind=BlockKind.TABLE, start=1000)),
+            two_block_section(
+                SectionKind.RESULTS, "Results", prose(5), table, other_kind=BlockKind.TABLE
             )
         ]
         result = StructureAwareChunker().chunk(PAPER, sections)
@@ -202,6 +231,8 @@ class TestTablesAreAtomic:
                 SectionKind.RESULTS,
                 "Results",
                 (block(big_table, kind=BlockKind.TABLE, start=0),),
+                text=big_table,
+                raw_title="Results",
             )
         ]
         result = StructureAwareChunker().chunk(PAPER, sections)
@@ -237,6 +268,194 @@ class TestContextualHeaders:
         result = StructureAwareChunker().chunk(PAPER, [section(SectionKind.METHOD, prose(5))])
         header = result.children[0].contextual_header("Untitled Preprint", None)
         assert "None" not in header
+
+
+def multipage_section(pages: tuple[int, ...] = (4, 5, 6)) -> tuple[ParsedSection, str]:
+    """A section spanning several pages, plus the canonical text its offsets index."""
+    blocks: list[ParsedBlock] = []
+    cursor = 0
+    for page in pages:
+        text = f"Sentence about retrieval quality on page {page} with enough words. " * 20
+        blocks.append(block(text, page=page, start=cursor))
+        cursor += len(text)
+    document = "".join(b.text for b in blocks)
+    return (
+        ParsedSection(
+            SectionKind.METHOD, "Method", tuple(blocks), text=document, raw_title="Method"
+        ),
+        document,
+    )
+
+
+class TestOverlapIsNotDuplicated:
+    """Found by FR-I5's round trip on a real paper, not by construction.
+
+    The last child of a window is merged backwards when it is too short to stand
+    alone — and it opens with the overlap tail of the chunk it joins. Repeating
+    those sentences made the chunk's *text* longer than the character span it
+    claims, which is a citation that highlights less than it quotes, plus an
+    inflated token count and a skewed embedding.
+    """
+
+    def test_a_child_never_carries_more_text_than_its_span_covers(self) -> None:
+        section, document = multipage_section()
+        cfg = ChunkingConfig(child_target_tokens=60, parent_target_tokens=5000, min_child_tokens=50)
+        result = StructureAwareChunker(cfg).chunk(PAPER, [section])
+
+        for child in result.children:
+            span = document[child.provenance.char_start : child.provenance.char_end]
+            assert len(span) >= len(child.text), (
+                f"chunk {child.id} carries {len(child.text)} chars in a "
+                f"{len(span)}-char span — the overlap was duplicated"
+            )
+
+    def test_no_sentence_appears_twice_in_one_child(self) -> None:
+        # The direct statement of the same defect, independent of offsets: a
+        # chunk that repeats a sentence wastes context budget and pulls its
+        # embedding toward whatever was said twice.
+        #
+        # Every sentence is distinct on purpose. `multipage_section` repeats one
+        # sentence twenty times, so running this against it would measure the
+        # fixture rather than the chunker and fail whatever the code did.
+        body = " ".join(f"Distinct claim number {i} about retrieval quality." for i in range(40))
+        section = ParsedSection(
+            SectionKind.METHOD,
+            "Method",
+            (block(body, start=0),),
+            text=body,
+            raw_title="Method",
+        )
+        cfg = ChunkingConfig(child_target_tokens=60, parent_target_tokens=5000, min_child_tokens=50)
+        result = StructureAwareChunker(cfg).chunk(PAPER, [section])
+
+        assert len(result.children) > 2, "too few children for the merge case to arise"
+        for child in result.children:
+            claims = [word for word in child.text.split() if word.isdigit()]
+            assert len(claims) == len(set(claims)), f"chunk {child.id} repeats a sentence"
+
+    def test_overlap_between_adjacent_children_still_exists(self) -> None:
+        # Positive control: the cheapest way to pass the two tests above is to
+        # drop the overlap entirely, which would remove the protection a claim
+        # straddling a chunk boundary depends on.
+        section, _ = multipage_section()
+        cfg = ChunkingConfig(child_target_tokens=60, parent_target_tokens=5000, min_child_tokens=10)
+        children = StructureAwareChunker(cfg).chunk(PAPER, [section]).children
+        assert len(children) > 2
+        overlaps = [
+            children[i + 1].provenance.char_start < children[i].provenance.char_end
+            for i in range(len(children) - 1)
+        ]
+        assert any(overlaps)
+
+
+class TestChildProvenanceIsItsOwn:
+    """A citation must point at the chunk that was cited, not at its neighbourhood."""
+
+    def test_child_span_is_narrower_than_its_parent_window(self) -> None:
+        # Prevents: every child in a window inheriting the window's span, so
+        # clicking a citation highlights ~1000 tokens of which ~300 are the
+        # actual evidence. FR-I5 asks for the span, not the vicinity.
+        sec, _ = multipage_section()
+        result = StructureAwareChunker().chunk(PAPER, [sec])
+        parent = result.parents[0]
+        children = result.children
+        assert len(children) > 1, "need several children for this to mean anything"
+        for child in children:
+            assert child.provenance.length < parent.provenance.length
+
+    def test_children_do_not_all_share_one_span(self) -> None:
+        # Prevents the specific regression: identical provenance on every child,
+        # which looks correct in isolation and is wrong for all but one of them.
+        sec, _ = multipage_section()
+        children = StructureAwareChunker().chunk(PAPER, [sec]).children
+        spans = {(c.provenance.char_start, c.provenance.char_end) for c in children}
+        assert len(spans) == len(children)
+
+    def test_child_page_is_where_the_chunk_starts(self) -> None:
+        # Prevents: sending the reader to the first page of the window when the
+        # cited text is three pages further in.
+        sec, _ = multipage_section()
+        children = StructureAwareChunker().chunk(PAPER, [sec]).children
+        assert {c.provenance.page for c in children} != {4}, (
+            "every child reported the window's first page — pages are not being tracked"
+        )
+
+    def test_child_text_is_recoverable_from_its_span(self) -> None:
+        # FR-I5's round trip: given a chunk, locate the exact source text. The
+        # contract is containment, not equality — joining sentences normalises
+        # inter-sentence whitespace — but every sentence must lie inside.
+        sec, document = multipage_section()
+        for child in StructureAwareChunker().chunk(PAPER, [sec]).children:
+            source = document[child.provenance.char_start : child.provenance.char_end]
+            for sentence in child.text.split(". "):
+                assert sentence.strip(". ") in source
+
+    def test_overlapping_children_have_overlapping_spans(self) -> None:
+        # The 15% overlap exists so a claim straddling a boundary survives. If
+        # the spans did not overlap too, the offsets would be describing a
+        # different chunking than the one that was embedded.
+        sec, _ = multipage_section()
+        children = StructureAwareChunker().chunk(PAPER, [sec]).children
+        pairs = list(itertools.pairwise(children))
+        assert any(b.provenance.char_start < a.provenance.char_end for a, b in pairs)
+
+
+class TestBlockOffsetsAreTrustworthy:
+    def test_block_offsets_must_match_its_own_text(self) -> None:
+        # Prevents a parser recording offsets against the raw PDF text while
+        # handing over normalised text: chunk spans are derived by adding
+        # within-block positions to char_start, so the two must describe the
+        # same string. A mismatch would shift every citation silently.
+        with pytest.raises(InvariantViolation, match="canonical parsed text"):
+            ParsedBlock(
+                kind=BlockKind.PARAGRAPH,
+                text="short text",
+                page=1,
+                char_start=0,
+                char_end=9999,
+            )
+
+
+class TestSectionTextIsTheOffsetGround:
+    """D42/D45: a section owns the text its chunk offsets index."""
+
+    def test_blocks_must_index_the_section_text(self) -> None:
+        # Prevents the silent version of the whole provenance failure: a parser
+        # that assembles text and offsets in separate passes produces citations
+        # that highlight the wrong span, with nothing raising anywhere. Failing
+        # at construction is the only place it is still diagnosable.
+        with pytest.raises(InvariantViolation, match="does not index its own text"):
+            ParsedSection(
+                SectionKind.METHOD,
+                "Method",
+                (block("the actual block text", start=0),),
+                text="completely different section text",
+                raw_title="Method",
+            )
+
+    def test_document_relative_offsets_are_rejected(self) -> None:
+        # The specific regression D42 replaced: a second section continuing the
+        # first section's offsets instead of restarting at 0.
+        body = "We propose a new approach."
+        with pytest.raises(InvariantViolation, match=r"does not index its own text"):
+            ParsedSection(
+                SectionKind.METHOD, "Method", (block(body, start=100),), text=body, raw_title="M"
+            )
+
+    def test_consistent_offsets_are_accepted(self) -> None:
+        # Positive control, so the two tests above are not passing merely because
+        # every ParsedSection raises.
+        body = "First block.\n\nSecond block."
+        assert (
+            ParsedSection(
+                SectionKind.METHOD,
+                "Method",
+                (block("First block.", start=0), block("Second block.", start=14)),
+                text=body,
+                raw_title="Method",
+            ).text
+            == body
+        )
 
 
 class TestProvenanceAndVersioning:
@@ -298,7 +517,7 @@ class TestEdgeCases:
         assert StructureAwareChunker().chunk(PAPER, []).chunks == []
 
     def test_empty_sections_are_ignored(self) -> None:
-        sections = [ParsedSection(SectionKind.METHOD, "Method", ())]
+        sections = [ParsedSection(SectionKind.METHOD, "Method", (), text="", raw_title="Method")]
         assert StructureAwareChunker().chunk(PAPER, sections).chunks == []
 
     def test_single_short_paragraph_yields_one_child(self) -> None:

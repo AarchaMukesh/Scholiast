@@ -84,6 +84,34 @@ uv run ruff format --check src tests && uv run ruff check src tests && uv run my
 > Docker Desktop with the WSL2 backend is required from M1 onward (PostgreSQL,
 > Qdrant, Redis). The domain layer and its tests need nothing but Python.
 
+### Running the stack
+
+Two steps, as M1's acceptance criterion specifies (NFR-DOC1):
+
+```bash
+docker compose up -d
+```
+
+```bash
+uv run alembic upgrade head && uv run uvicorn scholiast.main:app --reload
+```
+
+Then open <http://localhost:8000>. Upload a PDF, wait for it to reach `indexed`,
+and ask a question; every citation the answer emits clicks through to the exact
+span it came from, validated rather than trusted (FR-Q2). Whether the model
+cites *every* claim is citation coverage (FR-Q11), a measured property of
+generation reported in M5 — not something M1 guarantees (D66).
+
+`scholiast.main` is the composition root: it runs the API **and** the ingestion
+worker in one process, because M1's queue is in-process by design (doc 8). Set
+`WORKER_IN_PROCESS=false` to run the API alone — which is what M3 does when
+Celery takes the worker over.
+
+Generation needs a model. The default is a local Ollama (`ollama pull llama3.2`),
+which carries sustained load at no quota cost; a `GROQ_API_KEY` adds a hosted
+fallback behind it. With neither, questions still return their retrieved evidence
+and say plainly that they were answered without synthesis.
+
 ### GPU note
 
 The RTX 5060 is Blackwell (`sm_120`). Install torch from a CUDA 12.8+ index — a

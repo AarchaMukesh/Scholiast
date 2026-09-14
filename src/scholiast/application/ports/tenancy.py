@@ -100,3 +100,8 @@ class TenantIsolationViolation(RuntimeError):
 SWEEPER_REASON: Final = "reconciliation sweeper: remove vectors orphaned by deletion"
 REBUILD_REASON: Final = "index rebuild from source of truth"
 MIGRATION_REASON: Final = "schema migration"
+#: D50. A worker cannot know whose job it is until it has claimed one, so the
+#: claim itself is genuinely cross-tenant. It is also the *only* cross-tenant
+#: step: once the owning user is known the pipeline re-enters layer 2 under a
+#: `TenantContext`, so every write the worker makes is tenant-filtered.
+WORKER_CLAIM_REASON: Final = "ingestion worker: claim a job before its owner is known"

@@ -17,12 +17,13 @@ from datetime import UTC, datetime
 
 import pytest
 
-from scholiast.domain.errors import InvariantViolation
+from scholiast.domain.errors import FailureClass, InvariantViolation
 from scholiast.domain.paper import (
     Chunk,
     ChunkRole,
     Paper,
     PaperVisibility,
+    ParseStatus,
     Provenance,
     SectionKind,
     normalise_section,
@@ -238,3 +239,51 @@ class TestChunkInvariants:
                 char_start=0,
                 char_end=10,
             )
+
+
+class TestParseStatus:
+    """D44: the outcome and the reason are separate, and always consistent."""
+
+    def test_a_failed_parse_must_name_its_class(self) -> None:
+        # A failure with no class cannot produce a retry decision or a user
+        # message, which defeats the §4.4.1 taxonomy the column exists to reuse.
+        with pytest.raises(InvariantViolation, match="parse_failure_class"):
+            Paper(
+                id="p1",
+                content_hash="h",
+                visibility=PaperVisibility.PUBLIC,
+                title="T",
+                parse_status=ParseStatus.FAILED,
+            )
+
+    def test_a_successful_parse_must_not_name_a_class(self) -> None:
+        # The reverse direction: a class without a failure claims a problem that
+        # did not happen, and would surface a scary message on a healthy paper.
+        with pytest.raises(InvariantViolation, match="parse_failure_class"):
+            Paper(
+                id="p1",
+                content_hash="h",
+                visibility=PaperVisibility.PUBLIC,
+                title="T",
+                parse_status=ParseStatus.PARSED,
+                parse_failure_class=FailureClass.SCANNED_IMAGE,
+            )
+
+    def test_papers_start_unparsed(self) -> None:
+        paper = Paper(id="p1", content_hash="h", visibility=PaperVisibility.PUBLIC, title="T")
+        assert paper.parse_status is ParseStatus.PENDING
+        assert paper.parse_failure_class is None
+
+    def test_a_failure_carries_its_user_message(self) -> None:
+        # The point of reusing FailureClass rather than duplicating it: the retry
+        # decision and the user-facing text come from one place.
+        paper = Paper(
+            id="p1",
+            content_hash="h",
+            visibility=PaperVisibility.PUBLIC,
+            title="T",
+            parse_status=ParseStatus.FAILED,
+            parse_failure_class=FailureClass.SCANNED_IMAGE,
+        )
+        assert not paper.parse_failure_class.retryable
+        assert "scan" in paper.parse_failure_class.user_message.lower()

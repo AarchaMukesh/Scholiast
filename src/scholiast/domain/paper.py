@@ -19,7 +19,7 @@ from datetime import datetime
 from enum import StrEnum, unique
 from typing import Self
 
-from scholiast.domain.errors import InvariantViolation
+from scholiast.domain.errors import FailureClass, InvariantViolation
 
 
 @unique
@@ -119,13 +119,42 @@ class PaperVisibility(StrEnum):
     PRIVATE = "private"
 
 
+@unique
+class ParseStatus(StrEnum):
+    """Whether this paper's structure has been extracted (D44).
+
+    Parse state lives on the *paper*, not the membership, because parsing
+    happens once per paper — so a second workspace adding an already-failed
+    paper can see the outcome without re-parsing it.
+
+    The outcome is separate from the reason: `FAILED` is always accompanied by a
+    `FailureClass`, reusing the §4.4.1 taxonomy rather than duplicating three of
+    its values into a second enum that could drift out of step.
+    """
+
+    PENDING = "pending"
+    PARSING = "parsing"
+    PARSED = "parsed"
+    FAILED = "failed"
+
+    @property
+    def is_terminal(self) -> bool:
+        return self in (ParseStatus.PARSED, ParseStatus.FAILED)
+
+
 @dataclass(frozen=True, slots=True)
 class Provenance:
     """Exactly where a chunk came from (FR-I5).
 
-    Character offsets are into the parsed document text, not the PDF byte stream,
-    so they survive re-extraction with the same parser version. `parser_version`
-    is therefore part of the contract, not metadata.
+    Character offsets index the parsed **section** text (`sections.text`, D42),
+    not the PDF byte stream and not the whole document — so they survive
+    re-extraction with the same parser version, and `parser_version` is part of
+    the contract rather than metadata.
+
+    Section-relative is total rather than merely convenient: chunking rule 1
+    guarantees no chunk ever crosses a section boundary, so no span can straddle
+    two sections and become ambiguous. Resolving a citation is one join —
+    chunk → its section row → slice.
     """
 
     paper_id: str
@@ -150,7 +179,17 @@ class Provenance:
 
 @dataclass(frozen=True, slots=True)
 class Section:
-    """A node in the document's section hierarchy."""
+    """A node in the document's section hierarchy, with its canonical text.
+
+    `text` is what every chunk offset in this section indexes (D42) — the
+    entity owns it because `sections.text` is where a citation is resolved, and
+    a Section that could be persisted without its text would make the round trip
+    unsatisfiable one row at a time (D52).
+
+    `path` is unique within a paper (D51). That is not decoration: chunks are
+    mapped back onto section rows by path, so two sections sharing one would
+    silently attribute a chunk to the wrong text and highlight the wrong span.
+    """
 
     id: str
     paper_id: str
@@ -160,6 +199,7 @@ class Section:
     order_index: int
     page_start: int
     page_end: int
+    text: str
     parent_id: str | None = None
 
     @property
@@ -262,7 +302,17 @@ class Paper:
     citation_count: int | None = None
     external_ids: dict[str, str] = field(default_factory=dict)
     owner_id: str | None = None
+    parse_status: ParseStatus = ParseStatus.PENDING
+    #: Set exactly when parse_status is FAILED. Reuses the §4.4.1 taxonomy so
+    #: the retry decision and the user message come from one place (D44).
+    parse_failure_class: FailureClass | None = None
     parser_version: str | None = None
+    #: Object-store key for the retained TEI (D43, D49). Persisted identity in
+    #: the same sense as `content_hash` and `parser_version`: it records which
+    #: parse output is actually on disk, so a re-chunk ablation reads the bytes
+    #: that produced today's chunks rather than re-running a GROBID that may
+    #: have moved underneath it.
+    tei_key: str | None = None
     created_at: datetime | None = None
 
     def __post_init__(self) -> None:
@@ -275,6 +325,14 @@ class Paper:
             raise InvariantViolation("public papers must not be owner-scoped")
         if not self.title.strip():
             raise InvariantViolation("paper title cannot be blank")
+        # Mirrors the database CHECK. A failure with no class cannot produce a
+        # retry decision or a user message, and a class without a failure claims
+        # a problem that did not happen.
+        if (self.parse_status is ParseStatus.FAILED) != (self.parse_failure_class is not None):
+            raise InvariantViolation(
+                f"parse_failure_class must be set iff parse_status is FAILED "
+                f"(status={self.parse_status}, class={self.parse_failure_class})"
+            )
 
     @property
     def is_globally_shared(self) -> bool:
