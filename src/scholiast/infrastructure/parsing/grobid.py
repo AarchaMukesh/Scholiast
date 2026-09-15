@@ -38,9 +38,11 @@ from scholiast.application.ports.parsing import (
 )
 from scholiast.domain.chunking import (
     SECTION_PATH_SEPARATOR,
+    UNTITLED_SECTION,
     BlockKind,
     ParsedBlock,
     ParsedSection,
+    unique_section_path,
 )
 from scholiast.domain.errors import FailureClass
 from scholiast.domain.paper import SectionKind, normalise_section
@@ -63,10 +65,6 @@ COORD_ELEMENTS = ("p", "s", "head", "figure", "table")
 #: Blocks are joined by this, and the section text is built from the same join,
 #: so `ParsedSection`'s invariant holds by construction rather than by care.
 BLOCK_JOINER = "\n\n"
-
-#: What a `<div>` with no `<head>` is called. GROBID emits these for orphan
-#: prose, and they are the main source of path collisions (D51).
-UNTITLED_SECTION = "Untitled section"
 
 _WHITESPACE = re.compile(r"\s+")
 
@@ -93,30 +91,6 @@ def _first_page(coords: str | None) -> int | None:
         return None
     head = coords.split(";")[0].split(",")[0]
     return int(head) if head.isdigit() else None
-
-
-def _unique_path(base: str, claimed: set[str]) -> str:
-    """Make a section path unique within its document (D51).
-
-    Paths are how chunks find their section row: the chunk carries
-    `provenance.section_path` and the repository maps it to a `sections.id`. Two
-    sections sharing a path therefore do not collide loudly — one section's
-    chunks are attributed to the other's text, and a citation highlights a span
-    from the wrong part of the paper with nothing raising anywhere.
-
-    Collisions are not exotic. Only ~29% of GROBID heads carry numbering, so most
-    paths are a bare title, and every head-less `<div>` produces the same
-    "Untitled section". The counter is deliberately visible — it reaches the
-    breadcrumb and the contextual header (ML-3) — because a reader seeing
-    "Results (2)" learns something true about the document, while a silently
-    merged section teaches them nothing.
-    """
-    if base not in claimed:
-        return base
-    suffix = 2
-    while f"{base} ({suffix})" in claimed:
-        suffix += 1
-    return f"{base} ({suffix})"
 
 
 def _table_markdown(figure: ET.Element) -> str:
@@ -256,7 +230,7 @@ class GrobidParser:
             raw_title = _flatten(head)
             number = head.get("n", "").rstrip(".") if head is not None else ""
 
-            path = _unique_path(self._path_for(raw_title, number, paths_by_number), claimed)
+            path = unique_section_path(self._path_for(raw_title, number, paths_by_number), claimed)
             if number:
                 paths_by_number[number] = path
 
@@ -302,6 +276,14 @@ class GrobidParser:
         is flat. When a head is unnumbered — about two thirds of them — the path
         is the title alone, which is honest: an unknown parent is better than an
         invented one.
+
+        `UNTITLED_SECTION` is the domain's general name for a section with no
+        heading; **this adapter is what makes it common.** GROBID emits a
+        head-less `<div>` for orphan prose, and every one of them lands on that
+        same name — which, with only ~29% of heads carrying numbering, makes
+        these the main source of the path collisions `unique_section_path`
+        exists to resolve (D51). The eval harness shares the constant but not
+        the incidence: QASPER JSON produced 1 unnamed section in 3,796.
         """
         title = raw_title or UNTITLED_SECTION
         if "." not in number:

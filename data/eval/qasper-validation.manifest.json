@@ -1,0 +1,9 @@
+{
+  "dataset": "allenai/qasper",
+  "config": "qasper",
+  "split": "validation",
+  "revision": "06806e4608976fc2fac0a090ac425d5b2b29caf4",
+  "rows": 281,
+  "sha256": "0df19bba6de8ecd09d0407f6901c12098cea3df70897be31af03be5e8ef311ca",
+  "compressed_bytes": 2400635
+}
