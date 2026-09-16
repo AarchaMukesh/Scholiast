@@ -30,8 +30,15 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 from scholiast.application.ports.ml import TextRole
-from scholiast.application.ports.vector import VectorIndex, VectorRecord
+from scholiast.application.ports.vector import SparseRecord, VectorIndex, VectorRecord
+from scholiast.domain.lexical import (
+    average_length,
+    document_weights,
+    query_weights,
+    tokenize,
+)
 from scholiast.domain.paper import Chunk
+from scholiast.domain.retrieval import ScoredChunk, reciprocal_rank_fusion
 from scholiast.eval.dret import DRet, Grade, Query
 from scholiast.eval.metrics import (
     NDCG_CUTOFF,
@@ -279,6 +286,117 @@ async def run_retrieval(
         report.metrics.rr.append(reciprocal_rank(ranking, qrels))
         # Read off the hits already in hand — no second search, so the diagnostic
         # costs nothing beyond the arithmetic.
+        report.own_paper_in_top10.append(
+            sum(1 for hit in hits[:10] if hit.paper_id == query.paper_id) / 10.0
+        )
+    return report
+
+
+class LexicalLike(Protocol):
+    """The lexical surface the harness needs (doc 6 section 6.5, D73)."""
+
+    async def upsert_sparse(self, records: Sequence[SparseRecord]) -> int: ...
+
+    async def search_lexical(
+        self, weights: dict[int, float], *, paper_ids: Sequence[str], limit: int
+    ) -> list[ScoredChunk]: ...
+
+
+async def build_lexical_index(dataset: DRet, index: LexicalLike) -> int:
+    """Attach BM25 term weights to the corpus. Pure arithmetic plus one upsert.
+
+    `avgdl` is computed over the WHOLE corpus before any weight is emitted, not
+    per batch: BM25's length normalisation divides by it, so a per-batch average
+    would make a chunk's weight depend on which batch it landed in and the same
+    corpus indexed at a different batch size would score differently (D73).
+    """
+    tokens = {cid: tokenize(chunk.text) for cid, chunk in dataset.chunks.items()}
+    avgdl = average_length(tokens.values())
+    records = [
+        SparseRecord(
+            chunk_id=cid,
+            paper_id=dataset.chunks[cid].provenance.paper_id,
+            weights=document_weights(toks, average_length=avgdl),
+        )
+        for cid, toks in sorted(tokens.items())
+        if toks
+    ]
+    written = 0
+    for start in range(0, len(records), 256):
+        written += await index.upsert_sparse(records[start : start + 256])
+    return written
+
+
+async def run_hybrid(
+    dataset: DRet,
+    queries: Sequence[Query],
+    index: VectorIndex,
+    lexical: LexicalLike,
+    embedder: EmbedderLike,
+    *,
+    label: str,
+    paper_ids: Sequence[str],
+    arms: str = "hybrid",
+    depth: int = max(RECALL_CUTOFFS),
+) -> RunReport:
+    """One pass over the query set for a lexical-only or RRF-fused configuration.
+
+    `arms` selects the configuration under test: "lexical" runs BM25 alone,
+    "hybrid" fuses both by RRF. Dense-only keeps its own function, unchanged, so
+    the phase 2 baseline cannot drift because a shared code path was edited.
+
+    **Each arm retrieves `depth` and the fused list is truncated to `depth`**, per
+    doc 6 section 6.6's candidate budget. Fusing truncated lists rather than full
+    ones is what makes RRF's rank positions mean the same thing in both arms.
+    """
+    report = RunReport(label=label, metrics=MetricSet(recall={k: [] for k in RECALL_CUTOFFS}))
+    if queries:
+        warm = tokenize(queries[0].text)
+        await lexical.search_lexical(query_weights(warm), paper_ids=paper_ids, limit=depth)
+        if arms == "hybrid":
+            warm_vector = (await embedder.embed([queries[0].text], role=TextRole.QUERY))[0]
+            await index.search(warm_vector, paper_ids=paper_ids, limit=depth)
+
+    for query in queries:
+        qrels: dict[str, int] = {
+            cid: int(grade)
+            for cid, grade in dataset.qrels(query.id).items()
+            if grade > Grade.NOT_RELEVANT
+        }
+        if not qrels:
+            raise ValueError(f"query {query.id!r} reached scoring with no judgments")
+
+        # Query PREPARATION first, both arms', so `embed_ms` means the same thing
+        # here as in the dense-only runner. The first version of this timed only
+        # tokenisation and left the GPU embed inside `search_ms` — which reported
+        # `embed p50 0.02ms` for hybrid and quietly attributed the encoder's cost
+        # to the store. A mislabelled stage is worse than an unmeasured one.
+        started = time.perf_counter()
+        sparse = query_weights(tokenize(query.text))
+        vector = (
+            None
+            if arms == "lexical"
+            else (await embedder.embed([query.text], role=TextRole.QUERY))[0]
+        )
+        prepared = time.perf_counter()
+
+        lexical_hits = await lexical.search_lexical(sparse, paper_ids=paper_ids, limit=depth)
+        if vector is None:
+            hits = lexical_hits
+        else:
+            dense_hits = await index.search(vector, paper_ids=paper_ids, limit=depth)
+            hits = reciprocal_rank_fusion([dense_hits, lexical_hits], limit=depth)
+        finished = time.perf_counter()
+
+        report.embed_ms.append((prepared - started) * 1000.0)
+        report.search_ms.append((finished - prepared) * 1000.0)
+        report.latencies_ms.append((finished - started) * 1000.0)
+
+        ranking = [hit.chunk_id for hit in hits]
+        for k in RECALL_CUTOFFS:
+            report.metrics.recall[k].append(recall_at_k(ranking, qrels, k))
+        report.metrics.ndcg.append(ndcg_at_k(ranking, qrels, NDCG_CUTOFF))
+        report.metrics.rr.append(reciprocal_rank(ranking, qrels))
         report.own_paper_in_top10.append(
             sum(1 for hit in hits[:10] if hit.paper_id == query.paper_id) / 10.0
         )

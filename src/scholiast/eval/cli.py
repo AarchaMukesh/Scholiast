@@ -38,7 +38,9 @@ from scholiast.eval.harness import (
     IndexReport,
     RunReport,
     build_index,
+    build_lexical_index,
     collection_name,
+    run_hybrid,
     run_retrieval,
 )
 from scholiast.eval.metrics import (
@@ -189,7 +191,9 @@ def _render(report: EvalReport) -> str:
     return "\n".join(out)
 
 
-def _build_dependencies(dataset: DRet, spec: EmbedderSpec) -> tuple[EmbedderLike, Any, str]:
+def _build_dependencies(
+    dataset: DRet, spec: EmbedderSpec, *, sparse: bool = False
+) -> tuple[EmbedderLike, Any, str]:
     """Wire the real adapters for one encoder. Imported here, not at module load.
 
     Importing the embedder pulls in torch and sentence-transformers, which costs
@@ -214,11 +218,15 @@ def _build_dependencies(dataset: DRet, spec: EmbedderSpec) -> tuple[EmbedderLike
         # import an application port.
         precision=Precision(settings.embedding_precision),
     )
-    collection = collection_name(dataset, embedder.version)
+    # The arm is part of the collection identity: a sparse collection has a
+    # different SCHEMA (named vectors), so reusing one name for both would make
+    # `ensure_ready` validate against the wrong shape.
+    collection = collection_name(dataset, embedder.version) + ("_hybrid" if sparse else "")
     index = QdrantVectorIndex(
         settings.qdrant_url,
         collection=collection,
         dimensions=spec.dimensions,
+        sparse=sparse,
     )
     return embedder, index, collection
 
@@ -254,17 +262,36 @@ QUERY_SETS: tuple[tuple[str, str, bool, str], ...] = (
 
 
 async def _measure(
-    dataset: DRet, spec: EmbedderSpec, scope: list[str]
+    dataset: DRet, spec: EmbedderSpec, scope: list[str], *, arm: str = "dense"
 ) -> tuple[dict[str, Any], dict[str, RunReport], dict[str, Any]]:
-    """Run one encoder over every query set. Returns blocks, raw runs, config."""
-    embedder, index, collection = _build_dependencies(dataset, spec)
+    """Run one configuration over every query set. Returns blocks, raw runs, config.
+
+    `arm` selects the retrieval configuration: "dense" is phase 2's baseline and
+    goes through `run_retrieval` unchanged, so adding the lexical arm cannot move
+    the number it is measured against. "lexical" and "hybrid" need sparse vectors,
+    which means a sparse-capable adapter and its own collection — production's
+    dense-only schema is never touched (D73).
+    """
+    sparse = arm != "dense"
+    embedder, index, collection = _build_dependencies(dataset, spec, sparse=sparse)
     index_report = await build_index(dataset, index, embedder, collection=collection)
+    if sparse:
+        # Idempotent: `set_vectors` over deterministic point ids (D46). Runs after
+        # the dense pass because it attaches to points that must already exist.
+        await build_lexical_index(dataset, index)
 
     blocks: dict[str, Any] = {}
     runs: dict[str, RunReport] = {}
     for name, attribute, graded, note in QUERY_SETS:
         queries: list[Query] = getattr(dataset, attribute)
-        run = await run_retrieval(dataset, queries, index, embedder, label=name, paper_ids=scope)
+        if arm == "dense":
+            run = await run_retrieval(
+                dataset, queries, index, embedder, label=name, paper_ids=scope
+            )
+        else:
+            run = await run_hybrid(
+                dataset, queries, index, index, embedder, label=name, paper_ids=scope, arms=arm
+            )
         runs[name] = run
         blocks[name] = {**_summarise(run, graded=graded), "note": note}
     return (
@@ -273,6 +300,7 @@ async def _measure(
         {
             "embedder_version": embedder.version,
             "collection": collection,
+            "arm": arm,
             "resources": _resources(spec, index_report, len(dataset.chunks)),
         },
     )
@@ -320,34 +348,48 @@ def _percentile(values: list[float], q: float) -> float | None:
     return round(ordered[min(len(ordered) - 1, int(len(ordered) * q))], 2)
 
 
-async def _run(*, compare: bool) -> EvalReport:
+async def _run(*, compare: bool, compare_arms: bool) -> EvalReport:
     dataset = build_dret(load_snapshot())
     verify_split(dataset)
     verify_core(dataset)
     # D70: the whole corpus, every query. Stated here, once, where it is passed.
     scope = sorted(dataset.papers)
 
-    specs = COMPARED_EMBEDDERS if compare else tuple(s for s in COMPARED_EMBEDDERS if s.baseline)
+    base = next(s for s in COMPARED_EMBEDDERS if s.baseline)
+    # A "configuration" is (encoder, retrieval arm). The control is the same in
+    # both comparisons — bge-base, dense-only — so a delta always means the same
+    # thing regardless of which axis is being varied (D56, D71, D73).
+    if compare_arms:
+        plan = [(base, "dense"), (base, "lexical"), (base, "hybrid")]
+    elif compare:
+        plan = [(spec, "dense") for spec in COMPARED_EMBEDDERS]
+    else:
+        plan = [(base, "dense")]
+
     arms: dict[str, Any] = {}
     raw: dict[str, dict[str, RunReport]] = {}
-    for spec in specs:
-        blocks, runs, arm_config = await _measure(dataset, spec, scope)
-        raw[spec.label] = runs
-        arms[spec.label] = {
+    control_label = ""
+    for spec, arm in plan:
+        label = spec.label if not compare_arms else f"{arm} ({spec.model.split('/')[-1]})"
+        is_control = spec.baseline and arm == "dense"
+        if is_control:
+            control_label = label
+        blocks, runs, arm_config = await _measure(dataset, spec, scope, arm=arm)
+        raw[label] = runs
+        arms[label] = {
             **arm_config,
             "model": spec.model,
-            "is_m1_baseline": spec.baseline,
+            "is_m1_baseline": is_control,
             "blocks": blocks,
             "latency": {name: _latency(run) for name, run in runs.items()},
         }
 
-    if compare:
-        control = next(s for s in COMPARED_EMBEDDERS if s.baseline)
-        for spec in specs:
-            if spec.baseline:
+    if (compare or compare_arms) and control_label:
+        for label in arms:
+            if label == control_label:
                 continue
-            arms[spec.label]["deltas_vs_baseline"] = {
-                name: _deltas(raw[spec.label][name], raw[control.label][name], graded=graded)
+            arms[label]["deltas_vs_baseline"] = {
+                name: _deltas(raw[label][name], raw[control_label][name], graded=graded)
                 for name, _attribute, graded, _note in QUERY_SETS
             }
 
@@ -360,17 +402,23 @@ async def _run(*, compare: bool) -> EvalReport:
             f"{len(dataset.chunks)} chunks (D70)",
             "grade_scale": dataset.grade_scale,
             "corpus_chunks": len(dataset.chunks),
-            "comparison": "ML-4 embedding-model comparison" if compare else "single arm",
+            "comparison": (
+                "FR-Q3 retrieval-arm comparison: dense / lexical / RRF hybrid (D73)"
+                if compare_arms
+                else ("ML-4 embedding-model comparison" if compare else "single arm")
+            ),
             # Scope of the latency figures, stated in the artifact rather than
             # only in doc 9 §9.8. A reader meets these numbers here, and a table
             # that says "latency" without saying WHICH stages invites the
             # assumption that it covers the pipeline. Rows for unbuilt stages
             # would be fabrication, so they are absent rather than zero.
             "latency_measured": (
-                "retrieve only: query embed + dense search, idle system, "
-                "CUDA init excluded by an untimed warm-up. "
-                "lexical+fusion (phase 3), rerank (phase 4), context/TTFT/complete "
-                "(generation path) and the two non-idle conditions are NOT measured yet"
+                "retrieve only, idle system, CUDA init excluded by an untimed warm-up. "
+                "embed = query preparation: dense encode (dense), tokenise (lexical), "
+                "tokenise + dense encode (hybrid). search = store queries: one (dense, "
+                "lexical), two plus RRF fusion (hybrid). rerank (phase 4), "
+                "context/TTFT/complete (generation path) and the two non-idle "
+                "conditions are NOT measured yet"
             ),
         },
         blocks=arms,
@@ -402,15 +450,26 @@ def main(argv: list[str] | None = None) -> int:
             "command must keep measuring what production runs."
         ),
     )
+    parser.add_argument(
+        "--compare-arms",
+        action="store_true",
+        help=(
+            "run dense / lexical / RRF-hybrid against the M1 baseline encoder and "
+            "report paired deltas (FR-Q3, doc 6 sections 6.5-6.6). Off by default: "
+            "adoption waits on the phase 5 ablation, so production stays dense-only."
+        ),
+    )
     args = parser.parse_args(argv)
 
-    report = asyncio.run(_run(compare=args.compare_embedders))
+    report = asyncio.run(_run(compare=args.compare_embedders, compare_arms=args.compare_arms))
     print(_render(report))
 
     if not args.no_archive:
         args.report_dir.mkdir(parents=True, exist_ok=True)
         stamp = report.generated_at.replace(":", "").replace("-", "")
-        kind = "compare" if args.compare_embedders else "retrieval"
+        kind = (
+            "arms" if args.compare_arms else ("compare" if args.compare_embedders else "retrieval")
+        )
         path = args.report_dir / f"{kind}-{stamp}.json"
         path.write_text(report.to_json() + "\n", encoding="utf-8")
         print(f"archived to {path}")

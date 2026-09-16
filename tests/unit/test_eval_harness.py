@@ -21,7 +21,13 @@ from scholiast.domain.paper import SectionKind
 from scholiast.domain.retrieval import RetrievalArm, ScoredChunk
 from scholiast.eval.cli import EvalReport, _render, _summarise
 from scholiast.eval.dret import DRet, Grade, Judgment, Query, Split
-from scholiast.eval.harness import build_index, collection_name, run_retrieval
+from scholiast.eval.harness import (
+    build_index,
+    build_lexical_index,
+    collection_name,
+    run_hybrid,
+    run_retrieval,
+)
 
 
 class StubEmbedder:
@@ -366,3 +372,111 @@ class TestTheReportKeepsCoreAndFullApart:
         # for unbuilt stages would be fabrication (doc 9 §9.8).
         rendered = _render(await self._report())
         assert "retrieve only" in rendered
+
+
+class StubLexical:
+    """Scripted BM25 ranking, so fusion arithmetic is checkable by hand."""
+
+    def __init__(self, ranking: list[str] | None = None) -> None:
+        self.ranking = ranking or []
+        self.upserted: list[int] = []
+        self.searches = 0
+        self.last_weights: dict[int, float] = {}
+
+    async def upsert_sparse(self, records: Sequence[object]) -> int:
+        self.upserted.append(len(records))
+        return len(records)
+
+    async def search_lexical(
+        self, weights: dict[int, float], *, paper_ids: Sequence[str], limit: int
+    ) -> list[ScoredChunk]:
+        self.searches += 1
+        self.last_weights = weights
+        return [
+            ScoredChunk(
+                chunk_id=cid,
+                paper_id="paper-1",
+                score=1.0 - i / 100,
+                arm=RetrievalArm.LEXICAL,
+                rank=i + 1,
+            )
+            for i, cid in enumerate(self.ranking[:limit])
+        ]
+
+
+class TestTheLexicalArm:
+    async def test_building_it_weights_every_non_empty_chunk(self) -> None:
+        dataset = _dataset_with("c1")
+        lexical = StubLexical()
+        written = await build_lexical_index(dataset, lexical)
+        assert written == len(dataset.chunks)
+
+    async def test_lexical_only_never_calls_the_encoder(self) -> None:
+        # The arm's whole point is exact term matching; paying for a GPU embed
+        # would make the "lexical is cheap" latency finding a measurement artifact.
+        dataset = _dataset_with("target")
+        embedder = StubEmbedder()
+        await run_hybrid(
+            dataset,
+            dataset.core,
+            StubIndex(),
+            StubLexical(["target"]),
+            embedder,
+            label="t",
+            paper_ids=["paper-1"],
+            arms="lexical",
+        )
+        assert embedder.roles == [], "the lexical arm must not embed the query"
+
+    async def test_hybrid_queries_both_arms_and_fuses(self) -> None:
+        dataset = _dataset_with("target")
+        dense = StubIndex(ranking=["x", "target"])
+        lexical = StubLexical(["target", "y"])
+        run = await run_hybrid(
+            dataset,
+            dataset.core,
+            dense,
+            lexical,
+            StubEmbedder(),
+            label="t",
+            paper_ids=["paper-1"],
+            arms="hybrid",
+        )
+        # RRF: `target` is rank 2 dense and rank 1 lexical, so it outranks both
+        # singletons and lands first -> RR = 1.0.
+        assert run.metrics.rr == [1.0]
+        assert dense.searches >= 1 and lexical.searches >= 1
+
+    async def test_hybrid_counts_the_dense_encode_as_preparation_not_search(self) -> None:
+        # The first draft timed only tokenisation and hid the GPU embed inside
+        # `search_ms`, reporting `embed p50 0.02ms` for hybrid -- attributing the
+        # encoder's cost to the store. Pinned so it cannot regress silently.
+        dataset = _dataset_with("target")
+        run = await run_hybrid(
+            dataset,
+            dataset.core,
+            StubIndex(ranking=["target"]),
+            StubLexical(["target"]),
+            StubEmbedder(),
+            label="t",
+            paper_ids=["paper-1"],
+            arms="hybrid",
+        )
+        assert len(run.embed_ms) == len(dataset.core)
+        assert len(run.search_ms) == len(dataset.core)
+
+    async def test_an_untimed_warmup_precedes_the_measured_queries(self) -> None:
+        dataset = _dataset_with("target")
+        lexical = StubLexical(["target"])
+        run = await run_hybrid(
+            dataset,
+            dataset.core,
+            StubIndex(ranking=["target"]),
+            lexical,
+            StubEmbedder(),
+            label="t",
+            paper_ids=["paper-1"],
+            arms="lexical",
+        )
+        assert lexical.searches == len(dataset.core) + 1
+        assert len(run.latencies_ms) == len(dataset.core)

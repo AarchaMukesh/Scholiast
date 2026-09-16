@@ -126,3 +126,53 @@ class VectorIndex(Protocol):
         which legitimately spans tenants, never by a request path.
         """
         ...
+
+
+@dataclass(frozen=True, slots=True)
+class SparseRecord:
+    """One chunk's lexical term weights, ready to index (doc 6 section 6.5, D73).
+
+    `weights` maps a term id to its BM25 term-frequency contribution. The IDF
+    factor is deliberately absent: the store applies it from collection
+    statistics, so the weights here stay correct as the corpus grows.
+    """
+
+    chunk_id: str
+    paper_id: str
+    weights: dict[int, float]
+
+
+@runtime_checkable
+class LexicalIndex(Protocol):
+    """Sparse BM25 retrieval over the same chunks (FR-Q3, ML-6).
+
+    **A separate interface over the SAME store, not a second store.** Doc 6
+    section 6.5 adopted sparse-in-the-vector-store over Elasticsearch precisely
+    for "single store, single filter path, single query round-trip" -- so this is
+    implemented by the same adapter as `VectorIndex`, against the same collection,
+    with the same mandatory paper filter. It is a distinct Protocol rather than
+    extra methods on `VectorIndex` because production's dense-only path must not
+    acquire methods it never calls: FR-Q3's adoption is conditional on the
+    ablation measuring hybrid against dense-only, and until then the lexical arm
+    is an eval configuration rather than the shipped retriever.
+
+    The same tenancy shape applies for the same reason (section 5.8 layer 3, D36):
+    `paper_ids` is required and an empty set is an error, never an unfiltered scan.
+    """
+
+    async def upsert_sparse(self, records: Sequence[SparseRecord]) -> int:
+        """Index lexical weights, replacing any that already exist."""
+        ...
+
+    async def search_lexical(
+        self,
+        weights: dict[int, float],
+        *,
+        paper_ids: Sequence[str],
+        limit: int,
+    ) -> list[ScoredChunk]:
+        """Best BM25 matches, restricted to `paper_ids`.
+
+        Raises `EmptyRetrievalScope` when `paper_ids` is empty.
+        """
+        ...
