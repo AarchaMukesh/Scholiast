@@ -27,6 +27,11 @@ dependencies = [
     "python-multipart>=0.0.20",
 ]
 
+# Doc 9 §9.12 names the command literally: "one command: `make eval` (or
+# `uv run eval`) reproduces the published report". This is it.
+[project.scripts]
+eval = "scholiast.eval.cli:main"
+
 [project.optional-dependencies]
 # Local inference. Installed on the worker and in dev, not in the API image.
 # NOTE: torch must come from the CUDA 12.8+ index for Blackwell (sm_120) —
