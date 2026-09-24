@@ -33,6 +33,13 @@ from pathlib import Path
 from typing import Any
 
 from scholiast.config.settings import get_settings
+from scholiast.eval.contention import (
+    DEFAULT_REPEATS,
+    Condition,
+    ConditionReport,
+    measure_condition,
+    verify_same_retrieval,
+)
 from scholiast.eval.dret import DRet, Query, build_dret, verify_core, verify_split
 from scholiast.eval.fusion import FusionFit, fit_dense_weight, training_queries
 from scholiast.eval.harness import (
@@ -338,6 +345,92 @@ def _build_reranker() -> Any:
         precision=Precision(settings.embedding_precision),
         gate=GpuPriorityGate(),
     )
+
+
+def _contention_conditions(batch_size: int) -> tuple[Condition, ...]:
+    """The four ways of sharing the GPU that D79 compares.
+
+    Idle runs through the UNGATED adapters on purpose: it is the row every other
+    row is read against, and phases 4 and 5 published their idle numbers from that
+    same configuration, so keeping it identical makes the comparison continuous.
+    """
+    return (
+        Condition(
+            label="idle",
+            ingesting=False,
+            gated=False,
+            batch_size=batch_size,
+            note="reference; the configuration phases 4 and 5 measured idle",
+        ),
+        Condition(
+            label=f"contended, ungated (batch {batch_size})",
+            ingesting=True,
+            gated=False,
+            batch_size=batch_size,
+            note="phase 4 measured this half only: 3.2x at fp16 (D74)",
+        ),
+        Condition(
+            label=f"contended, gated (batch {batch_size})",
+            ingesting=True,
+            gated=True,
+            batch_size=batch_size,
+            note="the §5.7 scheme as production would run it",
+        ),
+        Condition(
+            label="contended, gated (batch 16)",
+            ingesting=True,
+            gated=True,
+            batch_size=16,
+            diagnostic=True,
+            note=(
+                "DIAGNOSTIC, not a proposed configuration: §5.7 pairs the gate with "
+                "batches bounded to ~50-100 ms and D74 measured batch 32 at p50 103 / "
+                "p95 135 ms, above that target. The default stays 32 (D74, D79)"
+            ),
+        ),
+    )
+
+
+def _build_contention(
+    dataset: DRet, spec: EmbedderSpec, *, gated: bool
+) -> tuple[Any, Any, Any, Any]:
+    """Adapters for one sharing regime: embedder, index, reranker, gate.
+
+    Built once per regime rather than per condition, so the batch-16 diagnostic
+    reuses the gated models instead of loading 1.5 GB again — `batch_size` is a
+    per-call argument, not part of the adapter's identity.
+
+    **One gate, shared.** A gate per adapter would coordinate nothing: priority
+    only means something when both consumers queue on the same primitive.
+    """
+    from scholiast.application.ports.ml import Precision
+    from scholiast.infrastructure.ml.embedder import LocalEmbedder
+    from scholiast.infrastructure.ml.gpu import GpuPriorityGate
+    from scholiast.infrastructure.ml.reranker import LocalReranker
+    from scholiast.infrastructure.vector.qdrant import QdrantVectorIndex
+
+    settings = get_settings()
+    precision = Precision(settings.embedding_precision)
+    gate = GpuPriorityGate() if gated else None
+    embedder = LocalEmbedder(
+        model_name=spec.model,
+        device=settings.embedding_device,
+        precision=precision,
+        gate=gate,
+    )
+    collection = collection_name(dataset, embedder.version) + "_hybrid"
+    index = QdrantVectorIndex(
+        settings.qdrant_url,
+        collection=collection,
+        dimensions=spec.dimensions,
+        sparse=True,
+    )
+    reranker = LocalReranker(
+        device=settings.embedding_device,
+        precision=precision,
+        gate=gate,
+    )
+    return embedder, index, reranker, gate
 
 
 def _resources(spec: EmbedderSpec, index_report: IndexReport, chunks: int) -> dict[str, Any]:
@@ -741,6 +834,158 @@ async def _run(
     )
 
 
+async def run_contention(*, repeats: int = DEFAULT_REPEATS) -> EvalReport:
+    """Doc 8 deliverable 6: the number that says whether §5.7's scheme works.
+
+    **This harness never builds the collection.** Every condition reads the index
+    phases 3-5 built, and a gated embedder re-batches and perturbs fp16 vectors
+    (D74, 108 of 256 changed) — so building here could silently move numbers other
+    phases published. An incomplete collection is refused with the command that
+    builds it properly instead.
+    """
+    dataset = build_dret(load_snapshot())
+    verify_split(dataset)
+    verify_core(dataset)
+    scope = sorted(dataset.papers)
+    base = next(s for s in COMPARED_EMBEDDERS if s.baseline)
+    settings = get_settings()
+
+    adapters: dict[bool, tuple[Any, Any, Any, Any]] = {}
+    reports: list[ConditionReport] = []
+    blocks: dict[str, Any] = {}
+    # Real corpus text, in a fixed order, so every condition ingests the same work.
+    load_texts = [dataset.chunks[cid].text for cid in sorted(dataset.chunks)]
+
+    for condition in _contention_conditions(settings.embedding_batch_size):
+        if condition.gated not in adapters:
+            adapters[condition.gated] = _build_contention(dataset, base, gated=condition.gated)
+        embedder, index, reranker, gate = adapters[condition.gated]
+        await index.ensure_ready()
+        present = await index.count()
+        if present != len(dataset.chunks):
+            raise ValueError(
+                f"the eval collection holds {present} of {len(dataset.chunks)} chunks. "
+                "This harness must not build it — a gated embedder perturbs fp16 "
+                "vectors (D74) and every published metric reads this collection. "
+                "Run `uv run eval --compare-arms` first."
+            )
+        report = await measure_condition(
+            condition,
+            dataset,
+            dataset.core,
+            index,
+            index,
+            embedder,
+            reranker,
+            paper_ids=scope,
+            load_texts=load_texts,
+            repeats=repeats,
+            gate=gate,
+        )
+        reports.append(report)
+        blocks[condition.label] = {
+            "ingesting": condition.ingesting,
+            "gated": condition.gated,
+            "batch_size": condition.batch_size,
+            "diagnostic": condition.diagnostic,
+            "note": condition.note,
+            "queries": report.queries,
+            "seconds": round(report.seconds, 1),
+            "rerank_ms": report.percentiles(report.rerank_ms),
+            "stage_total_ms": report.percentiles(report.total_ms),
+            "embed_ms": report.percentiles(report.embed_ms),
+            "search_ms": report.percentiles(report.search_ms),
+            "ingestion": {
+                "batches_during_queries": report.batches_during,
+                "chunks_during_queries": report.chunks_during,
+                "chunks_per_second": report.ingestion_chunks_per_second,
+            },
+            "gate_acquisitions": report.acquisitions,
+            "retrieval_metrics": report.metrics,
+        }
+
+    # Only timing may vary. Checked across all four before anything is archived.
+    verify_same_retrieval(reports)
+
+    embedder, _index, reranker, _gate = adapters[False]
+    return EvalReport(
+        generated_at=datetime.now(UTC).isoformat(timespec="seconds"),
+        config={
+            "measurement": (
+                "rerank latency under concurrent ingestion — doc 8 deliverable 6, "
+                "doc 9 §9.8's second condition, the test of §5.7's priority scheme (D79)"
+            ),
+            "conditions": (
+                "idle / contended-ungated / contended-gated at the production batch "
+                f"size ({settings.embedding_batch_size}), plus contended-gated at batch "
+                "16 as a DIAGNOSTIC. Idle runs the ungated adapters, the configuration "
+                "phases 4 and 5 measured idle with"
+            ),
+            "ingestion_load": (
+                f"real corpus chunks embedded continuously at {settings.embedding_precision}, "
+                "cycling the corpus, NOTHING WRITTEN — the contention is GPU-side and a "
+                "gated embedder would perturb the collection every metric reads (D74, D79)"
+            ),
+            "query_workload": (
+                f"D-RET-CORE (n={len(dataset.core)}) x {repeats} passes through the "
+                "hybrid_rerank arm at depth 50, the whole retrieval stage including the "
+                "query embed, because NFR-P2's budget is the stage"
+            ),
+            "budget": "NFR-P2: hybrid + fusion + rerank at p95 <= 800 ms",
+            "embedder_version": embedder.version,
+            "reranker_version": reranker.version,
+            "dataset_versions": dataset.versions,
+            "not_measured": (
+                "end-to-end ingestion (NFR-P6 covers parse + chunk + embed + write and is "
+                "a different number), concurrent QUERY load (NFR-S4's 20 users), and the "
+                "generation path"
+            ),
+            "reproducibility": (
+                "latency is not reproducible in FR-E4's sense; the retrieval metrics beside "
+                "each condition are, and are verified identical across all conditions — a "
+                "difference there would mean the harness changed more than the timing"
+            ),
+        },
+        blocks=blocks,
+    )
+
+
+def _render_contention(report: EvalReport) -> str:
+    """One row per condition: what the user waits, and what ingestion paid for it."""
+    cfg = report.config
+    out = [
+        f"Scholiast GPU contention  ({report.generated_at})",
+        f"  measurement {cfg['measurement']}",
+        f"  load        {cfg['ingestion_load']}",
+        f"  queries     {cfg['query_workload']}",
+        f"  budget      {cfg['budget']}",
+        "",
+        f"  {'condition':<34}{'rerank p50':>11}{'p95':>8}{'p99':>8}"
+        f"{'stage p95':>11}{'ingest/s':>10}{'gate Q/I':>12}",
+    ]
+    for label, block in report.blocks.items():
+        rerank, stage = block["rerank_ms"], block["stage_total_ms"]
+        acquisitions = block["gate_acquisitions"]
+        gate = (
+            f"{acquisitions.get('QUERY', 0)}/{acquisitions.get('INGESTION', 0)}"
+            if acquisitions
+            else "-"
+        )
+        throughput = block["ingestion"]["chunks_per_second"]
+        # "-", not 0.0: the idle row has no ingestion to measure, and a zero there
+        # reads as "ingestion stalled" rather than "not applicable".
+        ingest = f"{throughput:.1f}" if throughput is not None else "-"
+        out.append(
+            f"  {label:<34}{rerank.get('p50', 0):>11.0f}{rerank.get('p95', 0):>8.0f}"
+            f"{rerank.get('p99', 0):>8.0f}{stage.get('p95', 0):>11.0f}{ingest:>10}{gate:>12}"
+        )
+        if block["diagnostic"]:
+            out.append(f"  {'':<34}^ diagnostic — {block['note']}")
+    out.append("")
+    out.append(f"  not measured: {cfg['not_measured']}")
+    return "\n".join(out)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="eval",
@@ -786,6 +1031,15 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--contention",
+        action="store_true",
+        help=(
+            "measure rerank latency under concurrent ingestion with the GPU priority "
+            "gate on and off (doc 8 deliverable 6, §5.7, D79). Reads the collection "
+            "the retrieval runs built and writes nothing to it."
+        ),
+    )
+    parser.add_argument(
         "--compare-fusion",
         action="store_true",
         help=(
@@ -796,15 +1050,21 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    report = asyncio.run(
-        _run(
-            compare=args.compare_embedders,
-            compare_arms=args.compare_arms,
-            compare_depths=args.compare_depths,
-            compare_fusion=args.compare_fusion,
+    if args.contention:
+        # A different question with a different shape: conditions rather than
+        # retrieval configurations, so it has its own runner and its own view.
+        report = asyncio.run(run_contention())
+        print(_render_contention(report))
+    else:
+        report = asyncio.run(
+            _run(
+                compare=args.compare_embedders,
+                compare_arms=args.compare_arms,
+                compare_depths=args.compare_depths,
+                compare_fusion=args.compare_fusion,
+            )
         )
-    )
-    print(_render(report))
+        print(_render(report))
 
     if not args.no_archive:
         args.report_dir.mkdir(parents=True, exist_ok=True)
@@ -815,6 +1075,7 @@ def main(argv: list[str] | None = None) -> int:
             (
                 name
                 for name, selected in (
+                    ("contention", args.contention),
                     ("depths", args.compare_depths),
                     ("fusion", args.compare_fusion),
                     ("arms", args.compare_arms),
