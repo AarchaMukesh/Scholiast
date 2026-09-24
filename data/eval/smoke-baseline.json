@@ -1,0 +1,53 @@
+{
+  "config": {
+    "arms": [
+      "dense",
+      "hybrid"
+    ],
+    "chunks": 360,
+    "dataset_versions": {
+      "builder": "qasper-json/1.0.0",
+      "chunker": "structure-aware/1.2.0",
+      "dret": "d-ret/1.0.0"
+    },
+    "device": "cpu",
+    "embedder_version": "BAAI/bge-base-en-v1.5/fp32/1.0.0",
+    "papers": [
+      "1604.05372",
+      "1801.06482",
+      "1801.07887",
+      "1805.06966",
+      "1808.09111",
+      "1809.01202",
+      "1810.04635",
+      "1908.01294",
+      "1911.07555",
+      "2003.04866"
+    ],
+    "precision": "fp32 (forced on CPU by D18)",
+    "purpose": "FR-E6 regression gate (D82). These numbers are a fixed point for detecting CHANGE on a 10-paper subset at CPU/fp32 \u2014 they are not the published results, which are whole-corpus at GPU/fp16",
+    "queries": 27,
+    "regenerate": "uv run eval --smoke --update-baseline",
+    "reranking": "absent: on CPU it costs minutes, which is the whole job budget",
+    "scope": "paper-scoped to the subset, so absolute values sit above D70's",
+    "seed": 20260925,
+    "tolerance": 0.05
+  },
+  "generated_at": "2026-09-24T18:43:34+00:00",
+  "metrics": {
+    "dense": {
+      "mrr": 0.249509,
+      "ndcg@10": 0.244226,
+      "recall@10": 0.324691,
+      "recall@20": 0.425926,
+      "recall@50": 0.617284
+    },
+    "hybrid": {
+      "mrr": 0.280532,
+      "ndcg@10": 0.297846,
+      "recall@10": 0.469753,
+      "recall@20": 0.537654,
+      "recall@50": 0.62963
+    }
+  }
+}

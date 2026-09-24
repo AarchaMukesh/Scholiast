@@ -70,6 +70,15 @@ from scholiast.eval.pdfcheck import (
     queries_by_id,
     sample_papers,
 )
+from scholiast.eval.smoke import (
+    BASELINE_PATH,
+    SMOKE_PAPERS,
+    SMOKE_SEED,
+    TOLERANCE,
+    compare,
+    load_baseline,
+    save_baseline,
+)
 from scholiast.eval.snapshot import load_snapshot
 
 #: Where a run lands. Date-stamped rather than overwritten (§9.13): the trend line
@@ -1105,6 +1114,80 @@ async def run_pdf_check(*, count: int = SAMPLE_SIZE, seed: int = SAMPLE_SEED) ->
     )
 
 
+async def run_smoke() -> tuple[dict[str, Any], dict[str, dict[str, float]]]:
+    """Measure the smoke subset on CPU (FR-E6, D82). Returns (report, metrics).
+
+    **CPU and fp32 deliberately.** CI has no GPU, and the adapter forces fp32 there
+    (D18) — so these values are a different configuration from the published ones
+    and exist to detect change, not to be quoted. The device is passed explicitly
+    rather than read from settings: a smoke run that silently used CUDA on a dev
+    machine would compare against a baseline no CI runner could reproduce.
+
+    One collection serves both arms. The full eval keeps dense and hybrid apart so
+    the published baseline cannot drift; here the point is speed, and the sparse
+    schema answers a dense search the same way.
+    """
+    from scholiast.application.ports.ml import Precision
+    from scholiast.infrastructure.ml.embedder import LocalEmbedder
+    from scholiast.infrastructure.vector.qdrant import QdrantVectorIndex
+
+    rows = load_snapshot()
+    published = build_dret(rows)
+    verify_split(published)
+    sampled = sample_papers(published, count=SMOKE_PAPERS, seed=SMOKE_SEED)
+    dataset = build_dret([row for row in rows if str(row["id"]) in set(sampled)])
+    queries = dataset.full
+
+    base = next(s for s in COMPARED_EMBEDDERS if s.baseline)
+    embedder = LocalEmbedder(base.model, device="cpu", precision=Precision.FP32)
+    digest = hashlib.sha256("|".join(sampled).encode("utf-8")).hexdigest()[:8]
+    collection = f"{collection_name(dataset, embedder.version)}_smoke_{digest}"
+    # `sparse=True`: the hybrid arm needs the named-vector schema, and the dense
+    # arm reads the same collection rather than paying for a second index build.
+    index = QdrantVectorIndex(
+        get_settings().qdrant_url,
+        collection=collection,
+        dimensions=base.dimensions,
+        sparse=True,
+    )
+    await build_index(dataset, index, embedder, collection=collection)
+    await build_lexical_index(dataset, index)
+
+    dense = await run_retrieval(dataset, queries, index, embedder, label="dense", paper_ids=sampled)
+    hybrid = await run_hybrid(
+        dataset, queries, index, index, embedder, label="hybrid", paper_ids=sampled, arms="hybrid"
+    )
+    metrics = {
+        "dense": {name: round(value, 6) for name, value in dense.metrics.means().items()},
+        "hybrid": {name: round(value, 6) for name, value in hybrid.metrics.means().items()},
+    }
+    report = {
+        "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "config": {
+            "purpose": (
+                "FR-E6 regression gate (D82). These numbers are a fixed point for "
+                "detecting CHANGE on a 10-paper subset at CPU/fp32 — they are not the "
+                "published results, which are whole-corpus at GPU/fp16"
+            ),
+            "papers": sampled,
+            "seed": SMOKE_SEED,
+            "chunks": len(dataset.chunks),
+            "queries": len(queries),
+            "arms": ["dense", "hybrid"],
+            "reranking": "absent: on CPU it costs minutes, which is the whole job budget",
+            "scope": "paper-scoped to the subset, so absolute values sit above D70's",
+            "device": "cpu",
+            "precision": "fp32 (forced on CPU by D18)",
+            "embedder_version": embedder.version,
+            "dataset_versions": dataset.versions,
+            "tolerance": TOLERANCE,
+            "regenerate": "uv run eval --smoke --update-baseline",
+        },
+        "metrics": metrics,
+    }
+    return report, metrics
+
+
 def _render_pdf_check(report: EvalReport) -> str:
     """Two builds side by side, with what each one's evidence did."""
     cfg = report.config
@@ -1218,6 +1301,24 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--smoke",
+        action="store_true",
+        help=(
+            "FR-E6's regression gate: run a seeded 10-paper subset on CPU and compare "
+            f"every metric with {BASELINE_PATH}. Exits non-zero if any metric drops more "
+            f"than {TOLERANCE} below baseline; a rise is reported and passes (D82)."
+        ),
+    )
+    parser.add_argument(
+        "--update-baseline",
+        action="store_true",
+        help=(
+            "with --smoke, rewrite the committed baseline from this run instead of "
+            "checking against it. Deliberate by design: a gate that regenerates its own "
+            "reference gates nothing."
+        ),
+    )
+    parser.add_argument(
         "--pdf-check",
         action="store_true",
         help=(
@@ -1245,6 +1346,23 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     args = parser.parse_args(argv)
+
+    if args.update_baseline and not args.smoke:
+        # Refused rather than ignored: a flag that quietly does nothing is how
+        # someone comes to believe they regenerated a baseline they did not.
+        parser.error("--update-baseline only means something with --smoke")
+
+    if args.smoke:
+        # A gate, not a report: it prints a verdict and sets an exit code, and it
+        # archives nothing to var/eval — the committed baseline IS its artifact.
+        smoke_report, measured = asyncio.run(run_smoke())
+        if args.update_baseline:
+            save_baseline(smoke_report)
+            print(f"baseline written to {BASELINE_PATH}")
+            return 0
+        comparison = compare(load_baseline()["metrics"], measured, tolerance=TOLERANCE)
+        print(comparison.render())
+        return 0 if comparison.passed else 1
 
     if args.pdf_check:
         # Two corpora rather than two retrieval configurations, so it has its own
