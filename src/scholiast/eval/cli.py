@@ -8,9 +8,9 @@ the archive — §9.13 keeps every milestone's run date-stamped so the trend lin
 across milestones becomes an artifact in itself, and that needs a machine-readable
 file rather than scrollback. The table is what a human reads while working.
 
-**Every run records what produced it.** Dataset versions, embedder version,
-collection name, retrieval scope, query counts and the grade scale go into the
-report next to the numbers. §9.12 calls this a "full config snapshot"; the reason it
+**Every run records what produced it.** Dataset versions, embedder and reranker
+versions, collection name, retrieval scope, query counts and the grade scale go into
+the report next to the numbers. §9.12 calls this a "full config snapshot"; the reason it
 sits *inside* the report rather than beside it is that a number separated from the
 configuration that produced it is not reproducible, only repeatable.
 
@@ -154,6 +154,8 @@ def _render(report: EvalReport) -> str:
         res = arm["resources"]
         out.append(f"=== {label}{marker}")
         out.append(f"    {arm['model']}  {res['dimensions']}d  ->  {arm['collection']}")
+        if arm.get("reranker_version"):
+            out.append(f"    reranker {arm['reranker_version']}")
         built = res["index_build_seconds"]
         out.append(
             f"    vectors {res['vector_bytes_computed'] / 1e6:.1f} MB (computed)   "
@@ -173,6 +175,13 @@ def _render(report: EvalReport) -> str:
                     flag = "within noise" if delta["within_noise"] else "SIGNIFICANT"
                     dl, dh = delta["ci95"]
                     line += f"   d {delta['delta']:+.3f} [{dl:+.3f}, {dh:+.3f}] {flag}"
+                vs_hybrid = (arm.get("deltas_vs_hybrid") or {}).get(name, {}).get(metric)
+                if vs_hybrid:
+                    flag = "within noise" if vs_hybrid["within_noise"] else "SIGNIFICANT"
+                    hl, hh = vs_hybrid["ci95"]
+                    line += (
+                        f"   | vs hybrid {vs_hybrid['delta']:+.3f} [{hl:+.3f}, {hh:+.3f}] {flag}"
+                    )
                 out.append(line)
             for diagnostic, values in sorted((block.get("diagnostics") or {}).items()):
                 low, high = values["ci95"]
@@ -185,7 +194,12 @@ def _render(report: EvalReport) -> str:
             out.append(
                 f"    latency      p50 {total.get('p50', 0):.0f}ms  p95 {total.get('p95', 0):.0f}ms"
                 f"  p99 {total.get('p99', 0):.0f}ms"
-                f"   (embed p50 {lat['embed_p50_ms']}ms  search p50 {lat['search_p50_ms']}ms)"
+                f"   (embed p50 {lat['embed_p50_ms']}ms  search p50 {lat['search_p50_ms']}ms"
+                + (
+                    f"  rerank p50 {lat['rerank_p50_ms']}ms p95 {lat['rerank_p95_ms']}ms)"
+                    if lat.get("rerank_p50_ms") is not None
+                    else ")"
+                )
             )
         out.append("")
     return "\n".join(out)
@@ -231,6 +245,24 @@ def _build_dependencies(
     return embedder, index, collection
 
 
+def _build_reranker() -> Any:
+    """The local cross-encoder, holding a GPU gate at query priority (D74).
+
+    Imported here for the same reason as the embedder: `--help` and the tests that
+    import this module must not pay for torch and a 1.1 GB model.
+    """
+    from scholiast.application.ports.ml import Precision
+    from scholiast.infrastructure.ml.gpu import GpuPriorityGate
+    from scholiast.infrastructure.ml.reranker import LocalReranker
+
+    settings = get_settings()
+    return LocalReranker(
+        device=settings.embedding_device,
+        precision=Precision(settings.embedding_precision),
+        gate=GpuPriorityGate(),
+    )
+
+
 def _resources(spec: EmbedderSpec, index_report: IndexReport, chunks: int) -> dict[str, Any]:
     """The cost side of the ML-4 tradeoff, measured where measurable.
 
@@ -268,17 +300,25 @@ async def _measure(
 
     `arm` selects the retrieval configuration: "dense" is phase 2's baseline and
     goes through `run_retrieval` unchanged, so adding the lexical arm cannot move
-    the number it is measured against. "lexical" and "hybrid" need sparse vectors,
-    which means a sparse-capable adapter and its own collection — production's
-    dense-only schema is never touched (D73).
+    the number it is measured against. "lexical", "hybrid" and "hybrid_rerank" need
+    sparse vectors, which means a sparse-capable adapter and its own collection —
+    production's dense-only schema is never touched (D73).
+
+    **Only the reranker takes the GPU gate here, deliberately (D74).** Indexing
+    stays ungated: a gated embedder re-batches and measurably perturbs fp16
+    vectors (108 of 256 changed), and `hybrid` and `hybrid_rerank` share the
+    `_hybrid` collection — so gating the build would let whichever arm built it
+    first decide both arms' vectors. The embedder's gating is exercised under real
+    contention in phase 5, where it is the point of the measurement.
     """
     sparse = arm != "dense"
     embedder, index, collection = _build_dependencies(dataset, spec, sparse=sparse)
     index_report = await build_index(dataset, index, embedder, collection=collection)
     if sparse:
-        # Idempotent: `set_vectors` over deterministic point ids (D46). Runs after
-        # the dense pass because it attaches to points that must already exist.
+        # Idempotent: `update_vectors` over deterministic point ids (D46). Runs
+        # after the dense pass because it attaches to points that must already exist.
         await build_lexical_index(dataset, index)
+    reranker = _build_reranker() if arm == "hybrid_rerank" else None
 
     blocks: dict[str, Any] = {}
     runs: dict[str, RunReport] = {}
@@ -290,7 +330,15 @@ async def _measure(
             )
         else:
             run = await run_hybrid(
-                dataset, queries, index, index, embedder, label=name, paper_ids=scope, arms=arm
+                dataset,
+                queries,
+                index,
+                index,
+                embedder,
+                label=name,
+                paper_ids=scope,
+                arms=arm,
+                reranker=reranker,
             )
         runs[name] = run
         blocks[name] = {**_summarise(run, graded=graded), "note": note}
@@ -299,6 +347,10 @@ async def _measure(
         runs,
         {
             "embedder_version": embedder.version,
+            # NFR-M5: the embedder's stamp alone would present a cross-encoder's
+            # ordering as the embedder's. None rather than absent for arms that do
+            # not rerank, so every block has the same shape.
+            "reranker_version": reranker.version if reranker is not None else None,
             "collection": collection,
             "arm": arm,
             "resources": _resources(spec, index_report, len(dataset.chunks)),
@@ -338,6 +390,10 @@ def _latency(run: RunReport) -> dict[str, Any]:
         "total": run.latency_percentiles(),
         "embed_p50_ms": _percentile(run.embed_ms, 0.50),
         "search_p50_ms": _percentile(run.search_ms, 0.50),
+        # None for arms that do not rerank — absent rather than zero, for the same
+        # reason unbuilt stages are absent from `latency_measured`.
+        "rerank_p50_ms": _percentile(run.rerank_ms, 0.50),
+        "rerank_p95_ms": _percentile(run.rerank_ms, 0.95),
     }
 
 
@@ -360,7 +416,7 @@ async def _run(*, compare: bool, compare_arms: bool) -> EvalReport:
     # both comparisons — bge-base, dense-only — so a delta always means the same
     # thing regardless of which axis is being varied (D56, D71, D73).
     if compare_arms:
-        plan = [(base, "dense"), (base, "lexical"), (base, "hybrid")]
+        plan = [(base, "dense"), (base, "lexical"), (base, "hybrid"), (base, "hybrid_rerank")]
     elif compare:
         plan = [(spec, "dense") for spec in COMPARED_EMBEDDERS]
     else:
@@ -392,18 +448,38 @@ async def _run(*, compare: bool, compare_arms: bool) -> EvalReport:
                 name: _deltas(raw[label][name], raw[control_label][name], graded=graded)
                 for name, _attribute, graded, _note in QUERY_SETS
             }
+        # The reranker's OWN contribution. Its delta against dense-only mixes two
+        # effects — fusion and reranking — so on its own it cannot say whether the
+        # cross-encoder earned its latency. Against hybrid, the only difference is
+        # the rerank step, on the identical fused shortlist.
+        hybrid_label = next((lbl for lbl in arms if lbl.startswith("hybrid (")), None)
+        rerank_label = next((lbl for lbl in arms if lbl.startswith("hybrid_rerank (")), None)
+        if hybrid_label and rerank_label:
+            arms[rerank_label]["deltas_vs_hybrid"] = {
+                name: _deltas(raw[rerank_label][name], raw[hybrid_label][name], graded=graded)
+                for name, _attribute, graded, _note in QUERY_SETS
+            }
 
     return EvalReport(
         generated_at=datetime.now(UTC).isoformat(timespec="seconds"),
         config={
-            "configuration": "dense-only (D56 ablation baseline)",
+            "configuration": (
+                "per arm: each block's `arm`, `embedder_version` and `reranker_version`; "
+                "the control is dense-only (D56 ablation baseline)"
+                if compare_arms
+                else "dense-only (D56 ablation baseline)"
+            ),
             "dataset_versions": dataset.versions,
             "retrieval_scope": f"whole corpus, {len(scope)} papers, "
             f"{len(dataset.chunks)} chunks (D70)",
             "grade_scale": dataset.grade_scale,
             "corpus_chunks": len(dataset.chunks),
             "comparison": (
-                "FR-Q3 retrieval-arm comparison: dense / lexical / RRF hybrid (D73)"
+                # Built from the plan, so adding an arm cannot leave the header
+                # describing a comparison the run did not make — which is how this
+                # string went stale when the rerank arm arrived.
+                "FR-Q3 retrieval-arm comparison (D73, D74): "
+                + " / ".join(arm for _spec, arm in plan)
                 if compare_arms
                 else ("ML-4 embedding-model comparison" if compare else "single arm")
             ),
@@ -413,12 +489,15 @@ async def _run(*, compare: bool, compare_arms: bool) -> EvalReport:
             # assumption that it covers the pipeline. Rows for unbuilt stages
             # would be fabrication, so they are absent rather than zero.
             "latency_measured": (
-                "retrieve only, idle system, CUDA init excluded by an untimed warm-up. "
-                "embed = query preparation: dense encode (dense), tokenise (lexical), "
-                "tokenise + dense encode (hybrid). search = store queries: one (dense, "
-                "lexical), two plus RRF fusion (hybrid). rerank (phase 4), "
+                "retrieval stage only, idle system, CUDA init and model load excluded "
+                "by untimed warm-ups. embed = query preparation: dense encode (dense), "
+                "tokenise (lexical), tokenise + dense encode (hybrid, hybrid_rerank). "
+                "search = store queries: one (dense, lexical), two plus RRF fusion "
+                "(hybrid, hybrid_rerank). rerank = cross-encoder over the fused top-50 "
+                "(hybrid_rerank only). total = embed + search + rerank, NFR-P2's stage. "
                 "context/TTFT/complete (generation path) and the two non-idle "
-                "conditions are NOT measured yet"
+                "conditions, including rerank under concurrent ingestion, are NOT "
+                "measured yet"
             ),
         },
         blocks=arms,
@@ -454,8 +533,8 @@ def main(argv: list[str] | None = None) -> int:
         "--compare-arms",
         action="store_true",
         help=(
-            "run dense / lexical / RRF-hybrid against the M1 baseline encoder and "
-            "report paired deltas (FR-Q3, doc 6 sections 6.5-6.6). Off by default: "
+            "run dense / lexical / RRF-hybrid / hybrid+rerank against the M1 baseline "
+            "encoder and report paired deltas (FR-Q3, doc 6 sections 6.5-6.7). Off by default: "
             "adoption waits on the phase 5 ablation, so production stays dense-only."
         ),
     )

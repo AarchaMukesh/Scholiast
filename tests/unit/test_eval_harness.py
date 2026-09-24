@@ -19,7 +19,7 @@ from scholiast.application.ports.ml import TextRole
 from scholiast.application.ports.vector import VectorRecord
 from scholiast.domain.paper import SectionKind
 from scholiast.domain.retrieval import RetrievalArm, ScoredChunk
-from scholiast.eval.cli import EvalReport, _render, _summarise
+from scholiast.eval.cli import COMPARED_EMBEDDERS, EvalReport, _measure, _render, _summarise
 from scholiast.eval.dret import DRet, Grade, Judgment, Query, Split
 from scholiast.eval.harness import (
     build_index,
@@ -373,6 +373,14 @@ class TestTheReportKeepsCoreAndFullApart:
         rendered = _render(await self._report())
         assert "retrieve only" in rendered
 
+    async def test_a_reranked_arm_names_its_reranker_in_the_terminal_report(self) -> None:
+        # NFR-M5. Without this line the only model printed beside reranked numbers
+        # is the embedder, which did not produce their ordering.
+        report = await self._report()
+        assert "    reranker " not in _render(report)
+        report.blocks["bge-base (M1 baseline)"]["reranker_version"] = "BAAI/bge-reranker-base/fp16"
+        assert "    reranker BAAI/bge-reranker-base/fp16" in _render(report)
+
 
 class StubLexical:
     """Scripted BM25 ranking, so fusion arithmetic is checkable by hand."""
@@ -480,3 +488,221 @@ class TestTheLexicalArm:
         )
         assert lexical.searches == len(dataset.core) + 1
         assert len(run.latencies_ms) == len(dataset.core)
+
+
+def _dataset_with_candidates(ids: list[str], relevant: str) -> DRet:
+    """Several chunks in one paper, exactly one judged relevant."""
+    from scholiast.application.ports.parsing import ParsedDocument
+    from scholiast.domain.paper import Chunk, ChunkRole, Provenance
+    from scholiast.eval.qasper import CorpusPaper
+
+    chunks = {
+        cid: Chunk(
+            id=cid,
+            text=f"text of {cid}",
+            role=ChunkRole.CHILD,
+            ordinal=i,
+            provenance=Provenance(
+                paper_id="paper-1",
+                section_path="Results",
+                section_kind=SectionKind.RESULTS,
+                page=1,
+                char_start=0,
+                char_end=10,
+            ),
+            chunker_version="structure-aware/1.2.0",
+            token_count=3,
+            parent_id="paper-1:p0",
+        )
+        for i, cid in enumerate(ids)
+    }
+    paper = CorpusPaper(
+        paper_id="paper-1",
+        title="A Paper With A Title",
+        document=ParsedDocument(sections=()),
+        paragraph_index={},
+        section_headings=frozenset(),
+    )
+    return DRet(
+        queries=[Query("q1", "what was measured?", "paper-1", Split.EVAL, in_core=True)],
+        judgments=[Judgment("q1", relevant, Grade.DIRECTLY_ANSWERS)],
+        chunks=chunks,
+        papers={paper.paper_id: paper},
+    )
+
+
+class StubReranker:
+    """Scores each passage by a scripted lookup on the chunk id it contains."""
+
+    def __init__(self, favourite: str | None = None, drop_one: bool = False) -> None:
+        self.favourite = favourite
+        self.drop_one = drop_one
+        self.calls: list[list[str]] = []
+
+    async def rerank(
+        self, query: str, passages: Sequence[str], *, top_k: int | None = None
+    ) -> list[tuple[int, float]]:
+        self.calls.append(list(passages))
+        scored = [
+            (i, 1.0 if self.favourite and f"text of {self.favourite}" in p else 0.0)
+            for i, p in enumerate(passages)
+        ]
+        ranked = sorted(scored, key=lambda s: (-s[1], s[0]))
+        return ranked[:-1] if self.drop_one else ranked
+
+
+class TestTheRerankArm:
+    # A tuple, not a list: a shared mutable class attribute is one accidental
+    # `.append` away from leaking state between tests.
+    IDS = ("x", "y", "z", "target")
+
+    async def _run(self, reranker: StubReranker, arms: str = "hybrid_rerank") -> object:
+        dataset = _dataset_with_candidates(list(self.IDS), relevant="target")
+        # target is last in both arms, so fusion leaves it last and only a
+        # reranker can move it up.
+        dense = StubIndex(ranking=["x", "y", "z", "target"])
+        lexical = StubLexical(["x", "y", "z", "target"])
+        return await run_hybrid(
+            dataset,
+            dataset.core,
+            dense,
+            lexical,
+            StubEmbedder(),
+            label="t",
+            paper_ids=["paper-1"],
+            arms=arms,
+            reranker=reranker,
+        )
+
+    async def test_reranking_never_changes_recall_at_50(self) -> None:
+        # The invariant the comparison is framed around: a reranker reorders the
+        # shortlist and never resizes it, so recall@50 is doc 9 section 9.3's
+        # "reranking ceiling". If this moved, deltas against hybrid would be
+        # measuring candidate changes, not ordering.
+        fused = await self._run(StubReranker(), arms="hybrid")
+        reranked = await self._run(StubReranker(favourite="target"))
+        assert reranked.metrics.recall[50] == fused.metrics.recall[50]  # type: ignore[attr-defined]
+
+    async def test_a_reranker_that_lifts_the_relevant_chunk_improves_mrr(self) -> None:
+        fused = await self._run(StubReranker(), arms="hybrid")
+        reranked = await self._run(StubReranker(favourite="target"))
+        assert reranked.metrics.rr == [1.0]  # type: ignore[attr-defined]
+        assert fused.metrics.rr[0] < 1.0  # type: ignore[attr-defined]
+
+    async def test_a_reranker_that_drops_a_candidate_is_refused(self) -> None:
+        # Dropping one would silently move the reranking ceiling.
+        with pytest.raises(ValueError, match="reordered, never resized"):
+            await self._run(StubReranker(favourite="target", drop_one=True))
+
+    async def test_rerank_time_is_its_own_stage_and_only_for_the_rerank_arm(self) -> None:
+        # NFR-P2 names rerank "the main cost" of the retrieval budget; folding it
+        # into search_ms would hide exactly the number the budget turns on.
+        reranked = await self._run(StubReranker(favourite="target"))
+        fused = await self._run(StubReranker(), arms="hybrid")
+        assert len(reranked.rerank_ms) == 1  # type: ignore[attr-defined]
+        assert fused.rerank_ms == []  # type: ignore[attr-defined]
+
+    async def test_the_reranker_sees_the_contextual_header_not_bare_text(self) -> None:
+        # Paper confusion is the baseline's dominant failure, and the header is the
+        # only place a chunk says which paper it is from.
+        reranker = StubReranker(favourite="target")
+        await self._run(reranker)
+        measured = reranker.calls[-1]
+        assert all("[Paper: A Paper With A Title]" in p for p in measured)
+
+    async def test_the_rerank_arm_warms_the_reranker_before_timing(self) -> None:
+        # The cross-encoder loads 1.1 GB on first call; an unwarmed first query
+        # would put model load inside rerank_ms.
+        reranker = StubReranker(favourite="target")
+        await self._run(reranker)
+        assert len(reranker.calls) == 2, "expected one untimed warm-up plus one measured call"
+
+    async def test_the_rerank_arm_warms_the_dense_encoder_too(self) -> None:
+        # The warm-up condition is `!= "lexical"`, not `== "hybrid"`. An equality
+        # check would silently skip the encoder warm-up for this arm and put CUDA
+        # init inside its first timed query.
+        dataset = _dataset_with_candidates(list(self.IDS), relevant="target")
+        embedder = StubEmbedder()
+        await run_hybrid(
+            dataset,
+            dataset.core,
+            StubIndex(ranking=list(self.IDS)),
+            StubLexical(list(self.IDS)),
+            embedder,
+            label="t",
+            paper_ids=["paper-1"],
+            arms="hybrid_rerank",
+            reranker=StubReranker(favourite="target"),
+        )
+        assert len(embedder.roles) == len(dataset.core) + 1
+
+    async def test_the_rerank_arm_without_a_reranker_is_refused(self) -> None:
+        dataset = _dataset_with_candidates(list(self.IDS), relevant="target")
+        with pytest.raises(ValueError, match="needs a reranker"):
+            await run_hybrid(
+                dataset,
+                dataset.core,
+                StubIndex(),
+                StubLexical(),
+                StubEmbedder(),
+                label="t",
+                paper_ids=["paper-1"],
+                arms="hybrid_rerank",
+            )
+
+
+@dataclass
+class StubHybridIndex(StubIndex):
+    """One store serving both arms, as the sparse-capable adapter does (D73)."""
+
+    lexical: StubLexical = field(default_factory=StubLexical)
+
+    async def upsert_sparse(self, records: Sequence[object]) -> int:
+        return await self.lexical.upsert_sparse(records)
+
+    async def search_lexical(
+        self, weights: dict[int, float], *, paper_ids: Sequence[str], limit: int
+    ) -> list[ScoredChunk]:
+        return await self.lexical.search_lexical(weights, paper_ids=paper_ids, limit=limit)
+
+
+class VersionedStubReranker(StubReranker):
+    version = "stub-reranker/fp16/1.0.0"
+
+
+class TestTheArtifactNamesTheReranker:
+    """NFR-M5: a block must name every model that produced its numbers.
+
+    Pinned in `_measure`, where each arm's configuration is assembled, rather than
+    in rendered text — the archived JSON is what a later reader greps.
+    """
+
+    IDS = ("x", "y", "z", "target")
+
+    async def _config(self, monkeypatch: pytest.MonkeyPatch, arm: str) -> dict[str, object]:
+        dataset = _dataset_with_candidates(list(self.IDS), relevant="target")
+        index = StubHybridIndex(ranking=list(self.IDS), lexical=StubLexical(list(self.IDS)))
+        monkeypatch.setattr(
+            "scholiast.eval.cli._build_dependencies",
+            lambda *_args, **_kwargs: (StubEmbedder(), index, "scholiast_eval_stub_hybrid"),
+        )
+        monkeypatch.setattr("scholiast.eval.cli._build_reranker", VersionedStubReranker)
+        _blocks, _runs, config = await _measure(
+            dataset, COMPARED_EMBEDDERS[0], ["paper-1"], arm=arm
+        )
+        return config
+
+    async def test_the_rerank_arm_records_which_reranker_produced_it(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The embedder's stamp alone would attribute a cross-encoder's ordering to
+        # the embedder — "was it the reranker or the re-chunk?" made unanswerable.
+        config = await self._config(monkeypatch, "hybrid_rerank")
+        assert config["reranker_version"] == "stub-reranker/fp16/1.0.0"
+
+    async def test_an_arm_without_a_reranker_says_so_rather_than_omitting_it(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        config = await self._config(monkeypatch, "hybrid")
+        assert "reranker_version" in config
+        assert config["reranker_version"] is None

@@ -38,7 +38,7 @@ from scholiast.domain.lexical import (
     tokenize,
 )
 from scholiast.domain.paper import Chunk
-from scholiast.domain.retrieval import ScoredChunk, reciprocal_rank_fusion
+from scholiast.domain.retrieval import RetrievalArm, ScoredChunk, reciprocal_rank_fusion
 from scholiast.eval.dret import DRet, Grade, Query
 from scholiast.eval.metrics import (
     NDCG_CUTOFF,
@@ -212,6 +212,11 @@ class RunReport:
     #: both to "retrieval" and make the tradeoff unreadable.
     embed_ms: list[float] = field(default_factory=list)
     search_ms: list[float] = field(default_factory=list)
+    #: Cross-encoder time over the fused shortlist (FR-E5). Its own stage because
+    #: NFR-P2 names rerank as "the main cost" of the retrieval budget, and folding
+    #: it into `search_ms` would hide exactly the number the budget turns on.
+    #: Empty for arms that do not rerank.
+    rerank_ms: list[float] = field(default_factory=list)
     #: Share of the top 10 that came from the query's own paper. A **diagnostic**,
     #: not a headline metric: under D70's whole-corpus scope a low Recall@10 has two
     #: very different causes — the right paper was never reached, or it was reached
@@ -292,6 +297,52 @@ async def run_retrieval(
     return report
 
 
+class RerankerLike(Protocol):
+    """The reranking surface the harness needs (doc 6 section 6.7)."""
+
+    async def rerank(
+        self, query: str, passages: Sequence[str], *, top_k: int | None = None
+    ) -> list[tuple[int, float]]: ...
+
+
+async def _rerank(
+    dataset: DRet, query: str, hits: Sequence[ScoredChunk], reranker: RerankerLike
+) -> list[ScoredChunk]:
+    """Reorder a shortlist by cross-encoder score. Same members, new order.
+
+    **The cross-encoder sees the ML-3 contextual header, not bare chunk text** —
+    the same `[Paper: …] [Section: …]` prefix the embedder indexed. Phase 2 found
+    the dominant failure mode is paper confusion, and the header is the only place
+    a chunk says which paper it belongs to; hiding it from the reranker would
+    handicap it on exactly the error it is best placed to fix. A ~300-token child
+    plus a ~20-token header and query fits the 512-token window.
+    """
+    passages = []
+    for hit in hits:
+        chunk = dataset.chunks[hit.chunk_id]
+        title = dataset.papers[chunk.provenance.paper_id].title
+        passages.append(chunk.embedding_input(title, None))
+    order = await reranker.rerank(query, passages)
+    if sorted(index for index, _ in order) != list(range(len(hits))):
+        # Recall@50 is only unchanged by reranking if the reranker returns every
+        # candidate exactly once. A reranker that drops or duplicates one would
+        # silently move the reranking ceiling the whole comparison is framed around.
+        raise ValueError(
+            f"reranker returned {len(order)} indices for {len(hits)} candidates; "
+            "a shortlist must be reordered, never resized"
+        )
+    return [
+        ScoredChunk(
+            chunk_id=hits[index].chunk_id,
+            paper_id=hits[index].paper_id,
+            score=score,
+            arm=RetrievalArm.RERANKED,
+            rank=rank,
+        )
+        for rank, (index, score) in enumerate(order, start=1)
+    ]
+
+
 class LexicalLike(Protocol):
     """The lexical surface the harness needs (doc 6 section 6.5, D73)."""
 
@@ -338,24 +389,43 @@ async def run_hybrid(
     paper_ids: Sequence[str],
     arms: str = "hybrid",
     depth: int = max(RECALL_CUTOFFS),
+    reranker: RerankerLike | None = None,
 ) -> RunReport:
-    """One pass over the query set for a lexical-only or RRF-fused configuration.
+    """One pass over the query set for a lexical, fused, or fused+reranked config.
 
     `arms` selects the configuration under test: "lexical" runs BM25 alone,
-    "hybrid" fuses both by RRF. Dense-only keeps its own function, unchanged, so
-    the phase 2 baseline cannot drift because a shared code path was edited.
+    "hybrid" fuses both by RRF, "hybrid_rerank" reranks the fused shortlist with a
+    cross-encoder (doc 6 section 6.7). Dense-only keeps its own function,
+    unchanged, so the phase 2 baseline cannot drift because a shared path moved.
 
     **Each arm retrieves `depth` and the fused list is truncated to `depth`**, per
     doc 6 section 6.6's candidate budget. Fusing truncated lists rather than full
     ones is what makes RRF's rank positions mean the same thing in both arms.
+
+    **Reranking reorders the whole shortlist and never changes its membership.**
+    Production passes the top 8 to generation, but that is a context budget, not an
+    evaluation cutoff: scoring the full reordered list is what lets recall@10/20,
+    nDCG@10 and MRR show the reranker's effect, while recall@50 is unchanged by
+    construction — which is exactly doc 9 section 9.3's "reranking ceiling".
     """
+    if arms == "hybrid_rerank" and reranker is None:
+        raise ValueError("the hybrid_rerank arm needs a reranker")
     report = RunReport(label=label, metrics=MetricSet(recall={k: [] for k in RECALL_CUTOFFS}))
     if queries:
         warm = tokenize(queries[0].text)
         await lexical.search_lexical(query_weights(warm), paper_ids=paper_ids, limit=depth)
-        if arms == "hybrid":
+        # `!= "lexical"`, not `== "hybrid"`: every arm that embeds a query must warm
+        # the encoder, or its first timed query carries CUDA init (the 13,595 ms p99
+        # phase 2 found). An equality check here would have silently skipped the
+        # warm-up for any arm added later.
+        if arms != "lexical":
             warm_vector = (await embedder.embed([queries[0].text], role=TextRole.QUERY))[0]
             await index.search(warm_vector, paper_ids=paper_ids, limit=depth)
+        if reranker is not None and arms == "hybrid_rerank":
+            # The cross-encoder is 1.1 GB and loads on first call; warming it on a
+            # couple of real candidates keeps its load time out of rerank_ms.
+            sample = [c.text for c in list(dataset.chunks.values())[:2]]
+            await reranker.rerank(queries[0].text, sample)
 
     for query in queries:
         qrels: dict[str, int] = {
@@ -386,10 +456,18 @@ async def run_hybrid(
         else:
             dense_hits = await index.search(vector, paper_ids=paper_ids, limit=depth)
             hits = reciprocal_rank_fusion([dense_hits, lexical_hits], limit=depth)
+        searched = time.perf_counter()
+
+        if arms == "hybrid_rerank" and reranker is not None:
+            hits = await _rerank(dataset, query.text, hits, reranker)
         finished = time.perf_counter()
 
         report.embed_ms.append((prepared - started) * 1000.0)
-        report.search_ms.append((finished - prepared) * 1000.0)
+        report.search_ms.append((searched - prepared) * 1000.0)
+        if arms == "hybrid_rerank":
+            report.rerank_ms.append((finished - searched) * 1000.0)
+        # The whole retrieval stage, rerank included: NFR-P2's 800 ms budget is
+        # "hybrid + fusion + rerank", so the total must cover all three.
         report.latencies_ms.append((finished - started) * 1000.0)
 
         ranking = [hit.chunk_id for hit in hits]
