@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import sys
 from collections.abc import Sequence
@@ -58,12 +59,32 @@ from scholiast.eval.metrics import (
     bootstrap_interval,
     paired_bootstrap_delta,
 )
+from scholiast.eval.pdfcheck import (
+    SAMPLE_SEED,
+    SAMPLE_SIZE,
+    comparable_queries,
+    diagnose_mapping,
+    fetch_and_parse,
+    normalise_for_pdf_match,
+    paper_from_document,
+    queries_by_id,
+    sample_papers,
+)
 from scholiast.eval.snapshot import load_snapshot
 
 #: Where a run lands. Date-stamped rather than overwritten (§9.13): the trend line
 #: across milestones is itself a deliverable, and it cannot exist if each run
 #: destroys the last.
 DEFAULT_REPORT_DIR = Path("var/eval")
+
+#: Where D68's fetched PDFs live. Under `var/` so the repository never carries
+#: third-party papers, and cached so a re-run costs arXiv nothing.
+PDF_CACHE_DIR = Path("var/pdf")
+
+#: The two builds the D68 check compares. Named once so the block labels, the
+#: control pointer and the renderer cannot disagree about them.
+JSON_SIDE = "json (published build)"
+PDF_SIDE = "pdf (GROBID)"
 
 
 @dataclass(frozen=True, slots=True)
@@ -950,6 +971,172 @@ async def run_contention(*, repeats: int = DEFAULT_REPEATS) -> EvalReport:
     )
 
 
+def _pdf_check_index(spec: EmbedderSpec, collection: str) -> Any:
+    from scholiast.infrastructure.vector.qdrant import QdrantVectorIndex
+
+    return QdrantVectorIndex(
+        get_settings().qdrant_url,
+        collection=collection,
+        dimensions=spec.dimensions,
+        sparse=False,
+    )
+
+
+async def run_pdf_check(*, count: int = SAMPLE_SIZE, seed: int = SAMPLE_SEED) -> EvalReport:
+    """D68's validity check: the same papers, parsed from real PDFs (D81).
+
+    The two sides differ in exactly one thing — where the text came from. Same
+    rows, same builder, same chunker, same matcher, same queries, same scope.
+    """
+    import httpx
+
+    from scholiast.infrastructure.parsing.grobid import GrobidParser
+
+    settings = get_settings()
+    rows = load_snapshot()
+    published = build_dret(rows)
+    verify_split(published)
+    sampled = sample_papers(published, count=count, seed=seed)
+    subset = [row for row in rows if str(row["id"]) in set(sampled)]
+
+    parser = GrobidParser(settings.grobid_url)
+    async with httpx.AsyncClient() as client:
+        documents = await fetch_and_parse(
+            sampled, cache_dir=PDF_CACHE_DIR, client=client, parser=parser
+        )
+
+    def from_pdf(row: dict[str, Any], *, normaliser: Any) -> Any:
+        return paper_from_document(row, documents[str(row["id"])], normaliser=normaliser)
+
+    # One matcher on both sides (D81): the check varies the parse, not the lookup.
+    json_side = build_dret(subset, normaliser=normalise_for_pdf_match)
+    pdf_side = build_dret(subset, paper_factory=from_pdf, normaliser=normalise_for_pdf_match)
+    comparable = comparable_queries(json_side, pdf_side)
+    if not comparable.shared:
+        raise ValueError(
+            "no query carries judgments on both builds, so there is nothing to "
+            "compare — the PDF parse resolved no evidence at all"
+        )
+
+    base = next(s for s in COMPARED_EMBEDDERS if s.baseline)
+    embedder, _unused, _collection = _build_dependencies(published, base)
+    # The sample and the parser are part of the corpus identity: two runs over
+    # different samples, or the same sample under a different GROBID, must not
+    # share a collection and silently reuse the wrong vectors.
+    digest = hashlib.sha256(("|".join(sampled) + parser.version).encode("utf-8")).hexdigest()[:8]
+
+    blocks: dict[str, Any] = {}
+    runs: dict[str, RunReport] = {}
+    for label, side, note in (
+        (JSON_SIDE, json_side, "the published build: QASPER full_text JSON (D68 primary)"),
+        (PDF_SIDE, pdf_side, f"real arXiv PDFs through {parser.version} and the same chunker"),
+    ):
+        collection = f"{collection_name(side, embedder.version)}_pdfcheck_{digest}_{label[:4]}"
+        index = _pdf_check_index(base, collection)
+        index_report = await build_index(side, index, embedder, collection=collection)
+        run = await run_retrieval(
+            side,
+            queries_by_id(side, comparable.shared),
+            index,
+            embedder,
+            label=label,
+            paper_ids=sampled,
+        )
+        runs[label] = run
+        blocks[label] = {
+            "note": note,
+            "collection": collection,
+            "chunks": len(side.chunks),
+            "queries_scored": run.metrics.n,
+            "judgments": len(side.judgments),
+            "evidence": side.evidence.as_dict(),
+            # WHY evidence failed to reach a chunk. Without it, an unresolved count
+            # is uninterpretable: a parse that lost the text and two sources that
+            # render the same sentence differently look identical in a total.
+            "mapping_diagnosis": diagnose_mapping(subset, side.papers).as_dict(),
+            **_summarise(run, graded=True),
+            "latency": _latency(run),
+            "resources": _resources(base, index_report, len(side.chunks)),
+        }
+    blocks[PDF_SIDE]["control"] = JSON_SIDE
+    blocks[PDF_SIDE]["deltas_vs_control"] = {
+        "paper-scoped": _deltas(runs[PDF_SIDE], runs[JSON_SIDE], graded=True)
+    }
+
+    return EvalReport(
+        generated_at=datetime.now(UTC).isoformat(timespec="seconds"),
+        config={
+            "measurement": (
+                "D68's real-PDF validity check: does retrieval hold when the corpus is "
+                "parsed from PDFs by the production path instead of QASPER's JSON? (D81)"
+            ),
+            "sample": (
+                f"{len(sampled)} eval-split papers chosen by seed {seed}: {', '.join(sampled)}"
+            ),
+            "varied": (
+                "the PARSE only. Both sides run through the same `build_dret`, chunker, "
+                "evidence location, grading, split and CORE rules; the PDF side swaps in a "
+                "paper factory whose text came from GROBID"
+            ),
+            "matching": (
+                "both sides matched with one normaliser (NFKC + de-hyphenation across line "
+                "breaks + whitespace collapse + casefold), used for this check ONLY — the "
+                "vendored D-RET keeps its published `normalise_for_match` (D81)"
+            ),
+            "comparison_basis": (
+                "the delta covers queries judged on BOTH builds; a query judged on one side "
+                "only measures the matcher rather than retrieval, and is counted separately"
+            ),
+            "comparable": comparable.report,
+            "retrieval_scope": (
+                f"paper-scoped: both sides retrieve within the {len(sampled)} sampled papers, "
+                "because the PDF build contains only those. THIS DEPARTS FROM D70's "
+                "whole-corpus scope, so these absolute numbers are NOT the headline ones — a "
+                "top-50 over a few hundred chunks compresses Recall@50 toward 1.0. Recall@10 "
+                "and MRR carry the comparison"
+            ),
+            "arm": "dense-only (D56), the path M1 ships",
+            "grade_scale": published.grade_scale,
+            "dataset_versions": published.versions,
+            "parser_version": parser.version,
+            "embedder_version": embedder.version,
+        },
+        blocks=blocks,
+    )
+
+
+def _render_pdf_check(report: EvalReport) -> str:
+    """Two builds side by side, with what each one's evidence did."""
+    cfg = report.config
+    out = [
+        f"Scholiast PDF-subset check  ({report.generated_at})",
+        f"  measurement {cfg['measurement']}",
+        f"  sample      {cfg['sample']}",
+        f"  varied      {cfg['varied']}",
+        f"  basis       {cfg['comparison_basis']}  {cfg['comparable']}",
+        f"  scope       {cfg['retrieval_scope']}",
+        "",
+    ]
+    for label, block in report.blocks.items():
+        out.append(f"=== {label}  -- {block['note']}")
+        out.append(
+            f"    {block['chunks']} chunks   {block['judgments']} judgments   "
+            f"{block['queries_scored']} queries scored   evidence {block['evidence']}"
+        )
+        out.append(f"    mapping {block['mapping_diagnosis']}")
+        for metric, values in sorted(block["metrics"].items()):
+            low, high = values["ci95"]
+            line = f"    {metric:<12}{values['point']:>7.3f}  [{low:.3f}, {high:.3f}]"
+            delta = (block.get("deltas_vs_control") or {}).get("paper-scoped", {}).get(metric)
+            if delta:
+                flag = "within noise" if delta["within_noise"] else "SIGNIFICANT"
+                dl, dh = delta["ci95"]
+                line += f"   d {delta['delta']:+.3f} [{dl:+.3f}, {dh:+.3f}] {flag}"
+            out.append(line)
+        out.append("")
+    return "\n".join(out)
+
+
 def _render_contention(report: EvalReport) -> str:
     """One row per condition: what the user waits, and what ingestion paid for it."""
     cfg = report.config
@@ -1031,6 +1218,15 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--pdf-check",
+        action="store_true",
+        help=(
+            f"D68's validity check: re-parse {SAMPLE_SIZE} sampled papers from real arXiv "
+            "PDFs through GROBID and the same chunker, and report the Recall@k delta "
+            "against the published JSON build (D81). Fetches PDFs over the network."
+        ),
+    )
+    parser.add_argument(
         "--contention",
         action="store_true",
         help=(
@@ -1050,7 +1246,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    if args.contention:
+    if args.pdf_check:
+        # Two corpora rather than two retrieval configurations, so it has its own
+        # runner and its own view.
+        report = asyncio.run(run_pdf_check())
+        print(_render_pdf_check(report))
+    elif args.contention:
         # A different question with a different shape: conditions rather than
         # retrieval configurations, so it has its own runner and its own view.
         report = asyncio.run(run_contention())
@@ -1075,6 +1276,7 @@ def main(argv: list[str] | None = None) -> int:
             (
                 name
                 for name, selected in (
+                    ("pdf-check", args.pdf_check),
                     ("contention", args.contention),
                     ("depths", args.compare_depths),
                     ("fusion", args.compare_fusion),

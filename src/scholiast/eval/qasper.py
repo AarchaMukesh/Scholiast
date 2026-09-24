@@ -31,6 +31,7 @@ assumed, both consequences of the D68 tradeoff rather than defects:
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -130,8 +131,17 @@ def _section_text_and_blocks(paragraphs: list[str]) -> tuple[str, tuple[ParsedBl
     return text, tuple(blocks)
 
 
-def build_paper(row: dict[str, Any]) -> CorpusPaper:
-    """One vendored QASPER row into the domain's parsed-document shape."""
+def build_paper(
+    row: dict[str, Any], *, normaliser: Callable[[str], str] = normalise_for_match
+) -> CorpusPaper:
+    """One vendored QASPER row into the domain's parsed-document shape.
+
+    `normaliser` decides how evidence is looked up later — it builds the keys of
+    `paragraph_index`, so whatever matches evidence must be the same function. It
+    is injected for the D68 PDF check (D81), which matches both builds with one
+    more permissive normaliser; the default is the published behaviour and must
+    stay that way, because changing it would move every judgment D-RET carries.
+    """
     paper_id = str(row["id"])
     sections: list[ParsedSection] = []
     index: dict[str, tuple[str, int, int]] = {}
@@ -153,9 +163,7 @@ def build_paper(row: dict[str, Any]) -> CorpusPaper:
             )
         )
         for block in blocks:
-            index.setdefault(
-                normalise_for_match(block.text), (path, block.char_start, block.char_end)
-            )
+            index.setdefault(normaliser(block.text), (path, block.char_start, block.char_end))
 
     full_text = row["full_text"]
     for raw_name, paragraphs in zip(
@@ -163,7 +171,7 @@ def build_paper(row: dict[str, Any]) -> CorpusPaper:
     ):
         raw_title = (raw_name or "").strip()
         if raw_title:
-            headings.add(normalise_for_match(raw_title))
+            headings.add(normaliser(raw_title))
         text, blocks = _section_text_and_blocks(list(paragraphs))
         if not blocks:
             # An empty section carries nothing to retrieve. Skipped rather than
@@ -185,9 +193,7 @@ def build_paper(row: dict[str, Any]) -> CorpusPaper:
             # setdefault, not assignment: a paragraph repeated verbatim in two
             # sections resolves to its first occurrence, deterministically. Picking
             # the last would make the mapping depend on iteration order.
-            index.setdefault(
-                normalise_for_match(block.text), (path, block.char_start, block.char_end)
-            )
+            index.setdefault(normaliser(block.text), (path, block.char_start, block.char_end))
 
     document = ParsedDocument(
         sections=tuple(sections),

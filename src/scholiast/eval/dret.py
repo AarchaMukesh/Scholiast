@@ -33,7 +33,7 @@ calls it, and so should CI.
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from enum import IntEnum
 from typing import Any
@@ -303,14 +303,27 @@ def build_dret(
     config: ChunkingConfig | None = None,
     eval_fraction: float = EVAL_SPLIT_FRACTION,
     core_threshold: float = CORE_SELECTION_THRESHOLD,
+    paper_factory: Callable[..., CorpusPaper] = build_paper,
+    normaliser: Callable[[str], str] = normalise_for_match,
 ) -> DRet:
-    """Assemble D-RET from vendored QASPER rows. Pure, offline, deterministic."""
+    """Assemble D-RET from vendored QASPER rows. Pure, offline, deterministic.
+
+    `paper_factory` and `normaliser` exist for one caller: the D68 PDF-subset
+    check (D81), which needs the SAME chunker, evidence location, grading, split
+    and CORE rule applied to papers parsed from real PDFs instead of QASPER JSON.
+    Injecting them here rather than duplicating this loop is what keeps the two
+    builds comparable — a reimplementation that drifted would be indistinguishable
+    from the parsing difference the check exists to measure.
+
+    **The defaults are the published dataset and must stay that way.** Every
+    number phases 2-6 reported was produced by them.
+    """
     chunker = StructureAwareChunker(config)
     dataset = DRet()
     seen_query_ids: set[str] = set()
 
     for row in rows:
-        paper = build_paper(row)
+        paper = paper_factory(row, normaliser=normaliser)
         dataset.papers[paper.paper_id] = paper
         split = assign_split(paper.paper_id, fraction=eval_fraction)
 
@@ -336,7 +349,7 @@ def build_dret(
                     if evidence.strip().startswith(FLOAT_EVIDENCE_PREFIX):
                         dataset.evidence.float_reference += 1
                         continue
-                    key = normalise_for_match(evidence)
+                    key = normaliser(evidence)
                     located = paper.paragraph_index.get(key)
                     if located is None:
                         if key in paper.section_headings:
