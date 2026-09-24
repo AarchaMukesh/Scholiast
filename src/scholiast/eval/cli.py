@@ -26,6 +26,7 @@ import argparse
 import asyncio
 import json
 import sys
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -33,19 +34,20 @@ from typing import Any
 
 from scholiast.config.settings import get_settings
 from scholiast.eval.dret import DRet, Query, build_dret, verify_core, verify_split
+from scholiast.eval.fusion import FusionFit, fit_dense_weight, training_queries
 from scholiast.eval.harness import (
     EmbedderLike,
     IndexReport,
     RunReport,
     build_index,
     build_lexical_index,
+    collect_arm_hits,
     collection_name,
     run_hybrid,
     run_retrieval,
 )
 from scholiast.eval.metrics import (
     NDCG_CUTOFF,
-    RECALL_CUTOFFS,
     bootstrap_interval,
     paired_bootstrap_delta,
 )
@@ -85,6 +87,45 @@ COMPARED_EMBEDDERS: tuple[EmbedderSpec, ...] = (
 )
 
 
+#: REV-4's candidate depths, plus D77's diagnostic. 100 is NOT a production
+#: candidate — doc 6 §6.6 fixes the budget at top-50 and rerank latency scales with
+#: depth — it is there to say whether phase 4's null was a weak reranker or a
+#: starved one, by showing where the pre-rerank ceiling stops climbing.
+DEPTH_SWEEP: tuple[int, ...] = (10, 20, 30, 50, 100)
+DIAGNOSTIC_DEPTH = 100
+#: The depth every other depth is compared against: doc 6 §6.6's adopted budget and
+#: what phases 3 and 4 measured, so the sweep's deltas are read against the
+#: incumbent rather than against its own best cell.
+INCUMBENT_DEPTH = 50
+
+
+@dataclass(frozen=True, slots=True)
+class Cell:
+    """One cell of the ablation table: an encoder plus the knobs a phase varies.
+
+    Replaces the `(spec, arm)` pairs earlier phases planned with. Depth (D77) and
+    the fusion rule (D76) are configuration in exactly the same sense as the arm,
+    and threading them as extra tuple positions is how a plan entry becomes
+    unreadable and a block ends up labelled with the wrong one.
+    """
+
+    label: str
+    spec: EmbedderSpec
+    arm: str = "dense"
+    depth: int = INCUMBENT_DEPTH
+    dense_weight: float | None = None
+    #: The cell this one's deltas are measured against, empty when it is itself a
+    #: control. Per cell rather than per run, because the depth sweep compares each
+    #: depth with the SAME ARM at depth 50 — one run-wide control would put a
+    #: pre-rerank cell against a reranked one.
+    control_label: str = ""
+    is_m1_baseline: bool = False
+
+    @property
+    def fusion(self) -> str:
+        return "rrf" if self.dense_weight is None else f"weighted(dense={self.dense_weight})"
+
+
 @dataclass(slots=True)
 class EvalReport:
     """One complete run, as archived."""
@@ -109,7 +150,10 @@ def _summarise(run: RunReport, *, graded: bool) -> dict[str, Any]:
     should not be in the artifact a future reader greps.
     """
     metrics: dict[str, Any] = {}
-    for k in RECALL_CUTOFFS:
+    # The run's own cutoffs, not the module's: a shallow candidate depth cannot
+    # report recall@50, and `cutoffs_for` already dropped what would be degenerate
+    # (D77). Iterating RECALL_CUTOFFS here would raise on the depth-10 cell.
+    for k in sorted(run.metrics.recall):
         interval = bootstrap_interval(run.metrics.recall[k])
         metrics[f"recall@{k}"] = {
             "point": interval.point,
@@ -121,6 +165,15 @@ def _summarise(run: RunReport, *, graded: bool) -> dict[str, Any]:
         ndcg = bootstrap_interval(run.metrics.ndcg)
         metrics[f"ndcg@{NDCG_CUTOFF}"] = {"point": ndcg.point, "ci95": [ndcg.low, ndcg.high]}
     diagnostics: dict[str, Any] = {}
+    if run.ceiling_recall:
+        ceiling = bootstrap_interval(run.ceiling_recall)
+        # Doc 9 §9.3's reranking ceiling. A diagnostic rather than a metric: it is
+        # recall over the whole candidate list, so it answers "could the reranker
+        # have found it at all?" — not "how well is the list ordered?".
+        diagnostics["ceiling_recall_at_depth"] = {
+            "point": ceiling.point,
+            "ci95": [ceiling.low, ceiling.high],
+        }
     if run.own_paper_in_top10:
         own = bootstrap_interval(run.own_paper_in_top10)
         # Kept out of `metrics` on purpose: it is not one of §9.3's four, and a
@@ -137,8 +190,26 @@ def _summarise(run: RunReport, *, graded: bool) -> dict[str, Any]:
     }
 
 
+def _render_fit(fit: dict[str, Any]) -> list[str]:
+    """The weight curve, printed so the reader can see how flat the optimum is."""
+    lines = [
+        f"  fusion fit weight {fit['weight_on_dense']} on dense, by {fit['objective']}"
+        f"  ({fit['fitted_on']})",
+        f"             MRR would choose {fit['mrr_would_choose']}"
+        + ("  (agrees)" if fit["objectives_agree"] else "  (DISAGREES — the curve is flat)"),
+        "             weight   recall   mrr",
+    ]
+    for score in fit["curve"]:
+        chosen = " <-" if score["weight"] == fit["weight_on_dense"] else ""
+        lines.append(
+            f"             {score['weight']:>6.1f}   {score['recall']:.3f}   "
+            f"{score['mrr']:.3f}{chosen}"
+        )
+    return [*lines, ""]
+
+
 def _render(report: EvalReport) -> str:
-    """The terminal view: one section per encoder, deltas under the challenger."""
+    """The terminal view: one section per cell, deltas under the challenger."""
     cfg = report.config
     out: list[str] = [
         f"Scholiast retrieval eval  ({report.generated_at})",
@@ -149,11 +220,17 @@ def _render(report: EvalReport) -> str:
         f"  latency    {cfg['latency_measured']}",
         "",
     ]
+    if cfg.get("fusion_fit"):
+        out.extend(_render_fit(cfg["fusion_fit"]))
     for label, arm in report.blocks.items():
         marker = "  [M1 DENSE BASELINE]" if arm.get("is_m1_baseline") else ""
         res = arm["resources"]
         out.append(f"=== {label}{marker}")
         out.append(f"    {arm['model']}  {res['dimensions']}d  ->  {arm['collection']}")
+        out.append(
+            f"    arm {arm['arm']}   depth {arm['depth']}   fusion {arm['fusion']}"
+            + (f"   vs {arm['control']}" if arm.get("control") else "")
+        )
         if arm.get("reranker_version"):
             out.append(f"    reranker {arm['reranker_version']}")
         built = res["index_build_seconds"]
@@ -170,7 +247,7 @@ def _render(report: EvalReport) -> str:
             for metric, values in sorted(block["metrics"].items()):
                 low, high = values["ci95"]
                 line = f"    {metric:<12}{values['point']:>7.3f}  [{low:.3f}, {high:.3f}]"
-                delta = (arm.get("deltas_vs_baseline") or {}).get(name, {}).get(metric)
+                delta = (arm.get("deltas_vs_control") or {}).get(name, {}).get(metric)
                 if delta:
                     flag = "within noise" if delta["within_noise"] else "SIGNIFICANT"
                     dl, dh = delta["ci95"]
@@ -294,39 +371,43 @@ QUERY_SETS: tuple[tuple[str, str, bool, str], ...] = (
 
 
 async def _measure(
-    dataset: DRet, spec: EmbedderSpec, scope: list[str], *, arm: str = "dense"
+    dataset: DRet, cell: Cell, scope: list[str]
 ) -> tuple[dict[str, Any], dict[str, RunReport], dict[str, Any]]:
-    """Run one configuration over every query set. Returns blocks, raw runs, config.
+    """Run one cell over every query set. Returns blocks, raw runs, config.
 
-    `arm` selects the retrieval configuration: "dense" is phase 2's baseline and
-    goes through `run_retrieval` unchanged, so adding the lexical arm cannot move
-    the number it is measured against. "lexical", "hybrid" and "hybrid_rerank" need
-    sparse vectors, which means a sparse-capable adapter and its own collection —
-    production's dense-only schema is never touched (D73).
+    `cell.arm` selects the retrieval configuration: "dense" is phase 2's baseline
+    and goes through `run_retrieval` unchanged, so adding the lexical arm cannot
+    move the number it is measured against. "lexical", "hybrid" and "hybrid_rerank"
+    need sparse vectors, which means a sparse-capable adapter and its own
+    collection — production's dense-only schema is never touched (D73).
+
+    `cell.depth` and `cell.dense_weight` are phase 5's two knobs (D77, D76). Both
+    are query-time: every cell reads the collection the first one built, so a
+    sweep measures retrieval configurations rather than differently-built indexes.
 
     **Only the reranker takes the GPU gate here, deliberately (D74).** Indexing
     stays ungated: a gated embedder re-batches and measurably perturbs fp16
-    vectors (108 of 256 changed), and `hybrid` and `hybrid_rerank` share the
-    `_hybrid` collection — so gating the build would let whichever arm built it
-    first decide both arms' vectors. The embedder's gating is exercised under real
-    contention in phase 5, where it is the point of the measurement.
+    vectors (108 of 256 changed), and every sparse cell shares the `_hybrid`
+    collection — so gating the build would let whichever cell built it first decide
+    every other cell's vectors. The embedder's gating is exercised under real
+    contention in phase 6, where it is the point of the measurement.
     """
-    sparse = arm != "dense"
-    embedder, index, collection = _build_dependencies(dataset, spec, sparse=sparse)
+    sparse = cell.arm != "dense"
+    embedder, index, collection = _build_dependencies(dataset, cell.spec, sparse=sparse)
     index_report = await build_index(dataset, index, embedder, collection=collection)
     if sparse:
         # Idempotent: `update_vectors` over deterministic point ids (D46). Runs
         # after the dense pass because it attaches to points that must already exist.
         await build_lexical_index(dataset, index)
-    reranker = _build_reranker() if arm == "hybrid_rerank" else None
+    reranker = _build_reranker() if cell.arm == "hybrid_rerank" else None
 
     blocks: dict[str, Any] = {}
     runs: dict[str, RunReport] = {}
     for name, attribute, graded, note in QUERY_SETS:
         queries: list[Query] = getattr(dataset, attribute)
-        if arm == "dense":
+        if cell.arm == "dense":
             run = await run_retrieval(
-                dataset, queries, index, embedder, label=name, paper_ids=scope
+                dataset, queries, index, embedder, label=name, paper_ids=scope, depth=cell.depth
             )
         else:
             run = await run_hybrid(
@@ -337,8 +418,10 @@ async def _measure(
                 embedder,
                 label=name,
                 paper_ids=scope,
-                arms=arm,
+                arms=cell.arm,
+                depth=cell.depth,
                 reranker=reranker,
+                dense_weight=cell.dense_weight,
             )
         runs[name] = run
         blocks[name] = {**_summarise(run, graded=graded), "note": note}
@@ -352,8 +435,13 @@ async def _measure(
             # not rerank, so every block has the same shape.
             "reranker_version": reranker.version if reranker is not None else None,
             "collection": collection,
-            "arm": arm,
-            "resources": _resources(spec, index_report, len(dataset.chunks)),
+            "arm": cell.arm,
+            # The two phase 5 knobs, on every block rather than only on the cells
+            # that vary them: a reader comparing two artifacts needs to see that
+            # the other one ran at depth 50 with RRF, not infer it from silence.
+            "depth": cell.depth,
+            "fusion": cell.fusion,
+            "resources": _resources(cell.spec, index_report, len(dataset.chunks)),
         },
     )
 
@@ -368,9 +456,12 @@ def _deltas(treatment: RunReport, baseline: RunReport, *, graded: bool) -> dict[
     discipline doc 9 section 9.4 exists to impose.
     """
     out: dict[str, Any] = {}
+    # Only cutoffs both sides actually reported: a depth-10 cell against the
+    # depth-50 control shares recall@10 and nothing deeper, and inventing the
+    # missing rows would compare recall@50 against recall@10 under one label.
+    shared = sorted(set(treatment.metrics.recall) & set(baseline.metrics.recall))
     pairs: list[tuple[str, list[float], list[float]]] = [
-        (f"recall@{k}", treatment.metrics.recall[k], baseline.metrics.recall[k])
-        for k in RECALL_CUTOFFS
+        (f"recall@{k}", treatment.metrics.recall[k], baseline.metrics.recall[k]) for k in shared
     ]
     pairs.append(("mrr", treatment.metrics.rr, baseline.metrics.rr))
     if graded:
@@ -404,7 +495,141 @@ def _percentile(values: list[float], q: float) -> float | None:
     return round(ordered[min(len(ordered) - 1, int(len(ordered) * q))], 2)
 
 
-async def _run(*, compare: bool, compare_arms: bool) -> EvalReport:
+async def _fit_fusion(dataset: DRet, spec: EmbedderSpec, scope: list[str]) -> FusionFit:
+    """Fit the weighted-fusion weight on the TRAIN split (D76).
+
+    Reads the same collection the evaluation reads and retrieves through the same
+    two calls, so the weight is fitted on the system that will be measured. The
+    training queries never appear in a reported block: they exist so the ablation
+    can put a tuned weighted fusion against RRF's untuned constant without the
+    delta measuring the tuning.
+    """
+    embedder, index, collection = _build_dependencies(dataset, spec, sparse=True)
+    await build_index(dataset, index, embedder, collection=collection)
+    await build_lexical_index(dataset, index)
+    hits = await collect_arm_hits(
+        dataset, training_queries(dataset), index, index, embedder, paper_ids=scope
+    )
+    return fit_dense_weight(hits)
+
+
+def _plan(
+    base: EmbedderSpec,
+    *,
+    compare: bool,
+    compare_arms: bool,
+    compare_depths: bool,
+    weight: float | None,
+) -> list[Cell]:
+    """The cells this run measures, and what each one is compared against.
+
+    Every cell names its own control rather than the run naming one for all of
+    them: the depth sweep compares each depth against the SAME ARM at depth 50, so
+    a single run-wide control would either compare a pre-rerank cell against a
+    reranked one or drop half the comparisons.
+    """
+    model = base.model.split("/")[-1]
+    if weight is not None:
+        control = f"rrf hybrid ({model})"
+        return [
+            Cell(control, base, arm="hybrid"),
+            Cell(
+                f"weighted hybrid ({model})",
+                base,
+                arm="hybrid",
+                dense_weight=weight,
+                control_label=control,
+            ),
+        ]
+    if compare_depths:
+        return [
+            Cell(
+                f"{arm} @{depth}",
+                base,
+                arm=arm,
+                depth=depth,
+                control_label="" if depth == INCUMBENT_DEPTH else f"{arm} @{INCUMBENT_DEPTH}",
+            )
+            for depth in DEPTH_SWEEP
+            for arm in ("hybrid", "hybrid_rerank")
+        ]
+    if compare_arms:
+        control = f"dense ({model})"
+        return [
+            Cell(
+                f"{arm} ({model})",
+                base,
+                arm=arm,
+                control_label="" if arm == "dense" else control,
+                is_m1_baseline=arm == "dense",
+            )
+            for arm in ("dense", "lexical", "hybrid", "hybrid_rerank")
+        ]
+    if compare:
+        return [
+            Cell(
+                spec.label,
+                spec,
+                control_label="" if spec.baseline else base.label,
+                is_m1_baseline=spec.baseline,
+            )
+            for spec in COMPARED_EMBEDDERS
+        ]
+    return [Cell(base.label, base, is_m1_baseline=True)]
+
+
+def _validate(plan: Sequence[Cell]) -> None:
+    """Refuse a plan that cannot be reported — before any measuring happens.
+
+    Both failures are quiet in the artifact and expensive in wall-clock: two cells
+    sharing a label overwrite each other's block, and a control the plan does not
+    contain drops a comparison. A depth sweep is ten cells and minutes of GPU
+    time, so the check belongs before the first cell rather than after the last.
+    """
+    labels = [cell.label for cell in plan]
+    if len(set(labels)) != len(labels):
+        raise ValueError(f"two cells share a label, so one would overwrite the other: {labels}")
+    unknown = {cell.control_label for cell in plan if cell.control_label} - set(labels)
+    if unknown:
+        raise ValueError(
+            f"cells are measured against {sorted(unknown)}, which this run does not "
+            f"contain: {sorted(labels)}"
+        )
+
+
+def _comparison(plan: Sequence[Cell], *, compare: bool, fit: FusionFit | None) -> str:
+    """What this run compared — built from the plan, never written by hand.
+
+    A hand-written header went stale the moment the rerank arm was added, and the
+    artifact then described a three-arm comparison it had not run.
+    """
+    if fit is not None:
+        return (
+            f"ML-7 fusion ablation (D76): RRF vs weighted min-max score fusion at "
+            f"dense weight {fit.weight}, fitted on {fit.n_queries} train-split "
+            f"queries by {fit.objective}"
+        )
+    depths = sorted({cell.depth for cell in plan})
+    if len(depths) > 1:
+        return (
+            "REV-4 candidate-depth sweep (D77): "
+            + " / ".join(str(depth) for depth in depths)
+            + f"; {DIAGNOSTIC_DEPTH} is a diagnostic, not a production candidate; "
+            f"each cell is compared with the same arm at depth {INCUMBENT_DEPTH}"
+        )
+    arms = [cell.arm for cell in plan]
+    if len(set(arms)) > 1:
+        return "FR-Q3 retrieval-arm comparison (D73, D74): " + " / ".join(arms)
+    return "ML-4 embedding-model comparison" if compare else "single arm"
+
+
+async def _run(
+    *,
+    compare: bool,
+    compare_arms: bool,
+    compare_depths: bool = False,
+    compare_fusion: bool = False,
+) -> EvalReport:
     dataset = build_dret(load_snapshot())
     verify_split(dataset)
     verify_core(dataset)
@@ -412,61 +637,62 @@ async def _run(*, compare: bool, compare_arms: bool) -> EvalReport:
     scope = sorted(dataset.papers)
 
     base = next(s for s in COMPARED_EMBEDDERS if s.baseline)
-    # A "configuration" is (encoder, retrieval arm). The control is the same in
-    # both comparisons — bge-base, dense-only — so a delta always means the same
-    # thing regardless of which axis is being varied (D56, D71, D73).
-    if compare_arms:
-        plan = [(base, "dense"), (base, "lexical"), (base, "hybrid"), (base, "hybrid_rerank")]
-    elif compare:
-        plan = [(spec, "dense") for spec in COMPARED_EMBEDDERS]
-    else:
-        plan = [(base, "dense")]
+    # Fitting happens BEFORE the plan exists, because the fitted weight is part of
+    # the configuration the plan describes (D76).
+    fit = await _fit_fusion(dataset, base, scope) if compare_fusion else None
+    plan = _plan(
+        base,
+        compare=compare,
+        compare_arms=compare_arms,
+        compare_depths=compare_depths,
+        weight=fit.weight if fit else None,
+    )
 
-    arms: dict[str, Any] = {}
+    _validate(plan)
+
+    cells: dict[str, Any] = {}
     raw: dict[str, dict[str, RunReport]] = {}
-    control_label = ""
-    for spec, arm in plan:
-        label = spec.label if not compare_arms else f"{arm} ({spec.model.split('/')[-1]})"
-        is_control = spec.baseline and arm == "dense"
-        if is_control:
-            control_label = label
-        blocks, runs, arm_config = await _measure(dataset, spec, scope, arm=arm)
-        raw[label] = runs
-        arms[label] = {
-            **arm_config,
-            "model": spec.model,
-            "is_m1_baseline": is_control,
+    for cell in plan:
+        blocks, runs, cell_config = await _measure(dataset, cell, scope)
+        raw[cell.label] = runs
+        cells[cell.label] = {
+            **cell_config,
+            "model": cell.spec.model,
+            "is_m1_baseline": cell.is_m1_baseline,
+            # Named per block, because different cells in one run can have
+            # different controls (the depth sweep's do).
+            "control": cell.control_label or None,
             "blocks": blocks,
             "latency": {name: _latency(run) for name, run in runs.items()},
         }
 
-    if (compare or compare_arms) and control_label:
-        for label in arms:
-            if label == control_label:
-                continue
-            arms[label]["deltas_vs_baseline"] = {
-                name: _deltas(raw[label][name], raw[control_label][name], graded=graded)
-                for name, _attribute, graded, _note in QUERY_SETS
-            }
-        # The reranker's OWN contribution. Its delta against dense-only mixes two
-        # effects — fusion and reranking — so on its own it cannot say whether the
-        # cross-encoder earned its latency. Against hybrid, the only difference is
-        # the rerank step, on the identical fused shortlist.
-        hybrid_label = next((lbl for lbl in arms if lbl.startswith("hybrid (")), None)
-        rerank_label = next((lbl for lbl in arms if lbl.startswith("hybrid_rerank (")), None)
-        if hybrid_label and rerank_label:
-            arms[rerank_label]["deltas_vs_hybrid"] = {
-                name: _deltas(raw[rerank_label][name], raw[hybrid_label][name], graded=graded)
-                for name, _attribute, graded, _note in QUERY_SETS
-            }
+    for cell in plan:
+        if not cell.control_label:
+            continue
+        cells[cell.label]["deltas_vs_control"] = {
+            name: _deltas(raw[cell.label][name], raw[cell.control_label][name], graded=graded)
+            for name, _attribute, graded, _note in QUERY_SETS
+        }
+
+    # The reranker's OWN contribution. Its delta against dense-only mixes two
+    # effects — fusion and reranking — so on its own it cannot say whether the
+    # cross-encoder earned its latency. Against hybrid, the only difference is
+    # the rerank step, on the identical fused shortlist.
+    hybrid_label = next((lbl for lbl in cells if lbl.startswith("hybrid (")), None)
+    rerank_label = next((lbl for lbl in cells if lbl.startswith("hybrid_rerank (")), None)
+    if hybrid_label and rerank_label:
+        cells[rerank_label]["deltas_vs_hybrid"] = {
+            name: _deltas(raw[rerank_label][name], raw[hybrid_label][name], graded=graded)
+            for name, _attribute, graded, _note in QUERY_SETS
+        }
 
     return EvalReport(
         generated_at=datetime.now(UTC).isoformat(timespec="seconds"),
         config={
             "configuration": (
-                "per arm: each block's `arm`, `embedder_version` and `reranker_version`; "
-                "the control is dense-only (D56 ablation baseline)"
-                if compare_arms
+                "per cell: each block's `arm`, `depth`, `fusion`, `embedder_version` "
+                "and `reranker_version`; every cell reads one collection, built once"
+                if len(plan) > 1
                 else "dense-only (D56 ablation baseline)"
             ),
             "dataset_versions": dataset.versions,
@@ -474,14 +700,25 @@ async def _run(*, compare: bool, compare_arms: bool) -> EvalReport:
             f"{len(dataset.chunks)} chunks (D70)",
             "grade_scale": dataset.grade_scale,
             "corpus_chunks": len(dataset.chunks),
-            "comparison": (
-                # Built from the plan, so adding an arm cannot leave the header
-                # describing a comparison the run did not make — which is how this
-                # string went stale when the rerank arm arrived.
-                "FR-Q3 retrieval-arm comparison (D73, D74): "
-                + " / ".join(arm for _spec, arm in plan)
-                if compare_arms
-                else ("ML-4 embedding-model comparison" if compare else "single arm")
+            "comparison": _comparison(plan, compare=compare, fit=fit),
+            # The fitted weight and the curve behind it, so a reader can see how
+            # weakly or strongly the choice was determined (D76). None when this
+            # run fitted nothing.
+            "fusion_fit": (
+                None
+                if fit is None
+                else {
+                    "weight_on_dense": fit.weight,
+                    "objective": fit.objective,
+                    "fitted_on": f"D-RET train split, {fit.n_queries} queries, "
+                    "disjoint from the evaluation papers (D76)",
+                    "mrr_would_choose": fit.mrr_weight,
+                    "objectives_agree": fit.objectives_agree,
+                    "curve": [
+                        {"weight": score.weight, "recall": score.recall, "mrr": score.mrr}
+                        for score in fit.curve
+                    ],
+                }
             ),
             # Scope of the latency figures, stated in the artifact rather than
             # only in doc 9 §9.8. A reader meets these numbers here, and a table
@@ -492,15 +729,15 @@ async def _run(*, compare: bool, compare_arms: bool) -> EvalReport:
                 "retrieval stage only, idle system, CUDA init and model load excluded "
                 "by untimed warm-ups. embed = query preparation: dense encode (dense), "
                 "tokenise (lexical), tokenise + dense encode (hybrid, hybrid_rerank). "
-                "search = store queries: one (dense, lexical), two plus RRF fusion "
-                "(hybrid, hybrid_rerank). rerank = cross-encoder over the fused top-50 "
-                "(hybrid_rerank only). total = embed + search + rerank, NFR-P2's stage. "
-                "context/TTFT/complete (generation path) and the two non-idle "
-                "conditions, including rerank under concurrent ingestion, are NOT "
-                "measured yet"
+                "search = store queries: one (dense, lexical), two plus fusion by each "
+                "block's `fusion` rule (hybrid, hybrid_rerank). rerank = cross-encoder "
+                "over the fused candidate list at each block's `depth` (hybrid_rerank "
+                "only). total = embed + search + rerank, NFR-P2's stage. context/TTFT/"
+                "complete (generation path) and the two non-idle conditions, including "
+                "rerank under concurrent ingestion, are NOT measured yet"
             ),
         },
-        blocks=arms,
+        blocks=cells,
     )
 
 
@@ -535,19 +772,57 @@ def main(argv: list[str] | None = None) -> int:
         help=(
             "run dense / lexical / RRF-hybrid / hybrid+rerank against the M1 baseline "
             "encoder and report paired deltas (FR-Q3, doc 6 sections 6.5-6.7). Off by default: "
-            "adoption waits on the phase 5 ablation, so production stays dense-only."
+            "adoption waits on the phase 7 ablation, so production stays dense-only."
+        ),
+    )
+    parser.add_argument(
+        "--compare-depths",
+        action="store_true",
+        help=(
+            f"sweep the candidate depth over {' / '.join(str(d) for d in DEPTH_SWEEP)}, "
+            f"reporting pre-rerank recall (the reranking ceiling) and post-rerank "
+            f"metrics at each, against depth {INCUMBENT_DEPTH} (REV-4, D77). "
+            f"{DIAGNOSTIC_DEPTH} is a diagnostic, not a production candidate."
+        ),
+    )
+    parser.add_argument(
+        "--compare-fusion",
+        action="store_true",
+        help=(
+            "fit the weighted-fusion weight on the D-RET train split, then report "
+            "weighted min-max fusion against RRF on the evaluation sets (ML-7, D76). "
+            "The evaluation queries are never used for fitting."
         ),
     )
     args = parser.parse_args(argv)
 
-    report = asyncio.run(_run(compare=args.compare_embedders, compare_arms=args.compare_arms))
+    report = asyncio.run(
+        _run(
+            compare=args.compare_embedders,
+            compare_arms=args.compare_arms,
+            compare_depths=args.compare_depths,
+            compare_fusion=args.compare_fusion,
+        )
+    )
     print(_render(report))
 
     if not args.no_archive:
         args.report_dir.mkdir(parents=True, exist_ok=True)
         stamp = report.generated_at.replace(":", "").replace("-", "")
-        kind = (
-            "arms" if args.compare_arms else ("compare" if args.compare_embedders else "retrieval")
+        # One kind per comparison, so §9.13's date-stamped trend line does not mix
+        # a depth sweep into the arms series.
+        kind = next(
+            (
+                name
+                for name, selected in (
+                    ("depths", args.compare_depths),
+                    ("fusion", args.compare_fusion),
+                    ("arms", args.compare_arms),
+                    ("compare", args.compare_embedders),
+                )
+                if selected
+            ),
+            "retrieval",
         )
         path = args.report_dir / f"{kind}-{stamp}.json"
         path.write_text(report.to_json() + "\n", encoding="utf-8")

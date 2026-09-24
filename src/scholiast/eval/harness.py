@@ -38,7 +38,12 @@ from scholiast.domain.lexical import (
     tokenize,
 )
 from scholiast.domain.paper import Chunk
-from scholiast.domain.retrieval import RetrievalArm, ScoredChunk, reciprocal_rank_fusion
+from scholiast.domain.retrieval import (
+    RetrievalArm,
+    ScoredChunk,
+    reciprocal_rank_fusion,
+    weighted_score_fusion,
+)
 from scholiast.eval.dret import DRet, Grade, Query
 from scholiast.eval.metrics import (
     NDCG_CUTOFF,
@@ -195,6 +200,21 @@ def _mean(values: Sequence[float]) -> float:
     return sum(values) / len(values) if values else 0.0
 
 
+def cutoffs_for(depth: int) -> tuple[int, ...]:
+    """The recall cutoffs that are reportable at a candidate depth (D77).
+
+    A cutoff deeper than the candidate list is not the metric its name claims:
+    `recall@50` over a 10-long list *is* `recall@10`, and a depth sweep printing
+    both would show a column that looks flat for a reason the reader cannot see.
+    Deeper cutoffs are therefore absent rather than degenerate — the same rule the
+    report already follows for latency stages that do not exist yet.
+    """
+    reportable = tuple(k for k in RECALL_CUTOFFS if k <= depth)
+    # A depth shallower than every cutoff still has one honest number: recall over
+    # what it actually returned.
+    return reportable or (depth,)
+
+
 @dataclass(slots=True)
 class RunReport:
     """One configuration measured over one query set."""
@@ -217,6 +237,14 @@ class RunReport:
     #: it into `search_ms` would hide exactly the number the budget turns on.
     #: Empty for arms that do not rerank.
     rerank_ms: list[float] = field(default_factory=list)
+    #: Recall over the WHOLE candidate list at this depth — doc 9 §9.3's
+    #: "reranking ceiling", the diagnostic that separates *"the reranker is weak"*
+    #: from *"the candidate set never had the answer"*. Reranking reorders the
+    #: shortlist without changing its membership, so this number is a property of
+    #: the candidate set and must be identical for `hybrid` and `hybrid_rerank` at
+    #: the same depth; the depth sweep (D77) reads it at each depth to find where
+    #: the ceiling stops rising.
+    ceiling_recall: list[float] = field(default_factory=list)
     #: Share of the top 10 that came from the query's own paper. A **diagnostic**,
     #: not a headline metric: under D70's whole-corpus scope a low Recall@10 has two
     #: very different causes — the right paper was never reached, or it was reached
@@ -251,7 +279,7 @@ async def run_retrieval(
     here: the port requires it (§5.8 layer 3), and D70's choice of the whole corpus
     is a decision the caller states rather than a default this function invents.
     """
-    report = RunReport(label=label, metrics=MetricSet(recall={k: [] for k in RECALL_CUTOFFS}))
+    report = RunReport(label=label, metrics=MetricSet(recall={k: [] for k in cutoffs_for(depth)}))
 
     # One untimed query first. Without it the first measurement carries CUDA
     # context creation and the encoder's first forward pass: measured, that put
@@ -285,10 +313,11 @@ async def run_retrieval(
         report.latencies_ms.append((finished - started) * 1000.0)
 
         ranking = [hit.chunk_id for hit in hits]
-        for k in RECALL_CUTOFFS:
+        for k in report.metrics.recall:
             report.metrics.recall[k].append(recall_at_k(ranking, qrels, k))
         report.metrics.ndcg.append(ndcg_at_k(ranking, qrels, NDCG_CUTOFF))
         report.metrics.rr.append(reciprocal_rank(ranking, qrels))
+        report.ceiling_recall.append(recall_at_k(ranking, qrels, depth))
         # Read off the hits already in hand — no second search, so the diagnostic
         # costs nothing beyond the arithmetic.
         report.own_paper_in_top10.append(
@@ -378,6 +407,63 @@ async def build_lexical_index(dataset: DRet, index: LexicalLike) -> int:
     return written
 
 
+@dataclass(frozen=True, slots=True)
+class ArmHits:
+    """One query's two ranked lists, kept unfused, with its judgments.
+
+    What the fusion sweep needs is the same two lists fused many different ways.
+    Fusion is post-retrieval, so holding the lists lets one retrieval pass serve
+    every candidate weight (D76) instead of re-running the index per weight.
+    """
+
+    query_id: str
+    qrels: dict[str, int]
+    dense: tuple[ScoredChunk, ...]
+    lexical: tuple[ScoredChunk, ...]
+
+
+async def collect_arm_hits(
+    dataset: DRet,
+    queries: Sequence[Query],
+    index: VectorIndex,
+    lexical: LexicalLike,
+    embedder: EmbedderLike,
+    *,
+    paper_ids: Sequence[str],
+    depth: int = max(RECALL_CUTOFFS),
+) -> list[ArmHits]:
+    """Retrieve both arms for every query and return them UNFUSED.
+
+    **Untimed on purpose.** This serves the fitting pass over the train split, not
+    a measurement: nothing it produces reaches a latency table, so it carries no
+    warm-up and no clock. Retrieval itself is the same two calls `run_hybrid`
+    makes, so a weight fitted on these lists is fitted on the system that will be
+    evaluated rather than on a second, subtly different one.
+    """
+    collected: list[ArmHits] = []
+    for query in queries:
+        qrels = {
+            cid: int(grade)
+            for cid, grade in dataset.qrels(query.id).items()
+            if grade > Grade.NOT_RELEVANT
+        }
+        if not qrels:
+            raise ValueError(f"query {query.id!r} has no judgments to fit against")
+        sparse = query_weights(tokenize(query.text))
+        vector = (await embedder.embed([query.text], role=TextRole.QUERY))[0]
+        collected.append(
+            ArmHits(
+                query_id=query.id,
+                qrels=qrels,
+                dense=tuple(await index.search(vector, paper_ids=paper_ids, limit=depth)),
+                lexical=tuple(
+                    await lexical.search_lexical(sparse, paper_ids=paper_ids, limit=depth)
+                ),
+            )
+        )
+    return collected
+
+
 async def run_hybrid(
     dataset: DRet,
     queries: Sequence[Query],
@@ -390,6 +476,7 @@ async def run_hybrid(
     arms: str = "hybrid",
     depth: int = max(RECALL_CUTOFFS),
     reranker: RerankerLike | None = None,
+    dense_weight: float | None = None,
 ) -> RunReport:
     """One pass over the query set for a lexical, fused, or fused+reranked config.
 
@@ -407,10 +494,17 @@ async def run_hybrid(
     evaluation cutoff: scoring the full reordered list is what lets recall@10/20,
     nDCG@10 and MRR show the reranker's effect, while recall@50 is unchanged by
     construction — which is exactly doc 9 section 9.3's "reranking ceiling".
+
+    `dense_weight` selects the fusion rule (D76). None keeps RRF, the adopted
+    default (ML-7). A float runs weighted min-max score fusion with that weight on
+    the dense arm and the remainder on the lexical one — the doc 6 section 6.6
+    ablation, whose weight is fitted on the TRAIN split and never here.
     """
     if arms == "hybrid_rerank" and reranker is None:
         raise ValueError("the hybrid_rerank arm needs a reranker")
-    report = RunReport(label=label, metrics=MetricSet(recall={k: [] for k in RECALL_CUTOFFS}))
+    if dense_weight is not None and not 0.0 <= dense_weight <= 1.0:
+        raise ValueError(f"dense_weight is a share of one fused score, got {dense_weight}")
+    report = RunReport(label=label, metrics=MetricSet(recall={k: [] for k in cutoffs_for(depth)}))
     if queries:
         warm = tokenize(queries[0].text)
         await lexical.search_lexical(query_weights(warm), paper_ids=paper_ids, limit=depth)
@@ -455,7 +549,15 @@ async def run_hybrid(
             hits = lexical_hits
         else:
             dense_hits = await index.search(vector, paper_ids=paper_ids, limit=depth)
-            hits = reciprocal_rank_fusion([dense_hits, lexical_hits], limit=depth)
+            hits = (
+                reciprocal_rank_fusion([dense_hits, lexical_hits], limit=depth)
+                if dense_weight is None
+                else weighted_score_fusion(
+                    [dense_hits, lexical_hits],
+                    weights=(dense_weight, 1.0 - dense_weight),
+                    limit=depth,
+                )
+            )
         searched = time.perf_counter()
 
         if arms == "hybrid_rerank" and reranker is not None:
@@ -471,10 +573,13 @@ async def run_hybrid(
         report.latencies_ms.append((finished - started) * 1000.0)
 
         ranking = [hit.chunk_id for hit in hits]
-        for k in RECALL_CUTOFFS:
+        for k in report.metrics.recall:
             report.metrics.recall[k].append(recall_at_k(ranking, qrels, k))
         report.metrics.ndcg.append(ndcg_at_k(ranking, qrels, NDCG_CUTOFF))
         report.metrics.rr.append(reciprocal_rank(ranking, qrels))
+        # Membership, not order — so this is identical for `hybrid` and
+        # `hybrid_rerank` at the same depth, which the depth sweep asserts.
+        report.ceiling_recall.append(recall_at_k(ranking, qrels, depth))
         report.own_paper_in_top10.append(
             sum(1 for hit in hits[:10] if hit.paper_id == query.paper_id) / 10.0
         )

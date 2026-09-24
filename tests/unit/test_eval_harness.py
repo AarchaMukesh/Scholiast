@@ -19,12 +19,26 @@ from scholiast.application.ports.ml import TextRole
 from scholiast.application.ports.vector import VectorRecord
 from scholiast.domain.paper import SectionKind
 from scholiast.domain.retrieval import RetrievalArm, ScoredChunk
-from scholiast.eval.cli import COMPARED_EMBEDDERS, EvalReport, _measure, _render, _summarise
+from scholiast.eval.cli import (
+    COMPARED_EMBEDDERS,
+    DEPTH_SWEEP,
+    INCUMBENT_DEPTH,
+    Cell,
+    EvalReport,
+    _comparison,
+    _measure,
+    _plan,
+    _render,
+    _summarise,
+    _validate,
+)
 from scholiast.eval.dret import DRet, Grade, Judgment, Query, Split
+from scholiast.eval.fusion import FusionFit
 from scholiast.eval.harness import (
     build_index,
     build_lexical_index,
     collection_name,
+    cutoffs_for,
     run_hybrid,
     run_retrieval,
 )
@@ -60,6 +74,7 @@ class StubIndex:
     upserts: list[int] = field(default_factory=list)
     searches: int = 0
     last_paper_ids: Sequence[str] = ()
+    last_limit: int = 0
 
     async def ensure_ready(self) -> None:
         return None
@@ -74,6 +89,7 @@ class StubIndex:
     ) -> list[ScoredChunk]:
         self.searches += 1
         self.last_paper_ids = paper_ids
+        self.last_limit = limit
         return [
             ScoredChunk(chunk_id=cid, paper_id="p", score=1.0 - i / 100, arm=RetrievalArm.DENSE)
             for i, cid in enumerate(self.ranking[:limit])
@@ -305,6 +321,10 @@ class TestTheReportKeepsCoreAndFullApart:
             "model": "BAAI/bge-base-en-v1.5",
             "collection": "scholiast_eval_abc",
             "is_m1_baseline": True,
+            "arm": "dense",
+            "depth": 50,
+            "fusion": "rrf",
+            "control": None,
             "resources": {
                 "dimensions": 768,
                 "vector_bytes_computed": 768 * 100 * 4,
@@ -323,7 +343,8 @@ class TestTheReportKeepsCoreAndFullApart:
         }
         if with_delta:
             arm["is_m1_baseline"] = False
-            arm["deltas_vs_baseline"] = {
+            arm["control"] = "dense (bge-base-en-v1.5)"
+            arm["deltas_vs_control"] = {
                 "D-RET-CORE": {
                     "recall@10": {"delta": -0.02, "ci95": [-0.09, 0.05], "within_noise": True},
                 }
@@ -390,6 +411,7 @@ class StubLexical:
         self.upserted: list[int] = []
         self.searches = 0
         self.last_weights: dict[int, float] = {}
+        self.last_limit = 0
 
     async def upsert_sparse(self, records: Sequence[object]) -> int:
         self.upserted.append(len(records))
@@ -400,6 +422,7 @@ class StubLexical:
     ) -> list[ScoredChunk]:
         self.searches += 1
         self.last_weights = weights
+        self.last_limit = limit
         return [
             ScoredChunk(
                 chunk_id=cid,
@@ -651,6 +674,139 @@ class TestTheRerankArm:
             )
 
 
+class TestCandidateDepth:
+    """REV-4's sweep (D77): what a depth changes, and the one thing it must not."""
+
+    IDS = tuple(f"c{i:02d}" for i in range(60))
+
+    async def _run(
+        self,
+        *,
+        depth: int,
+        relevant: str,
+        arms: str = "hybrid",
+        reranker: StubReranker | None = None,
+        dense_weight: float | None = None,
+    ) -> tuple[object, StubIndex, StubLexical]:
+        dataset = _dataset_with_candidates(list(self.IDS), relevant=relevant)
+        dense = StubIndex(ranking=list(self.IDS))
+        lexical = StubLexical(list(self.IDS))
+        run = await run_hybrid(
+            dataset,
+            dataset.core,
+            dense,
+            lexical,
+            StubEmbedder(),
+            label="t",
+            paper_ids=["paper-1"],
+            arms=arms,
+            depth=depth,
+            reranker=reranker,
+            dense_weight=dense_weight,
+        )
+        return run, dense, lexical
+
+    def test_cutoffs_deeper_than_the_candidate_list_are_dropped(self) -> None:
+        # recall@50 over a 10-long list IS recall@10. Reporting both would put a
+        # column in the sweep that looks flat for a reason the reader cannot see.
+        assert cutoffs_for(10) == (10,)
+        assert cutoffs_for(30) == (10, 20)
+        assert cutoffs_for(50) == (10, 20, 50)
+        assert cutoffs_for(100) == (10, 20, 50)
+
+    def test_a_depth_shallower_than_every_cutoff_still_reports_one(self) -> None:
+        # Not in the sweep, but a zero-metric block would be a silent hole.
+        assert cutoffs_for(5) == (5,)
+
+    async def test_the_depth_reaches_both_stores(self) -> None:
+        # The knob is worthless if it only truncates after retrieval: each arm has
+        # to be ASKED for `depth`, which is what makes deeper candidates reachable.
+        _run, dense, lexical = await self._run(depth=30, relevant=self.IDS[0])
+        assert dense.last_limit == 30
+        assert lexical.last_limit == 30
+
+    async def test_a_shallow_run_reports_only_what_it_could_reach(self) -> None:
+        run, _dense, _lexical = await self._run(depth=10, relevant=self.IDS[0])
+        assert set(run.metrics.recall) == {10}
+
+    async def test_the_ceiling_is_recall_over_the_whole_candidate_list(self) -> None:
+        # Doc 9 §9.3's reranking ceiling: a chunk outside the candidate list cannot
+        # be recovered by any reranker, so the ceiling must see the WHOLE list, not
+        # its top 10. Chunk 40 is reachable at depth 50 and not at depth 20.
+        deep, _d, _l = await self._run(depth=50, relevant=self.IDS[40])
+        shallow, _d2, _l2 = await self._run(depth=20, relevant=self.IDS[40])
+        assert deep.ceiling_recall == [1.0]
+        assert shallow.ceiling_recall == [0.0]
+
+    async def test_reranking_cannot_move_the_ceiling(self) -> None:
+        # The invariant the whole sweep is read against (D77): rerank reorders the
+        # candidate list, so any change in the ceiling between these two would mean
+        # the depth comparison is measuring membership, not ordering.
+        fused, _d, _l = await self._run(depth=50, relevant=self.IDS[40])
+        reranked, _d2, _l2 = await self._run(
+            depth=50,
+            relevant=self.IDS[40],
+            arms="hybrid_rerank",
+            reranker=StubReranker(favourite=self.IDS[40]),
+        )
+        assert reranked.ceiling_recall == fused.ceiling_recall
+        # ...while the ordering metric it exists to move did move.
+        assert reranked.metrics.rr[0] > fused.metrics.rr[0]
+
+
+class TestTheFusionRule:
+    """RRF stays the default; the weighted arm is opt-in per run (D76, ML-7).
+
+    The two arms are exact reverses of each other and the relevant chunk is the
+    one the dense arm ranks LAST, so each rule puts it in a different place and
+    the reciprocal rank alone identifies which rule ran. That is the point: the
+    selection is observable in a number the report publishes, not only in a call.
+    """
+
+    IDS = ("a", "b", "c", "d")
+
+    async def _reciprocal_rank(self, dense_weight: float | None) -> float:
+        dataset = _dataset_with_candidates(list(self.IDS), relevant="d")
+        run = await run_hybrid(
+            dataset,
+            dataset.core,
+            StubIndex(ranking=list(self.IDS)),
+            StubLexical(list(reversed(self.IDS))),
+            StubEmbedder(),
+            label="t",
+            paper_ids=["paper-1"],
+            arms="hybrid",
+            dense_weight=dense_weight,
+        )
+        return run.metrics.rr[0]
+
+    async def test_the_default_stays_rrf(self) -> None:
+        # Rank-based: "d" is first for one arm and last for the other, so it ties
+        # with "a" and loses the tie-break on chunk_id — second place.
+        assert await self._reciprocal_rank(None) == pytest.approx(0.5)
+
+    async def test_a_full_dense_weight_ranks_by_the_dense_arm_alone(self) -> None:
+        assert await self._reciprocal_rank(1.0) == pytest.approx(0.25)
+
+    async def test_a_full_lexical_weight_ranks_by_the_lexical_arm_alone(self) -> None:
+        assert await self._reciprocal_rank(0.0) == pytest.approx(1.0)
+
+    async def test_a_weight_outside_its_range_is_refused(self) -> None:
+        dataset = _dataset_with_candidates(list(self.IDS), relevant="a")
+        with pytest.raises(ValueError, match="share of one fused score"):
+            await run_hybrid(
+                dataset,
+                dataset.core,
+                StubIndex(ranking=list(self.IDS)),
+                StubLexical(list(self.IDS)),
+                StubEmbedder(),
+                label="t",
+                paper_ids=["paper-1"],
+                arms="hybrid",
+                dense_weight=1.5,
+            )
+
+
 @dataclass
 class StubHybridIndex(StubIndex):
     """One store serving both arms, as the sparse-capable adapter does (D73)."""
@@ -670,16 +826,16 @@ class VersionedStubReranker(StubReranker):
     version = "stub-reranker/fp16/1.0.0"
 
 
-class TestTheArtifactNamesTheReranker:
-    """NFR-M5: a block must name every model that produced its numbers.
+class TestTheArtifactRecordsItsConfiguration:
+    """NFR-M5: a block must name every model and knob that produced its numbers.
 
-    Pinned in `_measure`, where each arm's configuration is assembled, rather than
+    Pinned in `_measure`, where each cell's configuration is assembled, rather than
     in rendered text — the archived JSON is what a later reader greps.
     """
 
     IDS = ("x", "y", "z", "target")
 
-    async def _config(self, monkeypatch: pytest.MonkeyPatch, arm: str) -> dict[str, object]:
+    async def _config(self, monkeypatch: pytest.MonkeyPatch, cell: Cell) -> dict[str, object]:
         dataset = _dataset_with_candidates(list(self.IDS), relevant="target")
         index = StubHybridIndex(ranking=list(self.IDS), lexical=StubLexical(list(self.IDS)))
         monkeypatch.setattr(
@@ -687,22 +843,125 @@ class TestTheArtifactNamesTheReranker:
             lambda *_args, **_kwargs: (StubEmbedder(), index, "scholiast_eval_stub_hybrid"),
         )
         monkeypatch.setattr("scholiast.eval.cli._build_reranker", VersionedStubReranker)
-        _blocks, _runs, config = await _measure(
-            dataset, COMPARED_EMBEDDERS[0], ["paper-1"], arm=arm
-        )
+        _blocks, _runs, config = await _measure(dataset, cell, ["paper-1"])
         return config
+
+    def _cell(self, arm: str, **kwargs: object) -> Cell:
+        return Cell(label=arm, spec=COMPARED_EMBEDDERS[0], arm=arm, **kwargs)  # type: ignore[arg-type]
 
     async def test_the_rerank_arm_records_which_reranker_produced_it(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         # The embedder's stamp alone would attribute a cross-encoder's ordering to
         # the embedder — "was it the reranker or the re-chunk?" made unanswerable.
-        config = await self._config(monkeypatch, "hybrid_rerank")
+        config = await self._config(monkeypatch, self._cell("hybrid_rerank"))
         assert config["reranker_version"] == "stub-reranker/fp16/1.0.0"
 
     async def test_an_arm_without_a_reranker_says_so_rather_than_omitting_it(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        config = await self._config(monkeypatch, "hybrid")
+        config = await self._config(monkeypatch, self._cell("hybrid"))
         assert "reranker_version" in config
         assert config["reranker_version"] is None
+
+    async def test_every_block_records_the_depth_and_fusion_rule_it_ran(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Phase 5 varies both (D77, D76). A sweep whose blocks do not carry their
+        # own depth is a table of numbers with the axis missing.
+        config = await self._config(monkeypatch, self._cell("hybrid", depth=20, dense_weight=0.7))
+        assert config["depth"] == 20
+        assert config["fusion"] == "weighted(dense=0.7)"
+
+    async def test_an_unweighted_block_names_rrf_rather_than_leaving_it_blank(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        config = await self._config(monkeypatch, self._cell("hybrid"))
+        assert config["fusion"] == "rrf"
+        assert config["depth"] == INCUMBENT_DEPTH
+
+
+class TestThePlan:
+    """Which cells a run measures, and what each one is compared against."""
+
+    BASE = COMPARED_EMBEDDERS[0]
+
+    def _depths(self) -> list[Cell]:
+        return _plan(self.BASE, compare=False, compare_arms=False, compare_depths=True, weight=None)
+
+    def test_the_sweep_runs_both_arms_at_every_depth(self) -> None:
+        cells = self._depths()
+        assert {cell.depth for cell in cells} == set(DEPTH_SWEEP)
+        assert {cell.arm for cell in cells} == {"hybrid", "hybrid_rerank"}
+        assert len(cells) == 2 * len(DEPTH_SWEEP)
+
+    def test_each_depth_is_compared_with_the_same_arm_at_the_incumbent_depth(self) -> None:
+        # One run-wide control would compare a pre-rerank cell against a reranked
+        # one, mixing the two effects the sweep exists to separate.
+        for cell in self._depths():
+            expected = "" if cell.depth == INCUMBENT_DEPTH else f"{cell.arm} @{INCUMBENT_DEPTH}"
+            assert cell.control_label == expected
+
+    def test_every_named_control_is_a_cell_the_run_actually_measures(self) -> None:
+        # A control the plan does not contain would be a delta silently dropped —
+        # or, with the guard in `_run`, a crash mid-sweep after minutes of GPU work.
+        cells = self._depths()
+        labels = {cell.label for cell in cells}
+        assert all(cell.control_label in labels for cell in cells if cell.control_label)
+
+    def test_the_arms_plan_still_measures_against_the_m1_baseline(self) -> None:
+        # Phase 5 must not move what phases 2-4 published deltas against.
+        cells = _plan(
+            self.BASE, compare=False, compare_arms=True, compare_depths=False, weight=None
+        )
+        control = next(cell for cell in cells if cell.is_m1_baseline)
+        assert control.arm == "dense"
+        assert control.control_label == ""
+        assert all(cell.control_label == control.label for cell in cells if not cell.is_m1_baseline)
+
+    def test_the_fusion_plan_puts_the_fitted_weight_against_rrf(self) -> None:
+        cells = _plan(
+            self.BASE, compare=False, compare_arms=False, compare_depths=False, weight=0.4
+        )
+        assert [cell.fusion for cell in cells] == ["rrf", "weighted(dense=0.4)"]
+        assert cells[1].control_label == cells[0].label
+
+    def test_a_plan_whose_control_is_missing_is_refused_before_anything_runs(self) -> None:
+        # The sweep is ten cells of GPU work; discovering a broken comparison
+        # after the last one would waste all of it, and publishing a cell with no
+        # delta beside it would be worse.
+        orphan = Cell("hybrid @10", self.BASE, arm="hybrid", control_label="hybrid @999")
+        with pytest.raises(ValueError, match="does not "):
+            _validate([orphan])
+
+    def test_two_cells_sharing_a_label_are_refused(self) -> None:
+        # Blocks are keyed by label, so the second would silently replace the
+        # first and the report would show one cell where two ran.
+        twin = Cell("hybrid @50", self.BASE, arm="hybrid")
+        with pytest.raises(ValueError, match="share a label"):
+            _validate([twin, twin])
+
+    def test_the_real_plans_pass_their_own_check(self) -> None:
+        _validate(self._depths())
+        _validate(
+            _plan(self.BASE, compare=True, compare_arms=False, compare_depths=False, weight=None)
+        )
+        _validate(
+            _plan(self.BASE, compare=False, compare_arms=True, compare_depths=False, weight=None)
+        )
+        _validate(
+            _plan(self.BASE, compare=False, compare_arms=False, compare_depths=False, weight=0.6)
+        )
+
+    def test_the_header_names_every_depth_and_flags_the_diagnostic(self) -> None:
+        # Built from the plan, so a sweep that changes depths cannot leave the
+        # header describing the old set (the failure phase 4 shipped and fixed).
+        header = _comparison(self._depths(), compare=False, fit=None)
+        assert all(str(depth) in header for depth in DEPTH_SWEEP)
+        assert "diagnostic" in header
+
+    def test_the_fusion_header_records_the_weight_and_where_it_was_fitted(self) -> None:
+        fit = FusionFit(weight=0.4, curve=(), objective="recall@10", mrr_weight=0.4, n_queries=629)
+        header = _comparison([], compare=False, fit=fit)
+        assert "0.4" in header
+        assert "629 train-split queries" in header

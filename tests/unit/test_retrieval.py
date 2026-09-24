@@ -22,6 +22,7 @@ from scholiast.domain.retrieval import (
     audit_citations,
     reciprocal_rank_fusion,
     strip_labels,
+    weighted_score_fusion,
 )
 
 
@@ -101,6 +102,118 @@ class TestReciprocalRankFusion:
     def test_k_must_be_positive(self) -> None:
         with pytest.raises(InvariantViolation, match="k must be positive"):
             reciprocal_rank_fusion([ranked("a")], k=0)
+
+
+class TestWeightedScoreFusion:
+    """RRF's ablation arm (doc 6 §6.6, D76) — the one that keeps the scores.
+
+    Doc 6 rejects raw score fusion because cosine and BM25 scales are not
+    comparable, and keeps weighted fusion as an ablation only because
+    normalisation can remove the mismatch. These tests are about whether it
+    actually does: the class exists to be *compared* with RRF, so the properties
+    RRF is chosen for are the ones worth pinning here.
+    """
+
+    def test_normalisation_makes_it_immune_to_score_scale(self) -> None:
+        # The counterpart of test_fusion_is_immune_to_score_scale. Raw weighted
+        # fusion would hand the whole ranking to whichever arm has the larger
+        # numbers; per-query min-max is exactly what buys back scale immunity, so
+        # if someone drops the normalisation this fails and says why.
+        dense = ranked("a", "b", base=0.9)
+        lexical_small = ranked("b", "a", arm=RetrievalArm.LEXICAL, base=0.8)
+        lexical_huge = [
+            ScoredChunk(c.chunk_id, c.paper_id, c.score * 10_000, c.arm, c.rank)
+            for c in lexical_small
+        ]
+        weights = (0.5, 0.5)
+
+        assert [
+            c.chunk_id for c in weighted_score_fusion([dense, lexical_small], weights=weights)
+        ] == [c.chunk_id for c in weighted_score_fusion([dense, lexical_huge], weights=weights)]
+
+    def test_a_full_weight_reproduces_that_arm_alone(self) -> None:
+        # The degenerate ends of the grid are in the sweep on purpose (D76): a fit
+        # landing on 0.0 or 1.0 is the finding that fusion added nothing.
+        dense = ranked("a", "b", "c")
+        lexical = ranked("c", "b", "a", arm=RetrievalArm.LEXICAL)
+        dense_only = weighted_score_fusion([dense, lexical], weights=(1.0, 0.0))
+        lexical_only = weighted_score_fusion([dense, lexical], weights=(0.0, 1.0))
+
+        assert [c.chunk_id for c in dense_only] == ["a", "b", "c"]
+        assert [c.chunk_id for c in lexical_only] == ["c", "b", "a"]
+
+    def test_the_weight_actually_shifts_the_ranking(self) -> None:
+        # Without this, every weight on the grid could be scoring the same order
+        # and the fit would be meaningless.
+        dense = ranked("d-top", "shared")
+        lexical = ranked("l-top", "shared", arm=RetrievalArm.LEXICAL)
+        leans_dense = weighted_score_fusion([dense, lexical], weights=(0.9, 0.1))
+        leans_lexical = weighted_score_fusion([dense, lexical], weights=(0.1, 0.9))
+
+        assert leans_dense[0].chunk_id == "d-top"
+        assert leans_lexical[0].chunk_id == "l-top"
+
+    def test_a_chunk_missing_from_one_arm_scores_zero_there_rather_than_vanishing(self) -> None:
+        # The union, not the intersection: single-arm hits are the majority, and
+        # dropping them would make fusion a filter instead of a combiner.
+        fused = weighted_score_fusion(
+            [ranked("dense-only"), ranked("lexical-only", arm=RetrievalArm.LEXICAL)],
+            weights=(0.5, 0.5),
+        )
+        assert sorted(c.chunk_id for c in fused) == ["dense-only", "lexical-only"]
+
+    def test_a_single_hit_takes_its_arms_full_weight(self) -> None:
+        # min and max coincide, so the normalisation is undefined and the choice
+        # is visible here: 1.0, not 0.0. At 0.0 an arm returning one strong
+        # candidate would contribute nothing at all.
+        fused = weighted_score_fusion(
+            [ranked("only"), ranked("other", arm=RetrievalArm.LEXICAL)], weights=(0.7, 0.3)
+        )
+        by_id = {c.chunk_id: c.score for c in fused}
+        assert by_id["only"] == pytest.approx(0.7)
+        assert by_id["other"] == pytest.approx(0.3)
+
+    def test_identical_scores_within_an_arm_do_not_collapse_to_zero(self) -> None:
+        flat = [
+            ScoredChunk(chunk_id=cid, paper_id="p-1", score=0.5, arm=RetrievalArm.DENSE, rank=i)
+            for i, cid in enumerate(("a", "b"), start=1)
+        ]
+        fused = weighted_score_fusion([flat], weights=(1.0,))
+        assert [c.score for c in fused] == [pytest.approx(1.0), pytest.approx(1.0)]
+
+    def test_output_is_marked_as_fused_and_ranked(self) -> None:
+        fused = weighted_score_fusion([ranked("a", "b")], weights=(1.0,))
+        assert all(c.arm is RetrievalArm.FUSED for c in fused)
+        assert [c.rank for c in fused] == [1, 2]
+
+    def test_ties_break_deterministically(self) -> None:
+        # FR-E4 again, and more likely here than under RRF: normalised scores
+        # collide whenever two arms return the same-shaped list.
+        lists = [ranked("z"), ranked("a", arm=RetrievalArm.LEXICAL)]
+        first = [c.chunk_id for c in weighted_score_fusion(lists, weights=(0.5, 0.5))]
+        assert first == ["a", "z"]
+        for _ in range(5):
+            assert [c.chunk_id for c in weighted_score_fusion(lists, weights=(0.5, 0.5))] == first
+
+    def test_limit_truncates_after_fusing(self) -> None:
+        fused = weighted_score_fusion([ranked("a", "b", "c", "d")], weights=(1.0,), limit=2)
+        assert [c.chunk_id for c in fused] == ["a", "b"]
+
+    def test_one_weight_per_ranking_is_required(self) -> None:
+        with pytest.raises(InvariantViolation, match="one weight per ranking"):
+            weighted_score_fusion([ranked("a"), ranked("b")], weights=(1.0,))
+
+    def test_negative_weights_are_refused(self) -> None:
+        # A negative weight would rank a chunk higher for being irrelevant to one
+        # arm, which is not a configuration anyone means to run.
+        with pytest.raises(InvariantViolation, match="non-negative"):
+            weighted_score_fusion([ranked("a")], weights=(-0.5,))
+
+    def test_silencing_every_arm_is_refused(self) -> None:
+        # All-zero weights rank the whole union by chunk_id, which looks like a
+        # result rather than a misconfiguration.
+        with pytest.raises(InvariantViolation, match="at least one fusion weight"):
+            weighted_score_fusion([ranked("a"), ranked("b")], weights=(0.0, 0.0))
 
 
 class TestEvidenceAssembly:
