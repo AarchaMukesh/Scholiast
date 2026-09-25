@@ -5,23 +5,35 @@ and groundedness are **measured rather than asserted**. Portfolio project for ML
 Engineer interviews; the measurement discipline *is* the differentiator, not the
 feature list.
 
-**Status:** M0 and **M1 complete** on `m1-walking-skeleton` (not yet merged to `master`),
-built one phase per commit — schema + migrations, tenant-scoped repositories, GROBID
-parser, embedder + Qdrant index, ingestion pipeline, retrieval + generation, API + UI.
-All 7 acceptance criteria pass; 543 tests, five gates green. **M2 is next** and is the
-project's thesis: the labelled eval set, the metric pipeline, and the ablation table.
+**Status:** M0, M1 and **M2 complete** on `master`, built one phase per commit. M1 was the
+spine — schema, repositories, parser, index, pipeline, QA, API. M2 is the thesis: D-RET,
+the metric pipeline, four retrieval arms, the ablation axes, the GPU contention number and
+a CI regression gate. **796 tests, five gates green.** M3 is next: Celery, the worker
+split, and the operational surface.
 
-**Read `docs/milestone-logs/M1-MILESTONE-LOG.md` before starting M2.** It is the only
-tracked file under `docs/` (D67) and records what M1 deliberately did *not* establish —
-retrieval quality, citation coverage and latency are all unmeasured, and M1's QA path is
-M2's ablation **baseline**, not the adopted design (D56). `git log` carries the per-phase
-rationale and the debt deferred to M2/M3/M5.
+**Read `docs/milestone-logs/M2-MILESTONE-LOG.md` before starting M3.** Milestone logs are
+the only tracked files under `docs/` (D67). M2's records what the numbers do *not* say,
+and that section sits above the findings on purpose.
+
+**Retrieval quality is now measured, and three of its four headline results are
+negative.** Do not re-argue any of these — they cost a phase each:
+
+- **Hybrid beats dense-only** on D-RET-CORE: recall@10 **+0.088** [+0.004, +0.177],
+  nDCG@10 **+0.061**, significant on four of five metrics. Adopted? **Not yet** — FR-Q3's
+  decision is deliberately open and production is still dense-only.
+- **Reranking is a null against hybrid**, and the cause is measured: at the adopted top-50
+  budget **two-thirds of relevant chunks never reach the cross-encoder**, and the
+  pre-rerank ceiling still climbs at depth 100 (CORE 0.342 → 0.417). It is a starved
+  reranker, not a weak one.
+- **bge-small ties bge-base** on quality (all nine deltas within noise) while indexing
+  2.1× faster (D71). **Weighted fusion ties RRF** with the weight fitted on the train
+  split (D76). Neither changed production.
 
 ---
 
 ## Read this first
 
-**`docs/00-decisions-log.md` is the source of truth.** D1–D67, and several *reverse*
+**`docs/00-decisions-log.md` is the source of truth.** D1–D82, and several *reverse*
 what the earlier design docs say — including two that reverse *other decisions*.
 Reading doc 5, 6 or 7 without the log will lead you to recommend things already
 measured against:
@@ -43,6 +55,15 @@ measured against:
 - FR-Q2: one requirement → **two** (D66) — citation *validity* is M1 and guaranteed;
   citation *coverage* is FR-Q11, measured in M5. A real 3B cited nothing on a broad
   question, and the requirement as written could not tell the difference
+- Rerank under ingestion: "9.17× slowdown" → **fp32 artifact** (D74) — M0 measured it at
+  top-20 with an fp32 embedder. At production fp16 and top-50 it is **1.9× ungated, 1.5×
+  gated**, and the gate costs 17% of ingestion throughput
+- Reranking: doc 6's "single most reliable quality win" → **null on this eval set**
+  (phases 4–5). The expectation is doc 6's; the measurement is the project's
+- D68's PDF check: "report the Recall@k delta" → **the delta is not obtainable that way**
+  (D81) — QASPER's text is LaTeX-derived, so **40.6% of evidence strings carry a `BIBREF`
+  placeholder** the typeset PDF never contains and judgments do not transfer by string
+  match. Only 15 of 112 survived
 
 `docs/` is **gitignored (D12)** — read it from disk. The one exception is
 `docs/milestone-logs/`, which **is** committed (D67): a milestone log reports
@@ -50,7 +71,8 @@ measurements against a specific commit, so it belongs in history with it.
 
 | File | What it holds |
 |---|---|
-| `docs/00-decisions-log.md` | D1–D67 + measured hardware baseline. **Start here.** |
+| `docs/00-decisions-log.md` | D1–D82 + measured hardware baseline. **Start here.** |
+| `docs/milestone-logs/M2-MILESTONE-LOG.md` | M2's close-out: 8/8 criteria, every measurement with its interval, 16 defects and what found them, debt to M3/M5/M6 |
 | `docs/milestone-logs/M1-MILESTONE-LOG.md` | M1's close-out: 7/7 criteria, what is *not* measured, debt to M2/M3/M5 |
 | `docs/03-requirements.md` | FR/NFR IDs referenced throughout the code |
 | `docs/05-system-architecture.md` | §5.3 layering · §5.6 schema · §5.7 GPU contention |
@@ -77,6 +99,23 @@ Direct interpreter (Windows, when `uv run` is awkward):
 `.\.venv\Scripts\python.exe -m pytest`
 
 Services: `docker compose up -d` (Postgres · Qdrant · Redis · GROBID).
+
+**The eval (M2).** Every mode archives a date-stamped JSON under `var/eval/` with a full
+config snapshot; the plain command measures what production runs.
+
+```bash
+uv run eval                      # dense-only, the D56 ablation baseline
+uv run eval --compare-arms       # dense / lexical / RRF hybrid / hybrid+rerank
+uv run eval --compare-depths     # candidate depth 10/20/30/50 + a 100 diagnostic (D77)
+uv run eval --compare-fusion     # RRF vs weighted, weight fitted on the TRAIN split (D76)
+uv run eval --contention         # rerank latency with the GPU gate on and off (D79)
+uv run eval --pdf-check          # D68's real-PDF validity check — fetches from arXiv
+uv run eval --smoke              # FR-E6's CI gate; exits 1 on a regression (D82)
+```
+
+Reruns are cheap: a complete collection is never rebuilt, and the PDF cache is reused.
+**Never point a gated embedder at the eval collection** — it re-batches and perturbs fp16
+vectors (D74), which is why `--contention` refuses to build one.
 
 ---
 
@@ -134,8 +173,8 @@ Every one of these cost real time in M0 or M1. Do not rediscover them.
 | Trap | Rule |
 |---|---|
 | **`uv pip install` targets the wrong Python** | Always pass `--python .venv\Scripts\python.exe`, or it silently installs into the system interpreter |
-| **`datasets` breaks the ML stack** | A Windows Application Control policy blocks pyarrow's `_dataset` DLL, and `sentence-transformers` imports `datasets` at module load. **Do not install it** (D25). QASPER must therefore be vendored as plain JSON (D20) — M0 validated the `refs/convert/parquet` route (281 papers) but **vendored nothing**; doing it is M2 deliverable 1. |
-| **⚠️ Smart App Control can block compiled extensions without warning — it has taken gates 3 and 4 down before (D72)** | Windows SAC is *enforced* (`VerifiedAndReputablePolicyState = 1`) and judges unsigned native DLLs by **reputation, which can change while the files stay byte-identical**. Pinning `grimp<3.15` dodged an earlier block on 3.15 but is not a fix: on 2026-09-16 SAC blocked 3.14's `_rustgrimp` too (killing `lint-imports`, **gate 4**) and mypy's `__mypyc` .pyd (**gate 3**), and D72 records one-off `torch` and `grpc._cython.cygrpc` load failures. **The block then lifted on its own** — no block logged after 11:13 that day, and all five gates ran green that evening — **but it can recur at any time.** If gate 3 or 4 dies loading a DLL, check Code Integrity event **3077** (`Microsoft-Windows-CodeIntegrity/Operational`) before debugging anything else. **Reinstalling cannot help**: the installed `_rustgrimp` matches its wheel's RECORD hash, so a reinstall rewrites bytes SAC has already judged. Nor is there a module-level route around it — `importlinter.cli:lint_imports_command` fails at the same `grimp` import. **"Five gates green" is a claim about a run, not the machine**: make it only when all five ran and passed in that session, and never rewrite the layering acceptance tests to route around a block. Options are recorded in D72; none is taken. CI's containerized Linux path is unaffected |
+| **`datasets` breaks the ML stack** | A Windows Application Control policy blocks pyarrow's `_dataset` DLL, and `sentence-transformers` imports `datasets` at module load. **Do not install it** (D25). QASPER is therefore vendored as plain JSON (D20) — done in M2 phase 1: `data/eval/qasper-validation.json.gz`, 281 papers, with a manifest. Its text is LaTeX-derived, which matters more than it sounds; see the `BIBREF` row below. |
+| **⚠️ Smart App Control can block compiled extensions without warning — it has taken gates 3 and 4 down before (D72)** | Windows SAC is *enforced* (`VerifiedAndReputablePolicyState = 1`) and judges unsigned native DLLs by **reputation, which can change while the files stay byte-identical**. Pinning `grimp<3.15` dodged an earlier block on 3.15 but is not a fix: on 2026-09-16 SAC blocked 3.14's `_rustgrimp` too (killing `lint-imports`, **gate 4**) and mypy's `__mypyc` .pyd (**gate 3**), and D72 records one-off `torch` and `grpc._cython.cygrpc` load failures. **The block then lifted on its own** — no block logged after 11:13 that day, and all five gates ran green that evening — **but it can recur at any time.** If gate 3 or 4 dies loading a DLL, check Code Integrity event **3077** (`Microsoft-Windows-CodeIntegrity/Operational`) before debugging anything else. **Reinstalling cannot help**: the installed `_rustgrimp` matches its wheel's RECORD hash, so a reinstall rewrites bytes SAC has already judged. **A module-level route sometimes works, so try it before giving up**: during the M2 phase 6 recurrence the `lint-imports` LAUNCHER was blocked while `grimp._rustgrimp` imported fine, and `importlinter.cli:lint_imports_command` ran the same three contracts in-process. D72's earlier claim that every route is blocked by one DLL is false in general. **"Five gates green" is a claim about a run, not the machine**: make it only when all five ran and passed in that session, and never rewrite the layering acceptance tests to route around a block. Options are recorded in D72; none is taken. CI's containerized Linux path is unaffected |
 | **A model download is a network call** | Tests that load a real encoder must skip unless it is already in the local HF cache. `bge-base` is 419 MB, and NFR-T3 requires the default test run to make **zero** network calls. A warm cache on the dev machine hides this completely — CI is where it bites |
 | **Alembic does not compare CHECK constraints** | Neither `--autogenerate` nor `alembic check` sees them. Write them by hand in the migration and cover each with an *attempted violation* — a constraint that silently failed to be created looks identical to one that works |
 | **GROBID nests nothing** | `<figure>` is a **sibling** of `<div>` under `<body>`, never inside it, and the body has zero nested divs. Looking for tables inside a div finds exactly zero and raises nothing; section hierarchy comes from `head/@n` numbering |
@@ -146,6 +185,11 @@ Every one of these cost real time in M0 or M1. Do not rediscover them.
 | **No cross-process VRAM accounting** | Windows WDDM: `nvidia-smi` returns `0 MiB`/`[N/A]`, torch sees only its own context. Demonstrate co-residency empirically (D24) |
 | **Coverage under-reports async DB code** | `[tool.coverage.run]` has no `concurrency`, and SQLAlchemy's asyncio layer runs inside greenlets — coverage.py's default `thread` tracer does not follow a greenlet switch, so lines executing under an `await` on the database read as dead. Measured: one passing test covers `remove_paper.py` at 72% (`thread`) vs 86% (`greenlet,thread`). **Do not read a low number on a repository or use case as a missing test** until re-run with `concurrency = greenlet, thread`. Unfixed on purpose — changing it changes what CI computes (M1 log §7) |
 | **`.gitignore` cannot re-include under an excluded directory** | `docs/` + `!docs/milestone-logs/` silently does nothing: git never descends into an excluded *directory*, so the negation is unreachable. It must be `docs/*` + `!docs/milestone-logs/` (D67). Verify with `git check-ignore -v <path>`, never by eye |
+| **⚠️ An exit code read through a pipe is the pipe's** | `cmd \| grep ...; echo $?` reports GREP's status, which is 0 whatever `cmd` did. This "verified" the CI smoke gate's failure path once — a gate that would have passed every build forever. Check an exit code on the command itself, or use `PIPESTATUS`. The same trap hides behind `\| tail` in a background wrapper |
+| **⚠️ Latency drifts with machine state; compare WITHIN a run** | Idle rerank p50 measured **156 ms and 228 ms on the same tree an hour apart** — the whole machine was ~1.4× slower, which turned an in-budget stage into an over-budget one. One contention run was discarded for this. Every latency comparison must measure its own baseline in the same process; cross-run absolute latencies are not comparable |
+| **Warm models before any clock that divides by wall-clock** | Whichever condition touches a model first pays its load. Per-query percentiles survive it (they have warm-ups); throughput does not — it once deflated a gated arm by a fifth, nearly publishing "the gate costs 32% of ingestion" when it costs 17% |
+| **The corpus text is LaTeX-derived, and carries `BIBREF` markers** | QASPER's `full_text` comes from arXiv LaTeX, not the typeset PDF: **47.8% of indexed chunks contain `BIBREF<n>`**, which the lexical tokenizer indexes as real terms (`bibref0`…). It qualifies every lexical result, and it is why judgments cannot be transferred to a GROBID build by string matching (T12, D81) |
+| **The Grep tool cannot see `docs/`** | `docs/` is gitignored (D12) and ripgrep skips ignored files, so a Grep over `docs/` returns "No matches found" even when the text is there. This nearly produced a false report that a docstring misattributed a quote. Use bash `grep -rn ... docs/` for anything under `docs/` |
 
 **Dev topology:** backing services in Docker; **API and worker run natively on Windows**
 for direct GPU access. CI runs the fully containerized Linux path so the two cannot
@@ -170,6 +214,26 @@ Real numbers. Quote these, not estimates.
 | GROBID CRF | 3.1 s/paper, section bodies for 95% of sections |
 | Rerank under bulk embedding | **~3.2× at production fp16** (rerank@50 p95 578–707 ms). M0's **9.17×** was an **fp32-embedder artifact** measured at top-20 — reproduced as 8.8–10× only with fp32 (D74) |
 | Rerank@50 idle (fp16, real passages) | **160–165 ms p50** — resolves doc 6 §6.7's `[SPIKE]` |
+
+---
+
+## Measured retrieval (M2)
+
+Quote these, with their intervals. Full detail in the M2 milestone log; the artifacts are
+under `var/eval/` (gitignored).
+
+| | |
+|---|---|
+| D-RET | 281 papers · **7,854 chunks** · 888 queries (629 train / 259 eval) · **CORE 53 over 41 papers** · 1,876 judgments, all grade 2 |
+| Split | by paper — 207 train / 69 eval, **0 overlap**, verified not asserted |
+| Dense baseline (CORE) | recall@10 **0.177** · nDCG@10 **0.108** · MRR 0.113 |
+| Hybrid vs dense (CORE) | recall@10 **+0.088** [+0.004, +0.177] · nDCG@10 **+0.061** · significant on 4 of 5 |
+| Rerank vs hybrid | **within noise on both splits**, and CORE/FULL disagree in sign — a starved candidate set, not a weak reranker |
+| Pre-rerank ceiling (CORE) | 0.262 → 0.319 → 0.329 → **0.342** → 0.417 at depth 10/20/30/50/100 — still climbing at 100 |
+| Dominant failure mode | **paper confusion**: only 2.28 of the top 10 come from the query's own paper (dense). Own-paper share 0.228 → 0.266 → 0.275 for dense → lexical → hybrid |
+| Retrieval stage, idle | rerank p50 **156–159 ms**, whole stage p95 **~221 ms** against NFR-P2's 800 ms |
+| Under concurrent ingestion | rerank p95 **372 ms ungated → 289 ms gated**; ingestion pays 17% (209 → 173 chunks/s). NFR-P2 holds in every condition |
+| Reproducibility | **exact** for metrics — 124/124 values identical across runs. Latency is not, and says so |
 
 ---
 
