@@ -10,6 +10,13 @@
 #   no-network     the default test run makes zero outbound calls and spends zero
 #                  API quota (NFR-T3). Enforced, not trusted.
 #
+#   smoke eval     FR-E6's regression gate: a 10-paper subset is retrieved and
+#                  scored on CPU, and the build fails if any metric drops more
+#                  than 0.05 below the committed baseline (D82). It is the ONLY
+#                  job that downloads a model — NFR-T3 governs the default test
+#                  run, which still makes zero network calls — and the download
+#                  is cached, so it arrives once per cache lifetime.
+#
 # GPU tests are marked and skipped here — there is no free GPU runner.
 #
 # Tests that load a real encoder are also skipped, because the model is a 419 MB
@@ -104,6 +111,55 @@ jobs:
           name: coverage
           path: coverage.xml
           if-no-files-found: ignore
+
+  smoke:
+    name: Smoke eval (FR-E6 regression gate)
+    runs-on: ubuntu-latest
+    services:
+      # The same pinned image docker-compose runs. `qdrant-client` refuses a
+      # server more than one minor away, so letting CI and dev drift apart would
+      # surface as an inexplicable failure rather than as a version error.
+      qdrant:
+        image: qdrant/qdrant:v1.18.0@sha256:b3063c673f3973877c038eeecc392bad5011f072ee7892b56c9a8e204a3bdea9
+        ports:
+          - 6333:6333
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install ${{ env.PYTHON_VERSION }}
+
+      - name: Install project
+        run: uv sync --locked --extra dev
+
+      # 419 MB, fetched once per cache lifetime. Keyed on the model so bumping
+      # the encoder invalidates it rather than silently scoring the old weights.
+      - name: Cache the encoder
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-bge-base-en-v1.5-${{ runner.os }}
+
+      # `services:` starts the container but does not wait for it to answer. The
+      # eval would otherwise fail on connection refused and read as a regression.
+      - name: Wait for Qdrant
+        run: |
+          for _ in $(seq 1 30); do
+            if curl -fsS http://localhost:6333/readyz >/dev/null; then exit 0; fi
+            sleep 2
+          done
+          echo "Qdrant never became ready" >&2
+          exit 1
+
+      # Exits non-zero on a regression beyond the tolerance; a rise is reported
+      # and passes, because FR-E6 asks for a regression gate (D82).
+      - name: Smoke eval
+        run: uv run eval --smoke
 
   security:
     name: Dependency & secret scan

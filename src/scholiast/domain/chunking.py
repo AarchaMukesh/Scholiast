@@ -59,6 +59,52 @@ CHUNKER_VERSION = "structure-aware/1.2.0"
 #: `sections.parent_id`.
 SECTION_PATH_SEPARATOR = " > "
 
+#: What a section with no heading is called, whatever produced it. Named rather
+#: than blank, because the name reaches the breadcrumb and the contextual header
+#: (ML-3) — and because every untitled section in a document collides on it,
+#: which is what `unique_section_path` below is for. How *often* that happens is
+#: a property of the parser, not of this constant: each adapter documents its own
+#: incidence at the point it assigns the name.
+UNTITLED_SECTION = "Untitled section"
+
+
+def unique_section_path(base: str, claimed: set[str]) -> str:
+    """Make a section path unique within its document (D51).
+
+    Paths are how chunks find their section row: the chunk carries
+    `provenance.section_path` and the repository maps it to a `sections.id`. Two
+    sections sharing a path therefore do not collide loudly — one section's
+    chunks are attributed to the other's text, and a citation highlights a span
+    from the wrong part of the paper with nothing raising anywhere.
+
+    Collisions are not exotic. Real papers repeat headings, and any section the
+    parser could not name falls back on `UNTITLED_SECTION`, so every unnamed one
+    in a document collides with the rest. The GROBID adapter measures its own
+    rate — only ~29% of heads carry numbering there, which makes bare titles the
+    norm — and the eval corpus builder measures a very different one; each
+    records it where it assigns the name.
+
+    The counter is deliberately visible — it reaches the breadcrumb and the
+    contextual header (ML-3) — because a reader seeing "Results (2)" learns
+    something true about the document, while a silently merged section teaches
+    them nothing.
+
+    **Lives in the domain, not in the GROBID adapter, because it has two callers
+    that must not diverge** (D68). The eval harness builds a corpus from QASPER
+    JSON rather than from TEI, and the whole point of that corpus is to be
+    comparable to the production one — which it stops being the moment the two
+    disambiguate duplicate headings differently. One implementation, or the
+    comparison is measuring the difference between two path schemes as well as
+    between two parsers.
+    """
+    if base not in claimed:
+        return base
+    suffix = 2
+    while f"{base} ({suffix})" in claimed:
+        suffix += 1
+    return f"{base} ({suffix})"
+
+
 #: ~4 characters per token for English prose. Good enough for boundary decisions;
 #: production injects the real tokenizer for anything that must be exact.
 _CHARS_PER_TOKEN = 4

@@ -143,6 +143,77 @@ def reciprocal_rank_fusion(
     ]
 
 
+def weighted_score_fusion(
+    rankings: Sequence[Sequence[ScoredChunk]],
+    *,
+    weights: Sequence[float],
+    limit: int | None = None,
+) -> list[ScoredChunk]:
+    """Fuse by min-max normalised score — RRF's ablation arm (doc 6 §6.6, D76).
+
+    Where `reciprocal_rank_fusion` throws scores away because their scales are
+    incomparable, this keeps them and normalises the mismatch away per query: each
+    arm's scores are mapped onto [0, 1] using that arm's own min and max **within
+    this query's list**, then combined as a weighted sum. Doc 6 calls the
+    normalisation "itself fragile", which is the hypothesis the ablation tests —
+    weighted fusion can beat RRF when tuned, and the tuning is what makes it a
+    fairer comparison only if the weight was fitted somewhere other than the
+    evaluation queries (D76).
+
+    Two rules decide what the normalised score means, and both are choices:
+
+    - **A chunk one arm never returned scores 0 for that arm**, not "missing". That
+      is what makes the sum defined over the union of the lists rather than their
+      intersection, which would discard every single-arm hit — the majority.
+    - **A degenerate range scores 1.0.** When an arm returns one chunk, or several
+      with identical scores, min equals max and the normalisation is undefined.
+      Those chunks are that arm's best available evidence, so they take its full
+      weight rather than collapsing to 0 and silently disappearing from the fusion.
+
+    Ties break by chunk_id, as in RRF, so runs reproduce (FR-E4).
+    """
+    if len(weights) != len(rankings):
+        raise InvariantViolation(
+            f"weighted fusion needs one weight per ranking, got {len(weights)} "
+            f"weights for {len(rankings)} rankings"
+        )
+    if any(weight < 0.0 for weight in weights):
+        raise InvariantViolation(f"fusion weights must be non-negative, got {list(weights)}")
+    if sum(weights) <= 0.0:
+        # Every arm silenced produces an arbitrary ranking of everything, which
+        # would look like a result rather than a configuration error.
+        raise InvariantViolation("at least one fusion weight must be positive")
+
+    fused: dict[str, float] = {}
+    paper_of: dict[str, str] = {}
+
+    for ranking, weight in zip(rankings, weights, strict=True):
+        if not ranking:
+            continue
+        scores = [scored.score for scored in ranking]
+        low, high = min(scores), max(scores)
+        span = high - low
+        for scored in ranking:
+            normalised = 1.0 if span == 0.0 else (scored.score - low) / span
+            fused[scored.chunk_id] = fused.get(scored.chunk_id, 0.0) + weight * normalised
+            paper_of[scored.chunk_id] = scored.paper_id
+
+    ordered = sorted(fused.items(), key=lambda kv: (-kv[1], kv[0]))
+    if limit is not None:
+        ordered = ordered[:limit]
+
+    return [
+        ScoredChunk(
+            chunk_id=chunk_id,
+            paper_id=paper_of[chunk_id],
+            score=score,
+            arm=RetrievalArm.FUSED,
+            rank=rank,
+        )
+        for rank, (chunk_id, score) in enumerate(ordered, start=1)
+    ]
+
+
 @unique
 class CitationStatus(StrEnum):
     """Outcome of the three-layer citation check (doc 6 §6.11).

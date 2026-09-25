@@ -28,6 +28,7 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
 from scholiast.application.ports.ml import Precision, TextRole
+from scholiast.infrastructure.ml.gpu import GpuPriorityGate, Priority
 
 if TYPE_CHECKING:  # pragma: no cover - import cost is the point
     from sentence_transformers import SentenceTransformer
@@ -70,9 +71,15 @@ class LocalEmbedder:
         device: str = "cuda",
         precision: Precision = Precision.FP16,
         batch_size: int = DEFAULT_BATCH_SIZE,
+        gate: GpuPriorityGate | None = None,
     ) -> None:
         self._model_name = model_name
         self._device = device
+        # Opt-in (D74). With no gate the adapter keeps its original single `encode`
+        # call, byte for byte, so every published phase 2 and 3 number reproduces.
+        # With a gate it must loop over batches itself — the only way a waiting
+        # rerank can go ahead between two of them.
+        self._gate = gate
         # fp16 on CPU is generally slower than fp32 and unsupported for some
         # ops, so the CPU path runs fp32 and says so rather than pretending.
         self._precision = precision if device.startswith("cuda") else Precision.FP32
@@ -140,7 +147,26 @@ class LocalEmbedder:
         # sentence-transformers is synchronous and releases the GIL inside
         # torch, but a multi-second encode on the event loop would stall every
         # in-flight request. The API and the worker share a process in M1.
-        return await asyncio.to_thread(self._encode, prepared, size)
+        if self._gate is None:
+            return await asyncio.to_thread(self._encode, prepared, size)
+
+        # Gated: one GPU acquisition PER BATCH, releasing between batches. Holding
+        # the gate for the whole call would make a rerank wait for an entire paper
+        # instead of one batch — §5.7's bound is "at most one batch", and it only
+        # holds if the gate is released at batch boundaries.
+        #
+        # Priority follows the ROLE, not the adapter. A query embedding is on the
+        # user-facing path exactly as a rerank is; giving it ingestion priority
+        # would queue a user's question behind a paper being indexed, which is the
+        # precise inversion §5.7 exists to prevent.
+        priority = Priority.QUERY if role is TextRole.QUERY else Priority.INGESTION
+        vectors: list[list[float]] = []
+        for start in range(0, len(prepared), size):
+            async with self._gate.hold(priority):
+                vectors.extend(
+                    await asyncio.to_thread(self._encode, prepared[start : start + size], size)
+                )
+        return vectors
 
     def _encode(self, texts: list[str], batch_size: int) -> list[list[float]]:
         model = self._load()
