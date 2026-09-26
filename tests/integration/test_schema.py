@@ -32,6 +32,14 @@ pytestmark = [pytest.mark.integration]
 ROOT = Path(__file__).resolve().parents[2]
 
 
+#: Migration 0005 made `users.password_hash` NOT NULL (D85). These rows exist
+#: to own data, never to log in, so they get a string that is not a valid
+#: Argon2 encoding: `Argon2idHasher.verify` returns False for it against any
+#: password, so the account is unreachable by construction rather than by
+#: nobody knowing the password.
+UNUSABLE_HASH = "not-a-real-argon2-hash"
+
+
 @pytest.fixture(scope="module")
 def postgres() -> Iterator[str]:
     """A throwaway Postgres with the migrations applied."""
@@ -68,8 +76,8 @@ async def conn(postgres: str) -> AsyncIterator[AsyncConnection]:
 async def _user(conn: AsyncConnection, email: str) -> uuid.UUID:
     user_id = uuid.uuid4()
     await conn.execute(
-        text("INSERT INTO users (id, email) VALUES (:id, :email)"),
-        {"id": user_id, "email": email},
+        text("INSERT INTO users (id, email, password_hash) VALUES (:id, :email, :hash)"),
+        {"id": user_id, "email": email, "hash": UNUSABLE_HASH},
     )
     return user_id
 

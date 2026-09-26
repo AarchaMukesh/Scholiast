@@ -61,6 +61,14 @@ QDRANT_URL = "http://localhost:6333"
 DIMENSIONS = 32
 
 
+#: Migration 0005 made `users.password_hash` NOT NULL (D85). These rows exist
+#: to own data, never to log in, so they get a string that is not a valid
+#: Argon2 encoding: `Argon2idHasher.verify` returns False for it against any
+#: password, so the account is unreachable by construction rather than by
+#: nobody knowing the password.
+UNUSABLE_HASH = "not-a-real-argon2-hash"
+
+
 def _alive(url: str) -> bool:
     try:
         with httpx.Client(timeout=5.0) as client:
@@ -194,8 +202,8 @@ class Harness:
         self.workspace_id = str(uuid.uuid4())
         async with self.sessions() as session:
             await session.execute(
-                text("INSERT INTO users (id, email) VALUES (:id, :email)"),
-                {"id": self.user_id, "email": f"{self.user_id}@test.local"},
+                text("INSERT INTO users (id, email, password_hash) VALUES (:id, :email, :hash)"),
+                {"id": self.user_id, "email": f"{self.user_id}@test.local", "hash": UNUSABLE_HASH},
             )
             await session.execute(
                 text(

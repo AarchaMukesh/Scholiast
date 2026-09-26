@@ -15,7 +15,7 @@ from http import HTTPStatus
 from fastapi import APIRouter, Response
 
 from scholiast.api import schemas
-from scholiast.api.deps import M1_USER_ID, WorkspacesDep
+from scholiast.api.deps import TenantDep, WorkspacesDep
 from scholiast.domain.errors import WorkspaceNotAvailable
 from scholiast.domain.workspace import Workspace
 
@@ -40,10 +40,10 @@ async def list_workspaces(repo: WorkspacesDep) -> list[schemas.WorkspaceSummary]
 
 @router.post("", status_code=HTTPStatus.CREATED, response_model=schemas.WorkspaceSummary)
 async def create_workspace(
-    body: schemas.CreateWorkspace, repo: WorkspacesDep
+    body: schemas.CreateWorkspace, repo: WorkspacesDep, tenant: TenantDep
 ) -> schemas.WorkspaceSummary:
     created = await repo.create(
-        Workspace(id=str(uuid.uuid4()), owner_id=M1_USER_ID, name=body.name)
+        Workspace(id=str(uuid.uuid4()), owner_id=tenant.user_id, name=body.name)
     )
     return _to_summary(created)
 

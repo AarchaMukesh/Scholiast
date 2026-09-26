@@ -105,3 +105,9 @@ MIGRATION_REASON: Final = "schema migration"
 #: step: once the owning user is known the pipeline re-enters layer 2 under a
 #: `TenantContext`, so every write the worker makes is tenant-filtered.
 WORKER_CLAIM_REASON: Final = "ingestion worker: claim a job before its owner is known"
+#: D84. Authentication is the bootstrap case: resolving an account by email, or a
+#: session by refresh fingerprint, is what *produces* a principal, so it cannot
+#: already be holding one. The reach is deliberately narrow — these paths touch
+#: `users` and `refresh_tokens` and nothing else, never workspace data — and the
+#: moment a request has a principal it re-enters layer 2 under a `TenantContext`.
+AUTHENTICATION_REASON: Final = "authentication: resolve a principal before one exists"

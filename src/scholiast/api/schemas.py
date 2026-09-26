@@ -164,3 +164,59 @@ class PaperContent(BaseModel):
     paper_id: str
     title: str
     sections: list[SectionOut]
+
+
+class RegisterRequest(BaseModel):
+    """Credentials for a new account (FR-A1).
+
+    Length bounds are stated here as well as in the domain so a 10,000-character
+    password is refused at the boundary, before Argon2id is asked to hash it —
+    reject-by-default applied to a denial-of-service vector rather than to a typo.
+    The exact policy still lives in `domain.identity`; this is the cheap outer
+    check, not the authority.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    email: Annotated[str, StringConstraints(min_length=3, max_length=320)]
+    password: Annotated[str, StringConstraints(min_length=12, max_length=1024)]
+
+
+class LoginRequest(BaseModel):
+    """Credentials presented for a session.
+
+    Deliberately NOT constrained the way registration is: a login attempt with a
+    short password must fail as a failed login (401), not as a validation error
+    (422), or the difference tells an attacker which passwords are worth trying.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    email: str
+    password: str
+
+
+class RefreshRequest(BaseModel):
+    """A refresh secret, presented for rotation or revocation."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    refresh_token: str
+
+
+class TokenPair(BaseModel):
+    """What every successful authentication returns.
+
+    The refresh token appears here once and is never retrievable again: the
+    server keeps only its fingerprint (D84).
+    """
+
+    access_token: str
+    refresh_token: str
+    # S105 reads "token_type" as a credential name. It is the OAuth scheme
+    # label — the word "bearer" — and the actual credential is the field above.
+    token_type: str = "bearer"  # noqa: S105
+    #: Seconds until the ACCESS token expires — the conventional OAuth field, and
+    #: the one a client actually schedules against.
+    expires_in: int
+    user_id: str

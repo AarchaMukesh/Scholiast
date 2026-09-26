@@ -89,6 +89,22 @@ class Settings(BaseSettings):
     #: trains on it or shows it to human reviewers.
     private_papers_local_only: bool = True
 
+    # -- authentication (M3 phase 1, D84) ----------------------------------
+    #: HMAC key for access tokens. **The default is a development key and the
+    #: adapter refuses anything under 32 characters.** A deployment that forgets
+    #: to set this gets a well-known secret, which is why M6's checklist treats
+    #: it as a release blocker rather than a warning.
+    jwt_secret: str = "dev-only-insecure-jwt-secret-change-me"  # noqa: S105
+    #: Goes into every token's `iss`, and is required on the way back in, so a
+    #: token minted by another service sharing the secret is still rejected.
+    jwt_issuer: str = "scholiast"
+    #: Short, because nothing can revoke an access token before it expires
+    #: (D84) — this number IS the revocation latency.
+    access_token_minutes: int = 15
+    #: Long, because the refresh token is revocable: rotation on every use and
+    #: family revocation on reuse make a long life safe to offer.
+    refresh_token_days: int = 14
+
     @field_validator("embedding_precision")
     @classmethod
     def _precision_is_known(cls, value: str) -> str:

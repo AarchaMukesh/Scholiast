@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import contextlib
 from collections.abc import AsyncIterator, Callable
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
@@ -31,12 +32,14 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from scholiast.api.errors import register_error_handlers
-from scholiast.api.routers import chat, health, papers, workspaces
+from scholiast.api.routers import auth, chat, health, papers, workspaces
 from scholiast.application.ports.ml import Precision
 from scholiast.config.settings import Settings, get_settings
 from scholiast.infrastructure.db.engine import build_engine, build_session_factory
 from scholiast.infrastructure.llm.chain import build_provider_chain
 from scholiast.infrastructure.ml.embedder import LocalEmbedder
+from scholiast.infrastructure.security.passwords import Argon2idHasher
+from scholiast.infrastructure.security.tokens import JwtTokenService
 from scholiast.infrastructure.storage.local import LocalObjectStore
 from scholiast.infrastructure.vector.qdrant import QdrantVectorIndex
 
@@ -51,6 +54,17 @@ async def api_lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.engine = engine
     app.state.sessions = build_session_factory(engine)
     app.state.store = LocalObjectStore(settings.object_store_path)
+    # Cheap, stateless and shared: the hasher holds only its cost parameters, and
+    # the token service only its key and lifetimes. Built here anyway so the
+    # secret is validated at startup — a deployment with a too-short key should
+    # fail to boot, not fail at the first login (D84).
+    app.state.hasher = Argon2idHasher()
+    app.state.tokens = JwtTokenService(
+        secret=settings.jwt_secret,
+        issuer=settings.jwt_issuer,
+        access_ttl=timedelta(minutes=settings.access_token_minutes),
+        refresh_ttl=timedelta(days=settings.refresh_token_days),
+    )
     app.state.embedder = LocalEmbedder(
         settings.embedding_model,
         device=settings.embedding_device,
@@ -107,6 +121,7 @@ def create_app(
     app.state.settings = settings or get_settings()
 
     register_error_handlers(app)
+    app.include_router(auth.router)
     app.include_router(health.router)
     app.include_router(workspaces.router)
     app.include_router(papers.router)

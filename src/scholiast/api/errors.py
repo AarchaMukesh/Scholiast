@@ -29,6 +29,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from scholiast.application.ports.security import AuthenticationFailed
 from scholiast.domain.errors import (
     DomainError,
     FailureClass,
@@ -159,6 +160,27 @@ def register_error_handlers(app: FastAPI) -> None:
             detail=str(exc),
             instance=request.url.path,
         )
+
+    @app.exception_handler(AuthenticationFailed)
+    async def _unauthenticated(
+        request: Request,
+        exc: AuthenticationFailed,  # noqa: ARG001 - the reason is logged, never returned
+    ) -> JSONResponse:
+        # ONE shape for every cause (FR-A5): unknown account, wrong password,
+        # expired token, tampered signature, revoked session, reused refresh. The
+        # specific reason travels on the exception for the server's logs; letting
+        # any of it reach the client hands over an account-enumeration oracle.
+        response = problem(
+            status=HTTPStatus.UNAUTHORIZED,
+            slug="unauthenticated",
+            title="Not authenticated",
+            detail="Invalid or expired credentials.",
+            instance=request.url.path,
+        )
+        # RFC 9110 requires this on a 401, and it is what tells a client to
+        # refresh rather than to re-prompt for a password.
+        response.headers["WWW-Authenticate"] = "Bearer"
+        return response
 
     @app.exception_handler(InvariantViolation)
     async def _invariant(

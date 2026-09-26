@@ -8,17 +8,27 @@ are in `api`, which may import infrastructure — but the use case would have be
 handed a concrete type and the swap-the-adapter claim would quietly stop being
 true.
 
-**`current_tenant` is the entire auth surface in M1.** Doc 8's trivial adapter is
-"single seeded user", and this is it: one function returning a `TenantContext`
-for the row migration 0003 seeds. It is deliberately the *only* place a principal
-is constructed, so M3 replaces JWT verification here and nowhere else — which is
-§5.8 layer 1 in the shape it will keep, with a stub principal inside it.
+**`current_tenant` is §5.8 layer 1, and it is still the only place a principal is
+constructed.** M1 left it returning a `TenantContext` for a seeded row and said
+M3 would replace the inside and nothing else; M3 phase 1 did exactly that. Every
+router depends on it and none of them verifies a token, so there is one function
+to audit and one function to get wrong.
+
+The layer-1 job is narrow on purpose: turn a bearer token into a principal, or
+refuse. It never decides what that principal may *see* — that is layer 2's
+repositories, which take the `TenantContext` this produces and apply the tenant
+predicate to every query (D84, doc 5 §5.8).
 
 **Long-lived singletons, per-request sessions.** The engine, the embedder, the
 vector index and the provider chain are built once in the app's lifespan: loading
 a 419 MB encoder per request would be absurd, and Qdrant's client does a server
 version check on construction. The database session is per-request, because a
 shared one would serialise every caller through one transaction.
+
+**Two units of work, not one.** `get_session` rolls back on any exception;
+`auth_session` commits on `AuthenticationFailed` as well, because a refused
+authentication can still have written the security response to it (D86). Only
+the two authentication repositories take the second one.
 """
 
 from __future__ import annotations
@@ -27,16 +37,34 @@ from collections.abc import AsyncIterator
 from typing import Annotated
 
 from fastapi import Depends, Request
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from scholiast.application.ports.accounts import AccountRepository, SessionRepository
 from scholiast.application.ports.llm import LLMProvider
 from scholiast.application.ports.ml import Embedder
-from scholiast.application.ports.tenancy import TenantContext
+from scholiast.application.ports.security import (
+    AuthenticationFailed,
+    PasswordHasher,
+    TokenService,
+)
+from scholiast.application.ports.tenancy import (
+    AUTHENTICATION_REASON,
+    SystemContext,
+    TenantContext,
+)
 from scholiast.application.ports.vector import VectorIndex
 from scholiast.application.use_cases.add_paper import AddPaperUseCase
 from scholiast.application.use_cases.answer_question import AnswerQuestionUseCase
+from scholiast.application.use_cases.authentication import (
+    EndSessionUseCase,
+    RefreshSessionUseCase,
+    RegisterUserUseCase,
+    StartSessionUseCase,
+)
 from scholiast.application.use_cases.remove_paper import RemovePaperUseCase
 from scholiast.config.settings import Settings
+from scholiast.infrastructure.db.accounts import SqlAccountRepository, SqlSessionRepository
 from scholiast.infrastructure.db.repositories import (
     SqlChunkRepository,
     SqlConversationRepository,
@@ -46,11 +74,6 @@ from scholiast.infrastructure.db.repositories import (
 )
 from scholiast.infrastructure.queue.postgres import PostgresQueue
 from scholiast.infrastructure.storage.local import LocalObjectStore
-
-#: The user migration 0003 seeds. Fixed so the UI and the tests can name the
-#: principal without a lookup; M3 replaces this whole mechanism with real auth,
-#: and the recorded debt says `users.password_hash` must become NOT NULL then.
-M1_USER_ID = "00000000-0000-4000-8000-000000000001"
 
 
 async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
@@ -72,9 +95,83 @@ async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
             await session.commit()
 
 
-def current_tenant() -> TenantContext:
-    """The authenticated principal. In M1 there is exactly one (doc 8)."""
-    return TenantContext(user_id=M1_USER_ID)
+async def auth_session(request: Request) -> AsyncIterator[AsyncSession]:
+    """The unit of work for the authentication tables — it commits on refusal too.
+
+    **D86, and the phase-1 integration test is what found it.** D84's reuse
+    detection revokes a whole refresh family and then raises, because the caller
+    must still be refused. Under `get_session` that raise rolls the revocation
+    back, so a stolen chain survives its own detection — measured: one live row
+    where zero were expected, and the successor token still authenticated.
+
+    A failed authentication is an expected outcome, not an error, and the writes
+    it makes are the security *response* to it. The rule is confined to these two
+    repositories rather than applied in `get_session`, so it cannot silently
+    start preserving partial writes in some future route: the four auth routes
+    reach `users` and `refresh_tokens` and nothing else, and the only write that
+    can coexist with an `AuthenticationFailed` is the revocation.
+    """
+    factory = request.app.state.sessions
+    async with factory() as session:
+        try:
+            yield session
+        except AuthenticationFailed:
+            await session.commit()
+            raise
+        except Exception:
+            await session.rollback()
+            raise
+        else:
+            await session.commit()
+
+
+#: `auto_error=False` so a missing header reaches the code below rather than
+#: producing FastAPI's own 403. Every rejection must leave here as one 401
+#: (FR-A5), and a framework default that says "Not authenticated" with a
+#: different status is a second shape callers can distinguish.
+_bearer = HTTPBearer(auto_error=False, description="Access token from /v1/auth/login")
+
+
+def current_tenant(
+    request: Request,
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
+) -> TenantContext:
+    """Verify the bearer token and produce the principal (§5.8 layer 1).
+
+    Signature verification only — no database read — which is what keeps replicas
+    independent (D84). The consequence is stated where it is decided: an access
+    token stays valid until it expires, so `access_token_minutes` IS the
+    revocation latency.
+    """
+    tokens: TokenService = request.app.state.tokens
+    if credentials is None or credentials.scheme.lower() != "bearer":
+        raise AuthenticationFailed("no bearer credentials presented")
+    claims = tokens.verify_access(credentials.credentials)
+    return TenantContext(user_id=claims.subject)
+
+
+def get_hasher(request: Request) -> PasswordHasher:
+    hasher: PasswordHasher = request.app.state.hasher
+    return hasher
+
+
+def get_tokens(request: Request) -> TokenService:
+    tokens: TokenService = request.app.state.tokens
+    return tokens
+
+
+def accounts(session: AuthSessionDep) -> SqlAccountRepository:
+    """The account table, under the one sanctioned authentication bypass.
+
+    `SystemContext` rather than `TenantContext` because this is what *produces* a
+    principal — see `AUTHENTICATION_REASON`, which greps to exactly these two
+    repositories and nothing else.
+    """
+    return SqlAccountRepository(session, SystemContext(AUTHENTICATION_REASON))
+
+
+def sessions(session: AuthSessionDep) -> SqlSessionRepository:
+    return SqlSessionRepository(session, SystemContext(AUTHENTICATION_REASON))
 
 
 def get_settings_dep(request: Request) -> Settings:
@@ -103,11 +200,48 @@ def get_store(request: Request) -> LocalObjectStore:
 
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+#: D86: the same session type, a different commit rule. Only the two
+#: authentication repositories take it.
+AuthSessionDep = Annotated[AsyncSession, Depends(auth_session)]
 TenantDep = Annotated[TenantContext, Depends(current_tenant)]
 IndexDep = Annotated[VectorIndex, Depends(get_index)]
 EmbedderDep = Annotated[Embedder, Depends(get_embedder)]
 ProvidersDep = Annotated[list[LLMProvider], Depends(get_providers)]
 StoreDep = Annotated[LocalObjectStore, Depends(get_store)]
+HasherDep = Annotated[PasswordHasher, Depends(get_hasher)]
+TokensDep = Annotated[TokenService, Depends(get_tokens)]
+AccountsDep = Annotated[AccountRepository, Depends(accounts)]
+SessionsDep = Annotated[SessionRepository, Depends(sessions)]
+
+
+def register_user_use_case(
+    account_repo: AccountsDep, session_repo: SessionsDep, hasher: HasherDep, tokens: TokensDep
+) -> RegisterUserUseCase:
+    return RegisterUserUseCase(
+        accounts=account_repo, sessions=session_repo, hasher=hasher, tokens=tokens
+    )
+
+
+def start_session_use_case(
+    account_repo: AccountsDep, session_repo: SessionsDep, hasher: HasherDep, tokens: TokensDep
+) -> StartSessionUseCase:
+    return StartSessionUseCase(
+        accounts=account_repo, sessions=session_repo, hasher=hasher, tokens=tokens
+    )
+
+
+def refresh_session_use_case(session_repo: SessionsDep, tokens: TokensDep) -> RefreshSessionUseCase:
+    return RefreshSessionUseCase(sessions=session_repo, tokens=tokens)
+
+
+def end_session_use_case(session_repo: SessionsDep, tokens: TokensDep) -> EndSessionUseCase:
+    return EndSessionUseCase(sessions=session_repo, tokens=tokens)
+
+
+RegisterUserDep = Annotated[RegisterUserUseCase, Depends(register_user_use_case)]
+StartSessionDep = Annotated[StartSessionUseCase, Depends(start_session_use_case)]
+RefreshSessionDep = Annotated[RefreshSessionUseCase, Depends(refresh_session_use_case)]
+EndSessionDep = Annotated[EndSessionUseCase, Depends(end_session_use_case)]
 
 
 def workspaces(session: SessionDep, scope: TenantDep) -> SqlWorkspaceRepository:
@@ -147,7 +281,7 @@ def add_paper_use_case(
         # Same session as the repositories above — that is what makes the paper,
         # the membership and the job row one transaction (D47).
         queue=PostgresQueue(session, scope),
-        owner_id=M1_USER_ID,
+        owner_id=scope.user_id,
     )
 
 

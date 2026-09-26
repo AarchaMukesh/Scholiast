@@ -60,6 +60,14 @@ SHARED_UPLOAD_HASH = "identical-manuscript-bytes"
 SHARED_PUBLIC_HASH = "open-access-paper-bytes"
 
 
+#: Migration 0005 made `users.password_hash` NOT NULL (D85). These rows exist
+#: to own data, never to log in, so they get a string that is not a valid
+#: Argon2 encoding: `Argon2idHasher.verify` returns False for it against any
+#: password, so the account is unreachable by construction rather than by
+#: nobody knowing the password.
+UNUSABLE_HASH = "not-a-real-argon2-hash"
+
+
 @pytest.fixture(scope="module")
 def postgres() -> Iterator[str]:
     with PostgresContainer("postgres:17-alpine", driver="asyncpg") as container:
@@ -108,8 +116,8 @@ async def session(postgres: str) -> AsyncIterator[AsyncSession]:
 async def _seed_user(session: AsyncSession, email: str) -> str:
     user_id = uuid.uuid4()
     await session.execute(
-        text("INSERT INTO users (id, email) VALUES (:id, :email)"),
-        {"id": user_id, "email": email},
+        text("INSERT INTO users (id, email, password_hash) VALUES (:id, :email, :hash)"),
+        {"id": user_id, "email": email, "hash": UNUSABLE_HASH},
     )
     return str(user_id)
 
