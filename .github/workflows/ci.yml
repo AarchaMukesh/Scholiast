@@ -183,15 +183,33 @@ jobs:
       - name: Set up Python
         run: uv python install ${{ env.PYTHON_VERSION }}
 
-      - name: Install project
-        # --locked fails the build if uv.lock is stale relative to
-        # pyproject.toml. Reproducible installs are an FR-E4 requirement
-        # (doc 7 §7.13), so a drifted lockfile is a build error, not a
-        # silent re-resolution.
-        run: uv sync --locked --extra dev
-
+      # Audits the LOCKFILE, every extra included. A bare `uvx pip-audit` audits
+      # the interpreter it runs in — its own throwaway tool env — so it passed
+      # whatever uv.lock held; the project sync that used to precede it was never
+      # read. `--locked` still fails the build on a stale lock.
+      #
+      # `-s osv`: PyPI's service cannot resolve a local version tag and, under
+      # --strict, errors on torch `2.11.0+cpu`. Markers are evaluated for the
+      # runner, so the Windows-only `+cu128` entry is not audited directly; it
+      # is the same torch release as the `+cpu` one, with the same advisories.
+      #
+      # Each ignore is scoped, reasoned, and goes away with a torch upgrade:
+      #   PYSEC-2025-194 (GHSA-rrmf-rvhw-rf47) — torch <2.13, memory corruption
+      #     via torch.jit.script. Unreachable: nothing in src/, sentence-
+      #     transformers, or the BERT / XLM-RoBERTa code the bge models use
+      #     calls jit.script.
+      #   PYSEC-2026-3447 (GHSA-h35f-9h28-mq5c) — setuptools <83, MANIFEST.in
+      #     exclusion bypass when building an sdist on macOS. Present only
+      #     because torch 2.11 requires setuptools<82; nothing here builds an
+      #     sdist with it (the project builds with hatchling).
       - name: Audit dependencies
-        run: uvx pip-audit --strict --progress-spinner off
+        run: |
+          uv export --locked --all-extras --no-emit-project \
+            --format requirements.txt -o requirements-audit.txt
+          uvx pip-audit -s osv --strict --progress-spinner off \
+            --disable-pip --require-hashes -r requirements-audit.txt \
+            --ignore-vuln PYSEC-2025-194 \
+            --ignore-vuln PYSEC-2026-3447
 
       - name: Scan for committed secrets
         uses: gitleaks/gitleaks-action@v2
