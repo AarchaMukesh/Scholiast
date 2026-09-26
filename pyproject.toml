@@ -71,15 +71,35 @@ dev = [
 # return True, which is exactly why this fails silently. Verify with
 # `'sm_120' in torch.cuda.get_arch_list()`.
 #
-# `explicit = true` keeps this index out of resolution for every other package.
+# That applies to the Windows dev machine only. Linux is CI, which has no GPU:
+# the smoke eval (FR-E6, D82) needs the ML stack on CPU, and the cu128 Linux
+# wheel would drag in ~15 `nvidia-*` packages it can never use. Linux takes the
+# CPU index instead. Revisit if a Linux GPU worker image ever exists.
+#
+# `explicit = true` keeps these indexes out of resolution for every other package.
 # ---------------------------------------------------------------------------
 [[tool.uv.index]]
 name = "pytorch-cu128"
 url = "https://download.pytorch.org/whl/cu128"
 explicit = true
 
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv]
+# One torch version on every platform. Without it the new Linux entry resolves
+# to the newest release while Windows keeps its locked one, and CI would gate on
+# a torch the dev machine never runs. Raising it is a deliberate act: a new
+# Windows torch is also new unsigned DLLs for Smart App Control to judge (D72).
+constraint-dependencies = ["torch==2.11.0"]
+
 [tool.uv.sources]
-torch = [{ index = "pytorch-cu128" }]
+torch = [
+    { index = "pytorch-cu128", marker = "sys_platform == 'win32'" },
+    { index = "pytorch-cpu", marker = "sys_platform == 'linux'" },
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -208,7 +228,7 @@ plugins = []
 [[tool.mypy.overrides]]
 # Third-party packages without complete stubs. Scoped narrowly and listed
 # explicitly rather than globally silenced.
-module = ["fitz.*", "qdrant_client.*", "sentence_transformers.*", "celery.*"]
+module = ["fitz.*", "qdrant_client.*", "sentence_transformers.*", "celery.*", "torch.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
