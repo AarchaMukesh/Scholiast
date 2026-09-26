@@ -166,6 +166,12 @@ jobs:
   security:
     name: Dependency & secret scan
     runs-on: ubuntu-latest
+    # On a pull_request event gitleaks-action lists the PR's commits through the
+    # API, which the repo's default token cannot do. Granted here, per job, so
+    # no other job gains it. A push event scans with `git log` and never needs it.
+    permissions:
+      contents: read       # checkout
+      pull-requests: read  # GET /pulls/{n}/commits
     steps:
       - uses: actions/checkout@v4
         with:
