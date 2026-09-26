@@ -135,7 +135,9 @@ jobs:
         run: uv python install ${{ env.PYTHON_VERSION }}
 
       - name: Install project
-        run: uv sync --locked --extra dev
+        # The only job that needs the ML stack: the eval loads the encoder. On
+        # Linux `ml` resolves to the CPU torch wheel (see [tool.uv.sources]).
+        run: uv sync --locked --extra dev --extra ml
 
       # 419 MB, fetched once per cache lifetime. Keyed on the model so bumping
       # the encoder invalidates it rather than silently scoring the old weights.
