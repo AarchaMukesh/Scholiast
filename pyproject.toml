@@ -208,7 +208,7 @@ plugins = []
 [[tool.mypy.overrides]]
 # Third-party packages without complete stubs. Scoped narrowly and listed
 # explicitly rather than globally silenced.
-module = ["fitz.*", "qdrant_client.*", "sentence_transformers.*", "celery.*"]
+module = ["fitz.*", "qdrant_client.*", "sentence_transformers.*", "celery.*", "torch.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
