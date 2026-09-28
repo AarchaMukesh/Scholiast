@@ -82,6 +82,29 @@ services:
       retries: 10
       start_period: 60s
 
+  flower:
+    # FR-O5's ops view, and the reason doc 7 §7.3 counted it as free with Celery:
+    # queue depth, task history, and which worker holds what, without building an
+    # admin page. D95 means it is NOT the system of record — a paper's progress
+    # is read from `ingestion_jobs` via GET /v1/jobs/{id} (FR-I3). Flower shows
+    # the transport; the database shows the work.
+    image: mher/flower@sha256:51c3c3db5be343e6335e3dbca5348708932bbcca992df6a39f1dad91e3b340df
+    command: ["celery", "--broker=redis://redis:6379/0", "flower", "--port=5555"]
+    ports:
+      - "${FLOWER_PORT:-5555}:5555"
+    depends_on:
+      redis:
+        condition: service_healthy
+    # No profile gating: it is a few MB idle and an ops view nobody remembers to
+    # start is an ops view nobody uses. It reaches Redis over the compose
+    # network, so it works whether or not a worker is running natively.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:5555/healthcheck || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
 volumes:
   postgres-data:
   qdrant-data:

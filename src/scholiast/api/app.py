@@ -38,6 +38,8 @@ from scholiast.config.settings import Settings, get_settings
 from scholiast.infrastructure.db.engine import build_engine, build_session_factory
 from scholiast.infrastructure.llm.chain import build_provider_chain
 from scholiast.infrastructure.ml.embedder import LocalEmbedder
+from scholiast.infrastructure.queue.celery_app import build_celery_app
+from scholiast.infrastructure.queue.dispatch import CeleryDispatcher, NullDispatcher
 from scholiast.infrastructure.security.passwords import Argon2idHasher
 from scholiast.infrastructure.security.tokens import JwtTokenService
 from scholiast.infrastructure.storage.local import LocalObjectStore
@@ -65,6 +67,23 @@ async def api_lifespan(app: FastAPI) -> AsyncIterator[None]:
         access_ttl=timedelta(minutes=settings.access_token_minutes),
         refresh_ttl=timedelta(days=settings.refresh_token_days),
     )
+    # D95/D96: the API wakes a worker by task NAME and never imports one. With
+    # Celery off, the in-process worker is already polling the same database, so
+    # the null dispatcher keeps the call site free of a topology branch.
+    if settings.celery_enabled:
+        app.state.celery = build_celery_app(settings)
+        app.state.dispatcher = CeleryDispatcher(app.state.celery)
+    else:
+        app.state.celery = None
+        app.state.dispatcher = NullDispatcher()
+
+    # D97 (amended): no production embedder is handed a gate, here or in the
+    # Celery worker, because none ever was — `eval/cli.py` is the only caller
+    # that builds one. `RedisGpuGate` exists and is tested for the change that
+    # switches gating on, which is its own change precisely because a gated
+    # embedder re-batches and perturbs fp16 vectors (D74). Constructing one here
+    # that nothing consumes would advertise a capability that is not connected.
+
     app.state.embedder = LocalEmbedder(
         settings.embedding_model,
         device=settings.embedding_device,
@@ -119,6 +138,14 @@ def create_app(
         lifespan=lifespan or api_lifespan,
     )
     app.state.settings = settings or get_settings()
+    # Defaulted HERE, not in the lifespan, because `create_app` takes a lifespan
+    # override (that is how `scholiast.main` adds the worker and how the tests
+    # build a Postgres-only app). A dependency that every override has to
+    # remember to set is one that some override will forget — and this one is
+    # reached on the upload path, so forgetting it turns an accepted paper into
+    # a 500. The real lifespan replaces it when Celery is on.
+    app.state.dispatcher = NullDispatcher()
+    app.state.celery = None
 
     register_error_handlers(app)
     app.include_router(auth.router)

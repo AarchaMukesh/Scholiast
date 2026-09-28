@@ -60,6 +60,11 @@ CLAIMABLE: tuple[PaperState, ...] = (
     PaperState.EMBEDDING,
 )
 
+#: Key under which `enqueue` leaves job ids for the composition root to dispatch
+#: once the transaction commits (D95). A module constant rather than a literal at
+#: both ends, because a typo would silently mean "no job was ever dispatched".
+PENDING_DISPATCH = "scholiast.pending_job_dispatch"
+
 #: `last_error` is a diagnostic, not a log. Truncating keeps one pathological
 #: stack trace from making the jobs table expensive to scan.
 MAX_ERROR_CHARS = 2000
@@ -114,6 +119,14 @@ class PostgresQueue:
         )
         self._session.add(row)
         await self._session.flush()
+        # Record the wake-up for AFTER this transaction commits (D95). Publishing
+        # from here would announce a job a rollback then erased, and a worker
+        # quick enough to claim it would find nothing — the dual-write inversion
+        # §5.4.2 exists to avoid. `session.info` is the channel because the unit
+        # of work belongs to the caller: this adapter knows the job id, and only
+        # the composition root knows when the transaction ended.
+        pending: list[str] = self._session.info.setdefault(PENDING_DISPATCH, [])
+        pending.append(str(row.id))
         return str(row.id)
 
     async def claim(

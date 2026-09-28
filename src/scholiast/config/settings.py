@@ -89,6 +89,13 @@ class Settings(BaseSettings):
     #: trains on it or shows it to human reviewers.
     private_papers_local_only: bool = True
 
+    # -- queue transport (M3 phase 3, D95, D97) ----------------------------
+    #: D95. False puts ingestion in a Celery worker and makes `worker_in_process`
+    #: false the sensible companion; true keeps M1's single-process topology,
+    #: where a broker round trip would buy nothing because the same process is
+    #: already polling the same database.
+    celery_enabled: bool = False
+
     # -- authentication (M3 phase 1, D84) ----------------------------------
     #: HMAC key for access tokens. **The default is a development key and the
     #: adapter refuses anything under 32 characters.** A deployment that forgets

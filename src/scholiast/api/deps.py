@@ -41,6 +41,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from scholiast.application.ports.accounts import AccountRepository, SessionRepository
+from scholiast.application.ports.dispatch import JobDispatcher
 from scholiast.application.ports.llm import LLMProvider
 from scholiast.application.ports.ml import Embedder
 from scholiast.application.ports.security import (
@@ -72,7 +73,7 @@ from scholiast.infrastructure.db.repositories import (
     SqlSectionRepository,
     SqlWorkspaceRepository,
 )
-from scholiast.infrastructure.queue.postgres import PostgresQueue
+from scholiast.infrastructure.queue.postgres import PENDING_DISPATCH, PostgresQueue
 from scholiast.infrastructure.storage.local import LocalObjectStore
 
 
@@ -93,6 +94,33 @@ async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
             raise
         else:
             await session.commit()
+            await _dispatch_committed_jobs(request, session)
+
+
+async def _dispatch_committed_jobs(request: Request, session: AsyncSession) -> None:
+    """Wake a worker for any job this transaction just committed (D95).
+
+    **After the commit, and deliberately outside it.** The job row is already
+    durable, so this is a latency optimisation: if the broker is unreachable the
+    job still runs, because its lease makes it claimable and the sweep finds it.
+    That is the whole reason Celery can be the transport without giving up D47's
+    single-transaction guarantee.
+
+    The adapter reports failure by returning False rather than raising, and that
+    result is **deliberately ignored here**: the request has already succeeded,
+    turning a broker hiccup into a failed upload would be a worse answer than a
+    slower one, and there is nothing useful this path can do about it. The cost
+    is that a broker outage is currently invisible — it shows up as ingestion
+    starting at the poll interval instead of immediately, with nothing saying
+    why. `api` has no logger yet; phase 7 owns that, and this is a named place
+    for it to land rather than an oversight.
+    """
+    pending: list[str] = session.info.pop(PENDING_DISPATCH, [])
+    if not pending:
+        return
+    dispatcher: JobDispatcher = request.app.state.dispatcher
+    for job_id in pending:
+        await dispatcher.dispatch(job_id)
 
 
 async def auth_session(request: Request) -> AsyncIterator[AsyncSession]:
