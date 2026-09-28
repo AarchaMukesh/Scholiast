@@ -183,8 +183,13 @@ async def job_status(job_id: str, session: SessionDep, repo: WorkspacesDep) -> s
     if row is None:
         raise WorkspaceNotAvailable(job_id)
     # The scoped read that authorises it. A job whose workspace this tenant
-    # cannot reach is indistinguishable from one that does not exist.
-    await _scoped_workspace(str(row.workspace_id), repo)
+    # cannot reach must be indistinguishable from one that does not exist — so
+    # the refusal is raised HERE, naming `job_id`, rather than delegated to
+    # `_scoped_workspace`, which would name the job's own workspace instead.
+    # That uuid is one the caller never supplied and could not otherwise learn,
+    # and it would also make the two 404s tell each other apart (D93).
+    if await repo.get(str(row.workspace_id)) is None:
+        raise WorkspaceNotAvailable(job_id)
 
     return schemas.JobStatus(
         job_id=str(row.id),

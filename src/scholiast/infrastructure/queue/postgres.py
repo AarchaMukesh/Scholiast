@@ -33,7 +33,7 @@ import uuid
 from datetime import datetime
 from typing import Any, cast
 
-from sqlalchemy import ColumnElement, CursorResult, func, select, update
+from sqlalchemy import ColumnElement, CursorResult, Select, and_, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from scholiast.application.ports.queue import (
@@ -100,6 +100,7 @@ class PostgresQueue:
         self._scope = scope
 
     async def enqueue(self, *, workspace_id: str, paper_id: str) -> str:
+        await self._require_owned_workspace(workspace_id)
         row = models.IngestionJob(
             id=uuid.uuid4(),
             # Malformed ids here are a programming error, not user input: these
@@ -188,7 +189,7 @@ class PostgresQueue:
         detail: str,
         max_attempts: int = DEFAULT_MAX_ATTEMPTS,
     ) -> PaperState:
-        job = await self._session.get(models.IngestionJob, uuid.UUID(job_id))
+        job = await self._session.scalar(select(models.IngestionJob).where(self._scoped(job_id)))
         if job is None:
             # Nothing to record against. Reporting the terminal state the class
             # implies is still the honest answer for the caller's membership
@@ -216,8 +217,82 @@ class PostgresQueue:
 
     async def _apply(self, job_id: str, values: dict[str, object]) -> bool:
         result = await self._session.execute(
-            update(models.IngestionJob)
-            .where(models.IngestionJob.id == uuid.UUID(job_id))
-            .values(**values)
+            update(models.IngestionJob).where(self._scoped(job_id)).values(**values)
         )
         return bool(cast("CursorResult[Any]", result).rowcount)
+
+    def _scoped(self, job_id: str) -> ColumnElement[bool]:
+        """Match one job, and for a tenant scope only one it owns (D92, NFR-T5).
+
+        Closes the gap the M1 log recorded against M3: `heartbeat`, `complete`
+        and `fail` matched on the job id alone, so any scope holding an id could
+        drive any tenant's job through its state machine. Nothing exposes them
+        over HTTP — they are worker-only — but "unreachable today" is not the
+        property layer 2 claims, and phase 3 hands them to a Celery fleet.
+
+        A `SystemContext` passes unfiltered: `claim` cannot know whose job it is
+        until it has one (`WORKER_CLAIM_REASON`), and the orphaned-job path
+        completes a job whose owner could not be resolved at all.
+        """
+        match = models.IngestionJob.id == uuid.UUID(job_id)
+        if self._scope.is_system:
+            return match
+        return and_(match, models.IngestionJob.workspace_id.in_(self._owned_workspaces()))
+
+    def _owned_workspaces(self) -> Select[tuple[uuid.UUID]]:
+        """Workspaces this tenant owns — **including soft-deleted ones (D92)**.
+
+        Deliberately not `ScopedRepository._visible_workspaces()`, and the
+        difference is load-bearing rather than stylistic. That one excludes
+        workspaces marked DELETING, because §5.6.4 soft-deletes and sweeps
+        asynchronously and a deleted workspace must stop serving reads. Here the
+        caller is the worker, running under the job owner's `TenantContext`: if a
+        user deleted a workspace mid-ingestion, that predicate would stop
+        matching, `complete` would change nothing, the lease would expire and the
+        job would be re-claimed — a deletion turned into an ingestion loop.
+
+        Scoping by owner keeps a dying workspace's jobs completable, which is
+        also right on the merits: the sweeper removes the rows, and a terminal
+        state written first is what tells it nothing is still running.
+        """
+        return select(models.Workspace.id).where(
+            models.Workspace.owner_id == uuid.UUID(self._tenant_id())
+        )
+
+    async def _require_owned_workspace(self, workspace_id: str) -> None:
+        """Refuse to enqueue into a workspace this scope does not own.
+
+        `AddPaperUseCase` has already checked ownership through the workspace
+        repository, so a failure here means layer 2 has a hole — which is why it
+        raises rather than returning something a caller might branch on. That is
+        what `TenantIsolationViolation` is for.
+
+        **This one DOES exclude soft-deleted workspaces, unlike `_scoped`.** The
+        asymmetry is the point: finishing work that is already running in a dying
+        workspace is correct, and starting new work in one is not. Same table,
+        opposite answers, because the two questions differ.
+        """
+        if self._scope.is_system:
+            return
+        owned = await self._session.scalar(
+            self._owned_workspaces()
+            .where(
+                models.Workspace.id == uuid.UUID(workspace_id),
+                models.Workspace.deleted_at.is_(None),
+            )
+            .limit(1)
+        )
+        if owned is None:
+            raise TenantIsolationViolation("ingestion_jobs", "enqueue", repr(self._scope))
+
+    def _tenant_id(self) -> str:
+        """The tenant's id, read defensively because `Scope` is structural.
+
+        Duplicated from `ScopedRepository` rather than inherited on purpose:
+        inheriting would bring `_visible_workspaces()` into scope here, and the
+        docstring above explains why using it would be a bug.
+        """
+        user_id = getattr(self._scope, "user_id", None)
+        if not isinstance(user_id, str) or not user_id:
+            raise TenantIsolationViolation("Scope", repr(self._scope), "missing user_id")
+        return user_id

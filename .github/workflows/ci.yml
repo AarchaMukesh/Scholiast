@@ -78,6 +78,19 @@ jobs:
   test:
     name: Unit tests
     runs-on: ubuntu-latest
+    services:
+      # D90. NFR-T5 calls the tenant-isolation suite "mandatory, non-skippable",
+      # and part of it was skipping here: layer 3's leakage test needs a live
+      # Qdrant, this job declared no services, and the one job that had Qdrant
+      # runs the smoke eval instead. A skipped isolation test and a passing one
+      # look identical in a green build, which for a negative suite is the worst
+      # place to be trusting. Same digest-pinned image as the smoke job, because
+      # `qdrant-client` refuses a server more than one minor away and a drift
+      # between CI and dev would surface as an inexplicable failure.
+      qdrant:
+        image: qdrant/qdrant:v1.18.0@sha256:b3063c673f3973877c038eeecc392bad5011f072ee7892b56c9a8e204a3bdea9
+        ports:
+          - 6333:6333
     steps:
       - uses: actions/checkout@v4
 
@@ -96,8 +109,23 @@ jobs:
         # silent re-resolution.
         run: uv sync --locked --extra dev
 
-      # `-m "not gpu"` is the only exclusion. Integration tests bring their own
-      # services up via testcontainers, so they need no separate job.
+      # `services:` starts the container but does not wait for it to answer, and
+      # the suite's `needs_qdrant` gate probes `/readyz` at COLLECTION time — so
+      # losing this race would not fail the build, it would silently skip the
+      # tests D90 added the service for.
+      - name: Wait for Qdrant
+        run: |
+          for _ in $(seq 1 30); do
+            if curl -fsS http://localhost:6333/readyz >/dev/null; then exit 0; fi
+            sleep 2
+          done
+          echo "Qdrant never became ready" >&2
+          exit 1
+
+      # `-m "not gpu"` is the only exclusion. Postgres comes from testcontainers
+      # per suite; Qdrant is the service above. Tests needing GROBID, Ollama, the
+      # fixture PDFs or a cached encoder still skip on their own gates, so
+      # NFR-T3's zero-network-calls property is untouched.
       - name: Run tests
         run: >-
           uv run pytest -m "not gpu"

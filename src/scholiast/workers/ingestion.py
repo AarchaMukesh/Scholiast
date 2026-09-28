@@ -211,7 +211,18 @@ class IngestionWorker:
             )
 
             if outcome.succeeded:
-                await queue.complete(job.id)
+                if not await queue.complete(job.id):
+                    # The job row did not move. Since D92 the update carries a
+                    # tenant predicate, so a miss means the row is gone or is
+                    # not this scope's — and the consequence is specific: the
+                    # lease expires, the job is re-claimed, and the paper is
+                    # ingested again. Worth a line rather than a discarded bool.
+                    log.warning(
+                        "ingestion.completion_missed",
+                        job_id=job.id,
+                        paper_id=job.paper_id,
+                        workspace_id=job.workspace_id,
+                    )
                 await session.commit()
                 log.info(
                     "ingestion.indexed",

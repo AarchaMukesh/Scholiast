@@ -33,8 +33,16 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from testcontainers.community.postgres import PostgresContainer
 
-from scholiast.application.ports.tenancy import SWEEPER_REASON, SystemContext, TenantContext
+from scholiast.application.ports.tenancy import (
+    SWEEPER_REASON,
+    WORKER_CLAIM_REASON,
+    SystemContext,
+    TenantContext,
+    TenantIsolationViolation,
+)
 from scholiast.domain.chunking import CHUNKER_VERSION
+from scholiast.domain.conversation import Turn, TurnRole
+from scholiast.domain.errors import FailureClass
 from scholiast.domain.paper import (
     Chunk,
     ChunkRole,
@@ -46,9 +54,12 @@ from scholiast.domain.paper import (
 from scholiast.domain.workspace import PaperState, Workspace, WorkspaceState
 from scholiast.infrastructure.db.repositories import (
     SqlChunkRepository,
+    SqlConversationRepository,
     SqlPaperRepository,
+    SqlSectionRepository,
     SqlWorkspaceRepository,
 )
+from scholiast.infrastructure.queue.postgres import PostgresQueue
 
 pytestmark = [pytest.mark.integration]
 
@@ -474,6 +485,260 @@ class TestChunkIsolation:
         assert chunk.provenance.section_path == "Method"
         assert chunk.provenance.page == 1
         assert chunk.chunker_version == CHUNKER_VERSION
+
+
+class TestSectionIsolation:
+    """`sections` holds the canonical parsed text D42 made chunk offsets index,
+    so a leak here hands over a paper's body, not its title."""
+
+    async def test_a_non_owner_cannot_list_a_private_papers_sections(
+        self, world: World, session: AsyncSession
+    ) -> None:
+        mine = SqlSectionRepository(session, world.alice.scope)
+        theirs = SqlSectionRepository(session, world.bob.scope)
+
+        # The positive control first, so an empty database cannot pass this test.
+        assert [s.raw_title for s in await mine.list_for_paper(world.alice.private_paper_id)] == [
+            "Method"
+        ]
+        assert await theirs.list_for_paper(world.alice.private_paper_id) == []
+
+    async def test_the_shared_public_paper_is_readable_by_both(
+        self, world: World, session: AsyncSession
+    ) -> None:
+        # Both reach ONE row, each through its own membership — the dedup case.
+        for tenant in (world.alice, world.bob):
+            sections = await SqlSectionRepository(session, tenant.scope).list_for_paper(
+                world.public_paper_id
+            )
+            assert [s.raw_title for s in sections] == ["Method"]
+
+    async def test_a_non_owner_cannot_replace_another_tenants_sections(
+        self, world: World, session: AsyncSession
+    ) -> None:
+        # A write is the worse leak: it would silently rewrite the text the
+        # owner's citations resolve against.
+        theirs = SqlSectionRepository(session, world.bob.scope)
+        assert await theirs.replace_for_paper(world.alice.private_paper_id, []) == 0
+        mine = SqlSectionRepository(session, world.alice.scope)
+        assert len(await mine.list_for_paper(world.alice.private_paper_id)) == 1
+
+
+class TestConversationIsolation:
+    """A chat carries the user's questions and the evidence that answered them."""
+
+    async def test_a_non_owner_cannot_open_a_conversation_in_another_workspace(
+        self, world: World, session: AsyncSession
+    ) -> None:
+        theirs = SqlConversationRepository(session, world.bob.scope)
+        assert await theirs.create(world.alice.workspace_id) is None
+        mine = SqlConversationRepository(session, world.alice.scope)
+        assert await mine.create(world.alice.workspace_id) is not None
+
+    async def test_a_non_owner_cannot_read_another_tenants_conversation(
+        self, world: World, session: AsyncSession
+    ) -> None:
+        mine = SqlConversationRepository(session, world.alice.scope)
+        conversation_id = await mine.create(world.alice.workspace_id, title="private thread")
+        assert conversation_id is not None
+        await session.flush()
+
+        assert await mine.get(conversation_id) is not None
+        theirs = SqlConversationRepository(session, world.bob.scope)
+        assert await theirs.get(conversation_id) is None
+
+    async def test_the_messages_do_not_leak_with_the_conversation(
+        self, world: World, session: AsyncSession
+    ) -> None:
+        # The message query filters on conversation_id alone; it is scoped only
+        # because the conversation above it was checked for reachability first.
+        # That is correct and invisible, so it is pinned here — if the check is
+        # ever dropped, this is the test that fails.
+        mine = SqlConversationRepository(session, world.alice.scope)
+        conversation_id = await mine.create(world.alice.workspace_id)
+        assert conversation_id is not None
+        appended = await mine.append(
+            conversation_id, Turn(role=TurnRole.USER, content="my unpublished question")
+        )
+        assert appended is not None
+        await session.flush()
+
+        owner_view = await mine.get(conversation_id)
+        assert owner_view is not None
+        assert [turn.content for turn in owner_view.turns] == ["my unpublished question"]
+
+        theirs = SqlConversationRepository(session, world.bob.scope)
+        assert await theirs.get(conversation_id) is None
+
+    async def test_a_non_owner_cannot_append_to_another_tenants_conversation(
+        self, world: World, session: AsyncSession
+    ) -> None:
+        mine = SqlConversationRepository(session, world.alice.scope)
+        conversation_id = await mine.create(world.alice.workspace_id)
+        assert conversation_id is not None
+        await session.flush()
+
+        theirs = SqlConversationRepository(session, world.bob.scope)
+        assert (
+            await theirs.append(conversation_id, Turn(role=TurnRole.USER, content="injected"))
+            is None
+        )
+        owner_view = await mine.get(conversation_id)
+        assert owner_view is not None
+        assert owner_view.is_empty
+
+
+class TestQueueIsolation:
+    """D92 — the three mutating methods matched on a job id alone until now.
+
+    Nothing exposes them over HTTP; they are worker-only. That is why M1 could
+    record the gap and defer it, and it is not a reason to leave it: layer 2's
+    claim is about every query, and phase 3 hands these methods to a Celery
+    fleet where a job id is a routine thing to hold.
+    """
+
+    async def test_a_non_owner_cannot_enqueue_into_another_workspace(
+        self, world: World, session: AsyncSession
+    ) -> None:
+        # Raises rather than returning something branchable: `AddPaperUseCase`
+        # has already checked ownership, so arriving here means layer 2 has a
+        # hole, which is exactly what `TenantIsolationViolation` is for.
+        theirs = PostgresQueue(session, world.bob.scope)
+        with pytest.raises(TenantIsolationViolation):
+            await theirs.enqueue(
+                workspace_id=world.alice.workspace_id, paper_id=world.alice.private_paper_id
+            )
+
+    async def test_a_non_owner_cannot_complete_another_tenants_job(
+        self, world: World, session: AsyncSession
+    ) -> None:
+        mine = PostgresQueue(session, world.alice.scope)
+        job_id = await mine.enqueue(
+            workspace_id=world.alice.workspace_id, paper_id=world.alice.private_paper_id
+        )
+        await session.flush()
+
+        theirs = PostgresQueue(session, world.bob.scope)
+        assert await theirs.complete(job_id) is False
+        assert await mine.complete(job_id) is True  # the positive control
+
+    async def test_a_non_owner_cannot_heartbeat_another_tenants_job(
+        self, world: World, session: AsyncSession
+    ) -> None:
+        mine = PostgresQueue(session, world.alice.scope)
+        job_id = await mine.enqueue(
+            workspace_id=world.alice.workspace_id, paper_id=world.alice.private_paper_id
+        )
+        await session.flush()
+
+        theirs = PostgresQueue(session, world.bob.scope)
+        assert await theirs.heartbeat(job_id, state=PaperState.PARSING) is False
+        assert await mine.heartbeat(job_id, state=PaperState.PARSING) is True
+
+    async def test_a_non_owner_cannot_fail_another_tenants_job(
+        self, world: World, session: AsyncSession
+    ) -> None:
+        """`fail` read the job row unscoped, and the RETURN VALUE leaked it.
+
+        The class has to be a retryable one for this test to have teeth, and a
+        mutation run is what established that. With `UNPARSEABLE` both a scoped
+        and an unscoped read answer `UNSUPPORTED` — the write is blocked either
+        way — so the test passed against the unscoped version and proved nothing.
+
+        A retryable class branches on `job.attempts < max_attempts`, so the
+        answer itself reports whether another tenant's job still has retry
+        budget: `QUEUED` if the row was found, `FAILED` if it was not. That is a
+        real read across tenants, and the difference is the assertion.
+        """
+        mine = PostgresQueue(session, world.alice.scope)
+        job_id = await mine.enqueue(
+            workspace_id=world.alice.workspace_id, paper_id=world.alice.private_paper_id
+        )
+        assert await mine.heartbeat(job_id, state=PaperState.PARSING)
+        await session.flush()
+
+        theirs = PostgresQueue(session, world.bob.scope)
+        # No row visible, so the honest answer is the class's terminal state.
+        assert (
+            await theirs.fail(job_id, failure_class=FailureClass.TRANSIENT, detail="x")
+            == PaperState.FAILED
+        )
+        # The positive control, and the thing being contrasted: the owner sees the
+        # attempt count, so the same call schedules a retry instead.
+        assert (
+            await mine.fail(job_id, failure_class=FailureClass.TRANSIENT, detail="x")
+            == PaperState.QUEUED
+        )
+
+    async def test_a_non_owners_failure_does_not_move_the_job(
+        self, world: World, session: AsyncSession
+    ) -> None:
+        mine = PostgresQueue(session, world.alice.scope)
+        job_id = await mine.enqueue(
+            workspace_id=world.alice.workspace_id, paper_id=world.alice.private_paper_id
+        )
+        assert await mine.heartbeat(job_id, state=PaperState.PARSING)
+        await session.flush()
+
+        theirs = PostgresQueue(session, world.bob.scope)
+        await theirs.fail(job_id, failure_class=FailureClass.UNPARSEABLE, detail="x")
+
+        landed = await session.scalar(
+            text("SELECT state FROM ingestion_jobs WHERE id = :id"), {"id": uuid.UUID(job_id)}
+        )
+        assert landed == PaperState.PARSING.value
+
+    async def test_a_job_in_a_soft_deleted_workspace_stays_completable(
+        self, world: World, session: AsyncSession
+    ) -> None:
+        # D92's load-bearing case. `_visible_workspaces()` excludes a workspace
+        # marked DELETING, so reusing it here would stop the worker — running
+        # under the owner's scope — from finishing the job: the lease would
+        # expire and the paper would be ingested again. Scoping by OWNER is what
+        # keeps a deletion from turning into an ingestion loop.
+        mine = PostgresQueue(session, world.alice.scope)
+        job_id = await mine.enqueue(
+            workspace_id=world.alice.workspace_id, paper_id=world.alice.private_paper_id
+        )
+        assert await SqlWorkspaceRepository(session, world.alice.scope).soft_delete(
+            world.alice.workspace_id
+        )
+        await session.flush()
+
+        assert await mine.complete(job_id) is True
+
+    async def test_new_work_cannot_be_enqueued_into_a_dying_workspace(
+        self, world: World, session: AsyncSession
+    ) -> None:
+        # The asymmetry beside the test above: `_apply` scopes by ownership so a
+        # job already running can still be completed, while `enqueue` scopes by
+        # visibility so no NEW work starts in a workspace being swept away. Same
+        # table, opposite answers, because the two questions differ.
+        assert await SqlWorkspaceRepository(session, world.alice.scope).soft_delete(
+            world.alice.workspace_id
+        )
+        await session.flush()
+
+        mine = PostgresQueue(session, world.alice.scope)
+        with pytest.raises(TenantIsolationViolation):
+            await mine.enqueue(
+                workspace_id=world.alice.workspace_id, paper_id=world.alice.private_paper_id
+            )
+
+    async def test_the_worker_scope_reaches_any_job(
+        self, world: World, session: AsyncSession
+    ) -> None:
+        # `claim` cannot know whose job it is until it holds one, and the
+        # orphaned-job path completes a job whose owner never resolved. Both run
+        # under SystemContext, which passes unfiltered by design.
+        mine = PostgresQueue(session, world.alice.scope)
+        job_id = await mine.enqueue(
+            workspace_id=world.alice.workspace_id, paper_id=world.alice.private_paper_id
+        )
+        await session.flush()
+
+        system = PostgresQueue(session, SystemContext(WORKER_CLAIM_REASON))
+        assert await system.complete(job_id) is True
 
 
 class TestSystemScope:
