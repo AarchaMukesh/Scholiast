@@ -74,6 +74,19 @@ class WorkerConfig:
     chunking: ChunkingConfig | None = None
 
 
+class _FailureRecordingFailed(Exception):
+    """A classified failure that could not be written to its own session.
+
+    Carries the outcome so the crash handler can record the ORIGINAL class and
+    detail on a fresh session. Private because it never escapes this module: it
+    exists to move one value across a `raise`, not to describe a domain event.
+    """
+
+    def __init__(self, outcome: IngestionOutcome, cause: Exception) -> None:
+        super().__init__(str(cause))
+        self.outcome = outcome
+
+
 class IngestionWorker:
     """Drains the ingestion queue until stopped."""
 
@@ -234,8 +247,21 @@ class IngestionWorker:
                 )
                 return outcome
 
-            await self._record_failure(job, outcome, queue=queue, papers=papers)
-            await session.commit()
+            try:
+                await self._record_failure(job, outcome, queue=queue, papers=papers)
+                await session.commit()
+            except Exception as exc:
+                # The classification survives the session that could not write
+                # it. A DB-level failure earlier in the pipeline leaves this
+                # session inside a failed transaction, so every later statement
+                # raises — including the one recording WHY the paper failed. The
+                # M1 log recorded the consequence as debt: the crash handler
+                # would re-classify as TRANSIENT and the real reason
+                # ("encrypted PDF", "no extractable text") was replaced by a
+                # rollback error the user cannot act on. Carrying the outcome
+                # on the exception lets `_abandon` write the original class and
+                # detail on a fresh session instead.
+                raise _FailureRecordingFailed(outcome, exc) from exc
             return outcome
 
     async def _abandon(self, job: QueuedJob, scope: TenantContext, exc: Exception) -> None:
@@ -244,14 +270,29 @@ class IngestionWorker:
         The session the job was using may be inside a failed transaction — one
         `IntegrityError` and every later statement on it raises — so reusing it
         to write the failure would lose the failure too.
+
+        **A crash that happened while RECORDING a classified failure keeps that
+        classification** (see `_FailureRecordingFailed`). Without that, the most
+        informative failures were the ones most likely to be rewritten: a paper
+        the pipeline had correctly identified as UNSUPPORTED would come back as
+        a retryable TRANSIENT carrying a rollback error.
         """
-        outcome = IngestionOutcome(
-            paper_id=job.paper_id,
-            failure=IngestionFailure(
-                failure_class=FailureClass.TRANSIENT,
-                detail=f"{type(exc).__name__}: {exc}"[:500],
-            ),
-        )
+        if isinstance(exc, _FailureRecordingFailed):
+            # The pipeline had already decided what went wrong; only the write
+            # failed. Re-record THAT, not the write's error — otherwise a
+            # database hiccup silently converts an UNSUPPORTED paper into a
+            # retryable one and spends three deliveries rediscovering a failure
+            # that was already known, while the user reads a rollback message
+            # they cannot act on.
+            outcome = exc.outcome
+        else:
+            outcome = IngestionOutcome(
+                paper_id=job.paper_id,
+                failure=IngestionFailure(
+                    failure_class=FailureClass.TRANSIENT,
+                    detail=f"{type(exc).__name__}: {exc}"[:500],
+                ),
+            )
         try:
             async with self._sessions() as session:
                 await self._record_failure(
