@@ -25,9 +25,15 @@ from typing import Any
 import pytest
 
 from scholiast.api.deps import _dispatch_committed_jobs
-from scholiast.infrastructure.queue.celery_app import INGEST_QUEUE, INGEST_TASK
+from scholiast.infrastructure.db.pending import PENDING_DELETION_DISPATCH, PENDING_DISPATCH
+from scholiast.infrastructure.queue.celery_app import (
+    DELETE_TASK,
+    INGEST_QUEUE,
+    INGEST_TASK,
+    MAINTENANCE_QUEUE,
+    RECONCILE_TASK,
+)
 from scholiast.infrastructure.queue.dispatch import CeleryDispatcher, NullDispatcher
-from scholiast.infrastructure.queue.postgres import PENDING_DISPATCH
 
 
 class FakeCelery:
@@ -46,17 +52,28 @@ class FakeCelery:
 class RecordingDispatcher:
     def __init__(self) -> None:
         self.dispatched: list[str] = []
+        self.deleted: list[str] = []
 
     async def dispatch(self, job_id: str) -> bool:
         self.dispatched.append(job_id)
+        return True
+
+    async def dispatch_deletion(self, workspace_id: str) -> bool:
+        self.deleted.append(workspace_id)
         return True
 
 
 class FakeSession:
     """Just the `info` dict the real session exposes."""
 
-    def __init__(self, pending: list[str] | None = None) -> None:
-        self.info: dict[str, Any] = {PENDING_DISPATCH: pending} if pending is not None else {}
+    def __init__(
+        self, pending: list[str] | None = None, deletions: list[str] | None = None
+    ) -> None:
+        self.info: dict[str, Any] = {}
+        if pending is not None:
+            self.info[PENDING_DISPATCH] = pending
+        if deletions is not None:
+            self.info[PENDING_DELETION_DISPATCH] = deletions
 
 
 class FakeRequest:
@@ -82,6 +99,21 @@ class TestTheCeleryDispatcher:
         # database, so there is nothing to wake.
         assert await NullDispatcher().dispatch("job-1") is False
 
+    async def test_a_deletion_is_addressed_by_name_to_the_maintenance_queue(self) -> None:
+        # D99 + D100: same by-name contract as ingestion, different queue,
+        # because a cascade must not occupy the slot a user's upload wants.
+        app = FakeCelery()
+        assert await CeleryDispatcher(app).dispatch_deletion("ws-1") is True
+        assert app.sent == [(DELETE_TASK, ["ws-1"], MAINTENANCE_QUEUE)]
+
+    async def test_a_broker_failure_on_a_deletion_is_reported_not_raised(self) -> None:
+        # The 202 has already gone out and the workspace already stopped serving
+        # reads. The backstop is `list_deleting`, not the caller.
+        assert await CeleryDispatcher(FakeCelery(fails=True)).dispatch_deletion("ws-1") is False
+
+    async def test_the_null_dispatcher_declines_deletions_too(self) -> None:
+        assert await NullDispatcher().dispatch_deletion("ws-1") is False
+
 
 class TestDispatchHappensAfterTheCommit:
     async def test_committed_jobs_are_dispatched(self) -> None:
@@ -103,6 +135,30 @@ class TestDispatchHappensAfterTheCommit:
         dispatcher = RecordingDispatcher()
         await _dispatch_committed_jobs(FakeRequest(dispatcher), FakeSession())  # type: ignore[arg-type]
         assert dispatcher.dispatched == []
+        assert dispatcher.deleted == []
+
+    async def test_committed_deletions_are_dispatched(self) -> None:
+        dispatcher = RecordingDispatcher()
+        session = FakeSession(deletions=["ws-1"])
+        await _dispatch_committed_jobs(FakeRequest(dispatcher), session)  # type: ignore[arg-type]
+        assert dispatcher.deleted == ["ws-1"]
+
+    async def test_jobs_and_deletions_never_cross_over(self) -> None:
+        # Two keys rather than one tagged list (D99): they go to different tasks
+        # on different queues, and a single list of bare strings would let a
+        # workspace id be published as an ingestion job with nothing to catch it.
+        dispatcher = RecordingDispatcher()
+        session = FakeSession(["job-1"], deletions=["ws-1"])
+        await _dispatch_committed_jobs(FakeRequest(dispatcher), session)  # type: ignore[arg-type]
+        assert dispatcher.dispatched == ["job-1"]
+        assert dispatcher.deleted == ["ws-1"]
+
+    async def test_the_deletion_list_is_consumed_too(self) -> None:
+        dispatcher = RecordingDispatcher()
+        session = FakeSession(deletions=["ws-1"])
+        await _dispatch_committed_jobs(FakeRequest(dispatcher), session)  # type: ignore[arg-type]
+        await _dispatch_committed_jobs(FakeRequest(dispatcher), session)  # type: ignore[arg-type]
+        assert dispatcher.deleted == ["ws-1"]
 
     async def test_a_dispatch_failure_does_not_stop_the_rest(self) -> None:
         # One unreachable publish must not strand the other jobs in the same
@@ -131,6 +187,41 @@ class TestTheTaskNameIsNotAccidental:
         from scholiast.workers import tasks
 
         assert tasks.ingest_paper.name == INGEST_TASK
+
+    def test_the_deletion_task_name_agrees_too(self) -> None:
+        """D96's failure mode, for the cascade (D99).
+
+        A desynchronised deletion name is *worse* than a desynchronised ingest
+        name. An undispatched job still runs at the poll interval; an
+        undispatched cascade waits for the reconciliation sweep, which runs
+        every five minutes by default — so the workspace the user deleted keeps
+        its rows, vectors and blobs for that long with nothing reporting why.
+        """
+        from scholiast.workers import tasks
+
+        assert tasks.delete_workspace.name == DELETE_TASK
+        assert tasks.reconcile.name == RECONCILE_TASK
+
+    def test_the_scheduled_sweep_names_a_task_that_exists(self) -> None:
+        # The beat schedule is configuration, so a typo in it fails at no import
+        # and no test — the sweep simply never runs, and the only symptom is
+        # residue nobody is looking for.
+        from scholiast.workers import tasks
+
+        scheduled = {entry["task"] for entry in tasks.app.conf.beat_schedule.values()}
+        assert scheduled == {RECONCILE_TASK}
+        assert RECONCILE_TASK in tasks.app.tasks
+
+    def test_maintenance_work_is_routed_off_the_ingest_queue(self) -> None:
+        # D100. With `worker_prefetch_multiplier=1` a worker holds one message
+        # at a time, so a cascade sharing `ingest` would make a user's upload
+        # wait behind somebody else's delete.
+        from scholiast.workers import tasks
+
+        routes = tasks.app.conf.task_routes
+        assert routes[DELETE_TASK]["queue"] == MAINTENANCE_QUEUE
+        assert routes[RECONCILE_TASK]["queue"] == MAINTENANCE_QUEUE
+        assert routes[INGEST_TASK]["queue"] == INGEST_QUEUE
 
     def test_the_api_does_not_import_the_worker_package(self) -> None:
         # The architectural claim of D96, asserted here as well as by

@@ -48,7 +48,7 @@ from scholiast.domain.workspace import (
     Workspace,
     WorkspaceState,
 )
-from scholiast.infrastructure.db import models
+from scholiast.infrastructure.db import models, pending
 
 
 def _as_uuid(value: str) -> uuid.UUID | None:
@@ -86,6 +86,37 @@ class ScopedRepository:
         if self._scope.is_system:
             return stmt
         return stmt.where(models.Workspace.owner_id == _as_uuid(self._tenant_id()))
+
+    def _owned_workspaces(self) -> Select[tuple[uuid.UUID]]:
+        """Workspace ids this scope OWNS, **including soft-deleted ones** (D92).
+
+        One predicate different from `_visible_workspaces`, and the cascade is
+        what the difference is for: by the time a deletion sweep runs, the
+        workspace is soft-deleted *by construction*, so a visibility-scoped read
+        would find nothing to delete and the sweep would silently do nothing.
+
+        The split is the same one D92 drew for the queue. Ownership is the right
+        question for work that is ABOUT a deletion; visibility is the right
+        question for everything a user can still see. Using visibility here
+        would not leak anything — it would strand data forever, which FR-W3
+        forbids more loudly than any read would.
+        """
+        stmt = select(models.Workspace.id)
+        if self._scope.is_system:
+            return stmt
+        return stmt.where(models.Workspace.owner_id == _as_uuid(self._tenant_id()))
+
+    def _require_system(self, table: str, operation: str) -> None:
+        """Refuse a cross-tenant sweep read to anything but the sweeper.
+
+        The sweep legitimately spans tenants — residue has no owner — so these
+        reads cannot carry a tenant predicate. That makes them exactly the shape
+        a caller would want if it were trying to enumerate the whole system, so
+        the scope check is the thing standing in for the predicate. Same line
+        `PostgresQueue.claim` draws, for the same reason (D50).
+        """
+        if not self._scope.is_system:
+            raise TenantIsolationViolation(table, operation, repr(self._scope))
 
     def _reachable_papers(self) -> Select[tuple[uuid.UUID]]:
         """Paper ids reachable through a workspace this scope owns."""
@@ -182,6 +213,72 @@ class SqlWorkspaceRepository(ScopedRepository):
                 models.Workspace.id.in_(self._visible_workspaces()),
             )
             .values(state=WorkspaceState.DELETING.value, deleted_at=datetime.now(UTC))
+        )
+        if affected:
+            # The mark is now part of the caller's transaction, so the wake-up
+            # has to wait for it to commit — publishing here would announce a
+            # deletion a rollback then un-marked (D99, and D95's reasoning for
+            # ingestion verbatim). The composition root drains this after the
+            # commit; if it never does, `list_deleting` finds the row anyway.
+            pending.record(self._session, pending.PENDING_DELETION_DISPATCH, workspace_id)
+        return affected > 0
+
+    async def list_deleting(self) -> tuple[str, ...]:
+        """Workspaces whose cascade has not finished (§5.6.4 step 3, D99).
+
+        Keyed on `deleted_at` rather than `state == DELETING` because the two
+        are written together and only one of them is a timestamp: ordering by it
+        sweeps the oldest unfinished cascade first, which bounds how long any
+        residue can survive instead of leaving it to whichever row a scan
+        happens to reach. A row whose state drifted but whose timestamp stands
+        is still found, which is the safer direction to be wrong in.
+        """
+        self._require_system("workspaces", "list_deleting")
+        rows = (
+            (
+                await self._session.execute(
+                    select(models.Workspace.id)
+                    .where(models.Workspace.deleted_at.is_not(None))
+                    .order_by(models.Workspace.deleted_at)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        return tuple(str(r) for r in rows)
+
+    async def is_deleting(self, workspace_id: str) -> bool:
+        """Whether the workspace carries a deletion mark (D99's safety check)."""
+        target = _as_uuid(workspace_id)
+        if target is None:
+            return False
+        found = (
+            await self._session.execute(
+                select(models.Workspace.id).where(
+                    models.Workspace.id == target,
+                    models.Workspace.id.in_(self._owned_workspaces()),
+                    models.Workspace.deleted_at.is_not(None),
+                )
+            )
+        ).scalar_one_or_none()
+        return found is not None
+
+    async def purge(self, workspace_id: str) -> bool:
+        """Hard-delete the workspace row — the cascade's last step.
+
+        Scoped by ownership, not visibility: this row is soft-deleted by the
+        time anything calls it, so `_visible_workspaces` would match nothing and
+        the cascade would never complete. The database cascades from here to
+        conversations, messages, memberships and ingestion jobs.
+        """
+        target = _as_uuid(workspace_id)
+        if target is None:
+            return False
+        affected = await self._affected_rows(
+            delete(models.Workspace).where(
+                models.Workspace.id == target,
+                models.Workspace.id.in_(self._owned_workspaces()),
+            )
         )
         return affected > 0
 
@@ -438,6 +535,56 @@ class SqlPaperRepository(ScopedRepository):
             .scalars()
             .all()
         )
+        return tuple(str(r) for r in rows)
+
+    async def membership_paper_ids(self, workspace_id: str) -> tuple[str, ...]:
+        """Every paper the workspace holds, in any state (FR-W3's input).
+
+        Neither filter `queryable_paper_ids` applies is wanted here. The state
+        filter would skip papers that failed to ingest, which still own rows and
+        blobs; the visibility filter would skip the workspace itself, which is
+        soft-deleted by the time the cascade runs. Scoped by ownership instead,
+        so the sweep sees what it has to delete (D92).
+        """
+        target = _as_uuid(workspace_id)
+        if target is None:
+            return ()
+        rows = (
+            (
+                await self._session.execute(
+                    select(models.WorkspacePaper.paper_id).where(
+                        models.WorkspacePaper.workspace_id == target,
+                        models.WorkspacePaper.workspace_id.in_(self._owned_workspaces()),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        return tuple(str(r) for r in rows)
+
+    async def orphaned_paper_ids(self) -> tuple[str, ...]:
+        """Paper rows no workspace holds any more (D102).
+
+        `NOT EXISTS` rather than `NOT IN`: the correlated form lets Postgres
+        stop at the first membership instead of materialising every one, and it
+        cannot be surprised by a NULL the way `NOT IN` silently can.
+        """
+        self._require_system("papers", "orphaned_paper_ids")
+        held = select(models.WorkspacePaper.paper_id).where(
+            models.WorkspacePaper.paper_id == models.Paper.id
+        )
+        rows = (
+            (await self._session.execute(select(models.Paper.id).where(~held.exists())))
+            .scalars()
+            .all()
+        )
+        return tuple(str(r) for r in rows)
+
+    async def all_paper_ids(self) -> tuple[str, ...]:
+        """Every paper id in Postgres — the live set the sweep compares against."""
+        self._require_system("papers", "all_paper_ids")
+        rows = (await self._session.execute(select(models.Paper.id))).scalars().all()
         return tuple(str(r) for r in rows)
 
 

@@ -127,6 +127,29 @@ class VectorIndex(Protocol):
         """
         ...
 
+    async def count_orphans(self, live_paper_ids: Sequence[str]) -> int:
+        """Vectors whose paper is no longer in Postgres (§5.6.4 step 4, D102).
+
+        Separate from the delete so the sweep can report residue it did not
+        create, which is the difference between a safety net and a silent one.
+        """
+        ...
+
+    async def delete_orphans(self, live_paper_ids: Sequence[str]) -> int:
+        """Remove every vector whose paper is not in `live_paper_ids`.
+
+        Phrased as "delete what is NOT in this set" rather than enumerate-diff-
+        delete because the index can answer it with a negated filter in one
+        round trip, while enumerating pages the whole collection to find a
+        difference that is normally empty.
+
+        **An empty set means every vector is an orphan**, because Postgres is
+        the source of truth (NFR-R6) and it is saying there are no papers at
+        all. An adapter that reads empty as "nothing to do" inverts the
+        guarantee this method exists to enforce.
+        """
+        ...
+
 
 @dataclass(frozen=True, slots=True)
 class SparseRecord:

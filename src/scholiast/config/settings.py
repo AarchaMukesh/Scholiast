@@ -76,6 +76,15 @@ class Settings(BaseSettings):
     #: this off when Celery arrives: a configuration change, not a restructuring.
     worker_in_process: bool = True
 
+    # -- maintenance (§5.6.4 step 4, D100) ---------------------------------
+    #: How often the reconciliation sweep runs. Five minutes is a judgement
+    #: call, not a measurement, and the two things it trades off are named so
+    #: the number can be argued with: a cascade whose dispatch was lost waits at
+    #: most this long before `list_deleting` finds it, and every pass scans the
+    #: whole index and object store (D102), so the cost is paid whether or not
+    #: there is residue. Shorter means faster convergence and more scanning.
+    reconcile_interval_seconds: float = 300.0
+
     # -- generation --------------------------------------------------------
     #: Local carries sustained load; hosted quota is a deliberate spend (D26).
     generation_provider: str = "ollama"

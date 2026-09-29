@@ -21,15 +21,27 @@ import asyncio
 
 from celery import Celery
 
-from scholiast.infrastructure.queue.celery_app import INGEST_QUEUE, INGEST_TASK
+from scholiast.infrastructure.queue.celery_app import (
+    DELETE_TASK,
+    INGEST_QUEUE,
+    INGEST_TASK,
+    MAINTENANCE_QUEUE,
+)
 
 
 class CeleryDispatcher:
     """`JobDispatcher` over Celery."""
 
-    def __init__(self, app: Celery, *, queue: str = INGEST_QUEUE) -> None:
+    def __init__(
+        self,
+        app: Celery,
+        *,
+        queue: str = INGEST_QUEUE,
+        maintenance_queue: str = MAINTENANCE_QUEUE,
+    ) -> None:
         self._app = app
         self._queue = queue
+        self._maintenance_queue = maintenance_queue
 
     async def dispatch(self, job_id: str) -> bool:
         """Publish a wake-up for one committed job.
@@ -48,8 +60,26 @@ class CeleryDispatcher:
             return False
         return True
 
+    async def dispatch_deletion(self, workspace_id: str) -> bool:
+        """Publish a wake-up for one committed workspace deletion (D99).
+
+        Same best-effort contract as `dispatch`, resting on a different
+        backstop: an undispatched job is found by its lease, an undispatched
+        deletion by `list_deleting` on the next reconciliation pass. The user
+        already has their 202 and the workspace already stopped serving reads,
+        so a broker failure here delays the sweep rather than losing it.
+        """
+        try:
+            await asyncio.to_thread(self._send_deletion, workspace_id)
+        except Exception:
+            return False
+        return True
+
     def _send(self, job_id: str) -> None:
         self._app.send_task(INGEST_TASK, args=[job_id], queue=self._queue)
+
+    def _send_deletion(self, workspace_id: str) -> None:
+        self._app.send_task(DELETE_TASK, args=[workspace_id], queue=self._maintenance_queue)
 
 
 class NullDispatcher:
@@ -62,4 +92,14 @@ class NullDispatcher:
     """
 
     async def dispatch(self, job_id: str) -> bool:  # noqa: ARG002 - the point is to do nothing
+        return False
+
+    async def dispatch_deletion(self, workspace_id: str) -> bool:  # noqa: ARG002 - as above
+        """Nothing to wake. The reconciliation sweep finds the marked row.
+
+        Unlike the ingestion case there is no in-process poller watching for
+        deletions, so with no broker the cascade waits for the next sweep rather
+        than starting immediately. That is latency, not loss — the mark is
+        committed and `list_deleting` is what finds it (D99).
+        """
         return False

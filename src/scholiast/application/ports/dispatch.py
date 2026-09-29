@@ -42,3 +42,18 @@ class JobDispatcher(Protocol):
         would help, and the lease already covers the case.
         """
         ...
+
+    async def dispatch_deletion(self, workspace_id: str) -> bool:
+        """Best-effort wake-up for one committed workspace deletion (D99).
+
+        A separate method rather than a generic `send(task, arg)` because the
+        two carry different ids to different queues, and a single stringly-typed
+        entry point would let an ingestion id be dispatched as a deletion with
+        nothing to catch it.
+
+        Same best-effort contract as `dispatch`, resting on a different backstop:
+        an undispatched job is found by its lease, an undispatched deletion is
+        found by `list_deleting` on the next reconciliation pass. Neither loses
+        work; both cost latency.
+        """
+        ...

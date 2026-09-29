@@ -97,7 +97,14 @@ class TenantIsolationViolation(RuntimeError):
 
 #: Reason strings for the sanctioned system-context uses. Keeping them as
 #: constants makes the full set of cross-tenant operations enumerable.
-SWEEPER_REASON: Final = "reconciliation sweeper: remove vectors orphaned by deletion"
+SWEEPER_REASON: Final = "reconciliation sweeper: remove residue orphaned by deletion"
+#: D99. A workspace cascade runs after its owner's request has already returned,
+#: and it must run even if the owner cannot be resolved — a workspace nobody can
+#: be found for would otherwise become permanently unsweepable residue, which is
+#: the one outcome FR-W3 forbids. The cost of not being tenant-scoped is that
+#: the workspace id is trusted input, which is why `DeleteWorkspaceUseCase`
+#: refuses any workspace that is not already marked deleted.
+CASCADE_REASON: Final = "workspace cascade: delete on behalf of an owner who has gone"
 REBUILD_REASON: Final = "index rebuild from source of truth"
 MIGRATION_REASON: Final = "schema migration"
 #: D50. A worker cannot know whose job it is until it has claimed one, so the

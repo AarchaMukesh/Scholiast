@@ -59,6 +59,20 @@ INGEST_QUEUE = "ingest"
 #: Bulk work that may wait behind it (M4's discovery backfill).
 BACKFILL_QUEUE = "backfill"
 
+#: The workspace cascade (§5.6.4 step 2, D99) and the reconciliation sweep
+#: (step 4, D100). Both address a workspace or nothing at all, never a job id.
+DELETE_TASK = "scholiast.delete_workspace"
+RECONCILE_TASK = "scholiast.reconcile"
+
+#: Deletion and reconciliation. **Its own queue because `worker_prefetch_
+#: multiplier=1` makes queue choice a scheduling decision** (D100): a worker
+#: holds one message at a time, so a cascade sweeping three stores would occupy
+#: that slot for its whole duration — on `ingest`, a user's upload would wait
+#: behind somebody else's delete. Declared now for the same reason the others
+#: were: a queue added after the workers are deployed is a queue nothing
+#: consumes until every worker restarts.
+MAINTENANCE_QUEUE = "maintenance"
+
 #: Where a task goes when it dies for a reason the pipeline never saw — an
 #: unhandled crash in the task wrapper rather than a classified ingestion
 #: failure. §4.4.1's taxonomy handles the latter and writes a terminal state with
@@ -81,7 +95,23 @@ def build_celery_app(settings: Settings) -> Celery:
         task_reject_on_worker_lost=True,
         worker_prefetch_multiplier=1,
         task_default_queue=INGEST_QUEUE,
-        task_routes={INGEST_TASK: {"queue": INGEST_QUEUE}},
+        task_routes={
+            INGEST_TASK: {"queue": INGEST_QUEUE},
+            DELETE_TASK: {"queue": MAINTENANCE_QUEUE},
+            RECONCILE_TASK: {"queue": MAINTENANCE_QUEUE},
+        },
+        # §5.6.4 step 4's "periodic" made real (D100). A sweep an operator has
+        # to remember to run is an intention, not a schedule — and this one is
+        # the safety net every other deletion step is allowed to be
+        # interruptible *because* of. Run by exactly one beat process: two of
+        # them double every entry here.
+        beat_schedule={
+            "reconcile": {
+                "task": RECONCILE_TASK,
+                "schedule": float(settings.reconcile_interval_seconds),
+                "options": {"queue": MAINTENANCE_QUEUE},
+            }
+        },
         # Redis-specific: how long before an unfinished message is re-queued.
         # Tied to the database lease on purpose — see the module docstring.
         broker_transport_options={

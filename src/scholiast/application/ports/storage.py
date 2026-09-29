@@ -36,6 +36,20 @@ def source_key(paper_id: str) -> str:
     return f"papers/{paper_id}/source.pdf"
 
 
+def paper_prefix(paper_id: str) -> str:
+    """Everything this paper owns in the store (D49, D102).
+
+    The cascade deletes by prefix rather than by naming `source_key` and each
+    `tei_key`, and the difference is not tidiness. A paper may hold TEI for
+    SEVERAL parser generations on purpose, so a purge that deletes the version
+    the row happens to record leaks every other one — and FR-W3's "zero residue"
+    would then mean "zero residue among the keys we remembered to list".
+    Prefix deletion is only possible because D49 made keys paper-scoped; under
+    content-addressed keys this function could not exist.
+    """
+    return f"papers/{paper_id}/"
+
+
 def tei_key(paper_id: str, parser_version: str) -> str:
     """Where this paper's retained TEI lives, for one parser version (D43).
 
@@ -73,5 +87,18 @@ class ObjectStore(Protocol):
 
         Idempotent because the deletion sweep is (§5.6.4): a restarted cascade
         must not fail on the blobs its previous attempt already removed.
+        """
+        ...
+
+    async def list_keys(self, prefix: str = "") -> list[str]:
+        """Every key under `prefix`, in no particular order.
+
+        The reconciliation sweep is the only caller, and it needs this only
+        because an object store has no query language to ask "which of these
+        have no paper" with (D102). **D49 is what keeps the answer decidable:**
+        keys are paper-scoped, so the paper id is a path segment and a key can
+        be matched against the live set without opening or hashing anything.
+        Content-addressed keys would have made the same question unanswerable
+        without a reference count.
         """
         ...

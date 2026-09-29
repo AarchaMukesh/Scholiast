@@ -89,6 +89,35 @@ class LocalObjectStore:
     async def exists(self, key: str) -> bool:
         return await asyncio.to_thread(self._path_for(key).is_file)
 
+    async def list_keys(self, prefix: str = "") -> list[str]:
+        """Every key under `prefix`, as the store's own key strings.
+
+        Directories are skipped and paths are normalised to forward slashes, so
+        a key listed here is one `get` and `delete` accept unchanged — on
+        Windows too, where the filesystem would otherwise hand back backslashes
+        that no caller ever stored.
+
+        Interrupted writes are **included on purpose**. `_write` stages through
+        a `.partial` file in the destination directory, so a process killed
+        mid-write leaves one behind; it is residue under that paper's prefix,
+        and the cascade's prefix delete is the only thing that will ever remove
+        it. Filtering it out here would hide it from the one caller that cleans
+        it up.
+        """
+        return await asyncio.to_thread(self._list, prefix)
+
+    def _list(self, prefix: str) -> list[str]:
+        if not self._root.is_dir():
+            return []
+        keys: list[str] = []
+        for path in self._root.rglob("*"):
+            if not path.is_file():
+                continue
+            key = path.relative_to(self._root).as_posix()
+            if key.startswith(prefix):
+                keys.append(key)
+        return keys
+
     async def delete(self, key: str) -> bool:
         path = self._path_for(key)
 

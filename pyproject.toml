@@ -31,6 +31,8 @@ dependencies = [
 # `uv run eval`) reproduces the published report". This is it.
 [project.scripts]
 eval = "scholiast.eval.cli:main"
+# NFR-R6: "rebuildable from scratch by a documented command" (D101).
+scholiast-reindex = "scholiast.workers.reindex:main"
 
 [project.optional-dependencies]
 # Local inference. Installed on the worker and in dev, not in the API image.

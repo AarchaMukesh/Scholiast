@@ -65,6 +65,7 @@ from scholiast.application.use_cases.authentication import (
 )
 from scholiast.application.use_cases.remove_paper import RemovePaperUseCase
 from scholiast.config.settings import Settings
+from scholiast.infrastructure.db import pending
 from scholiast.infrastructure.db.accounts import SqlAccountRepository, SqlSessionRepository
 from scholiast.infrastructure.db.repositories import (
     SqlChunkRepository,
@@ -73,7 +74,7 @@ from scholiast.infrastructure.db.repositories import (
     SqlSectionRepository,
     SqlWorkspaceRepository,
 )
-from scholiast.infrastructure.queue.postgres import PENDING_DISPATCH, PostgresQueue
+from scholiast.infrastructure.queue.postgres import PostgresQueue
 from scholiast.infrastructure.storage.local import LocalObjectStore
 
 
@@ -98,7 +99,14 @@ async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
 
 
 async def _dispatch_committed_jobs(request: Request, session: AsyncSession) -> None:
-    """Wake a worker for any job this transaction just committed (D95).
+    """Wake a worker for anything this transaction just committed (D95, D99).
+
+    Two kinds travel this path and they are drained separately because they go
+    to different tasks on different queues: accepted ingestion jobs, and
+    workspaces the user just deleted. Both are already durable by the time this
+    runs, and both have a backstop if the publish fails — a job's lease makes it
+    claimable again, and a marked workspace is found by `list_deleting` on the
+    next reconciliation pass.
 
     **After the commit, and deliberately outside it.** The job row is already
     durable, so this is a latency optimisation: if the broker is unreachable the
@@ -115,12 +123,15 @@ async def _dispatch_committed_jobs(request: Request, session: AsyncSession) -> N
     why. `api` has no logger yet; phase 7 owns that, and this is a named place
     for it to land rather than an oversight.
     """
-    pending: list[str] = session.info.pop(PENDING_DISPATCH, [])
-    if not pending:
+    jobs = pending.drain(session, pending.PENDING_DISPATCH)
+    deletions = pending.drain(session, pending.PENDING_DELETION_DISPATCH)
+    if not jobs and not deletions:
         return
     dispatcher: JobDispatcher = request.app.state.dispatcher
-    for job_id in pending:
+    for job_id in jobs:
         await dispatcher.dispatch(job_id)
+    for workspace_id in deletions:
+        await dispatcher.dispatch_deletion(workspace_id)
 
 
 async def auth_session(request: Request) -> AsyncIterator[AsyncSession]:

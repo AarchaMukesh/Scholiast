@@ -2,7 +2,18 @@
 
 Run with:
 
-    celery -A scholiast.workers.tasks worker -Q ingest -c 1
+    celery -A scholiast.workers.tasks worker -Q ingest,maintenance -c 1
+    celery -A scholiast.workers.tasks beat
+
+**One beat, however many workers** (D100). Beat is a scheduler, not a consumer:
+a second one does not share the schedule, it duplicates it, so every sweep would
+run twice. Workers scale freely because the queue is what distributes their
+work.
+
+**In dev, one worker consumes both queues**, which means a long cascade still
+occupies the slot an upload wants — the separation declared in `celery_app` is
+structural until a deployment gives maintenance its own worker (M6). Said here
+rather than left to be discovered, because the routing makes it look solved.
 
 **The task is a wake-up, not a work order.** Its argument is a job id, and it
 does not use it to find work: it calls `IngestionWorker.run_once()`, which claims
@@ -41,10 +52,16 @@ from scholiast.config.settings import Settings, get_settings
 from scholiast.infrastructure.db.engine import build_engine, build_session_factory
 from scholiast.infrastructure.ml.embedder import LocalEmbedder
 from scholiast.infrastructure.parsing.grobid import GrobidParser
-from scholiast.infrastructure.queue.celery_app import INGEST_TASK, build_celery_app
+from scholiast.infrastructure.queue.celery_app import (
+    DELETE_TASK,
+    INGEST_TASK,
+    RECONCILE_TASK,
+    build_celery_app,
+)
 from scholiast.infrastructure.storage.local import LocalObjectStore
 from scholiast.infrastructure.vector.qdrant import QdrantVectorIndex
 from scholiast.workers.ingestion import IngestionWorker, WorkerConfig
+from scholiast.workers.maintenance import MaintenanceWorker
 
 log = structlog.get_logger(__name__)
 
@@ -58,6 +75,12 @@ class _ProcessContext:
 
     loop: asyncio.AbstractEventLoop
     worker: IngestionWorker
+    #: Shares the process's session factory and index with the ingestion worker.
+    #: It holds no model and opens no parser, so a worker consuming only the
+    #: maintenance queue still pays for the encoder — accepted for now because
+    #: the dev topology runs one worker for everything (D100), and splitting the
+    #: construction would buy nothing until the deployment splits too.
+    maintenance: MaintenanceWorker
     #: Held here as well as inside the worker because the process has to make it
     #: ready before the first claim, and reaching into the worker's private
     #: attribute to do that would make this module depend on its internals.
@@ -67,7 +90,7 @@ class _ProcessContext:
 _context: _ProcessContext | None = None
 
 
-def _build(settings: Settings) -> tuple[IngestionWorker, QdrantVectorIndex]:
+def _build(settings: Settings) -> tuple[IngestionWorker, MaintenanceWorker, QdrantVectorIndex]:
     """Construct the pipeline exactly as `scholiast.main` does in-process.
 
     Duplicated deliberately rather than shared with the composition root: that
@@ -76,14 +99,16 @@ def _build(settings: Settings) -> tuple[IngestionWorker, QdrantVectorIndex]:
     function that can only be read with both deployments in mind.
     """
     engine = build_engine(settings)
+    sessions = build_session_factory(engine)
+    store = LocalObjectStore(settings.object_store_path)
     index = QdrantVectorIndex(
         settings.qdrant_url,
         collection=settings.qdrant_collection,
         dimensions=settings.embedding_dimensions,
     )
     worker = IngestionWorker(
-        sessions=build_session_factory(engine),
-        store=LocalObjectStore(settings.object_store_path),
+        sessions=sessions,
+        store=store,
         parser=GrobidParser(settings.grobid_url),
         embedder=LocalEmbedder(
             settings.embedding_model,
@@ -100,7 +125,8 @@ def _build(settings: Settings) -> tuple[IngestionWorker, QdrantVectorIndex]:
             embed_batch_size=settings.embedding_batch_size,
         ),
     )
-    return worker, index
+    maintenance = MaintenanceWorker(sessions=sessions, index=index, store=store)
+    return worker, maintenance, index
 
 
 def _process_context() -> _ProcessContext:
@@ -114,9 +140,9 @@ def _process_context() -> _ProcessContext:
     if _context is None:
         settings = get_settings()
         loop = asyncio.new_event_loop()
-        worker, index = _build(settings)
+        worker, maintenance, index = _build(settings)
         loop.run_until_complete(index.ensure_ready())
-        _context = _ProcessContext(loop=loop, worker=worker, index=index)
+        _context = _ProcessContext(loop=loop, worker=worker, maintenance=maintenance, index=index)
         log.info("worker.process_ready", queue=app.conf.task_default_queue)
     return _context
 
@@ -135,3 +161,39 @@ def ingest_paper(self: Any, job_id: str) -> int:  # noqa: ARG001 - bind gives re
     ran = context.loop.run_until_complete(context.worker.run_once())
     log.info("worker.task_finished", dispatched_for=job_id, jobs_run=ran)
     return ran
+
+
+@app.task(name=DELETE_TASK, bind=True, acks_late=True, ignore_result=True)  # type: ignore[untyped-decorator]
+def delete_workspace(self: Any, workspace_id: str) -> int:  # noqa: ARG001 - bind gives retry context
+    """Sweep one deleted workspace out of all three stores (§5.6.4 step 2).
+
+    **Unlike `ingest_paper`, the argument is load-bearing.** A wake-up can be
+    vague because the ingestion worker claims whatever is due from Postgres;
+    a cascade acts on the id it is given. That is why the use case refuses any
+    workspace that is not already marked deleted — the id arrives over a broker
+    and nothing else constrains it (D99).
+
+    Returns how many papers were purged, for Flower and tests; nothing waits on
+    it. A failure here is not retried by Celery and does not need to be: the
+    mark is still in the database, so the next reconciliation pass finds it.
+    """
+    context = _process_context()
+    result = context.loop.run_until_complete(context.maintenance.delete_workspace(workspace_id))
+    return result.papers_purged
+
+
+@app.task(name=RECONCILE_TASK, bind=True, acks_late=True, ignore_result=True)  # type: ignore[untyped-decorator]
+def reconcile(self: Any) -> int:  # noqa: ARG001 - bind gives retry context
+    """Converge the three stores onto the relational truth (§5.6.4 step 4).
+
+    Scheduled by beat every `reconcile_interval_seconds` (D100). It takes no
+    argument because it has no target: it asks the stores what is inconsistent
+    rather than being told, which is what makes it a safety net for failures
+    nobody recorded.
+
+    Returns total residue removed. **Zero is the expected answer**, and anything
+    else is a defect somewhere upstream that this merely cleaned up after.
+    """
+    context = _process_context()
+    result = context.loop.run_until_complete(context.maintenance.reconcile())
+    return result.papers_purged + result.vectors_deleted + result.blobs_deleted
