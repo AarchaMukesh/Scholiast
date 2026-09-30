@@ -38,6 +38,11 @@ from scholiast.domain.paper import Chunk, ChunkRole, Paper, PaperVisibility, Pro
 from scholiast.domain.retrieval import CitationStatus, RetrievalArm, ScoredChunk
 from scholiast.domain.workspace import PaperMembership, PaperState, Workspace
 
+# The one adapter this file touches, and deliberately the real one: the claim
+# under test is that a REAL open breaker is disclosed by the use case, which a
+# fake breaker could not establish (D104).
+from scholiast.infrastructure.llm.breaker import CircuitBreaker
+
 OWNER = "11111111-1111-4111-8111-111111111111"
 WORKSPACE = "22222222-2222-4222-8222-222222222222"
 CONVERSATION = "33333333-3333-4333-8333-333333333333"
@@ -606,6 +611,32 @@ class TestDegradationIsDisclosed:
         answer = final(await collect(use_case))
         assert answer.provider == "groq"
         assert answer.degraded == (DEGRADED_PROVIDER_FAILOVER,)
+
+    async def test_an_open_breaker_fails_over_without_dialling_the_dead_provider(self) -> None:
+        """D104's claim, asserted at the use case rather than at the breaker.
+
+        The breaker is allowed to change what an outage *costs* and not what the
+        user is *told*. Both halves are here: the primary is never called (the
+        saving) and `provider_failover` is still disclosed (the invariant). A
+        breaker that swallowed the failure would make a degraded answer look
+        normal, which is the one thing §5.11 exists to prevent.
+        """
+        primary = FakeProvider("ollama", fails=True)
+        breaker = CircuitBreaker(primary, failure_threshold=1, cooldown_seconds=300.0)
+        secondary = FakeProvider("groq", "Answer from the backup [C1].")
+
+        # Trip it once, the way the first real request would.
+        with pytest.raises(GenerationUnavailable):
+            async for _ in breaker.stream(system="s", user="u"):
+                pass
+        calls_when_opened = primary.calls
+
+        use_case, _, _, _, _ = make_use_case(providers=[breaker, secondary])
+        answer = final(await collect(use_case))
+
+        assert answer.provider == "groq"
+        assert answer.degraded == (DEGRADED_PROVIDER_FAILOVER,)
+        assert primary.calls == calls_when_opened, "the open breaker still dialled the provider"
 
 
 class TestValidationHappensBeforeTheStreamOpens:

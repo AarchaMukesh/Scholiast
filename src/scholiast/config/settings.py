@@ -85,6 +85,16 @@ class Settings(BaseSettings):
     #: there is residue. Shorter means faster convergence and more scanning.
     reconcile_interval_seconds: float = 300.0
 
+    # -- provider circuit breaker (§5.11, D104) ----------------------------
+    #: Consecutive failures before a provider is skipped without being called.
+    #: Three, matching D48's retry budget for the same reason: it survives a
+    #: restart of the thing being called without sitting through an outage.
+    breaker_failure_threshold: int = 3
+    #: How long to skip it when the provider said nothing about when to return.
+    #: A 429's `Retry-After` overrides this, because the provider has stated the
+    #: answer and this number can only guess at it (D103).
+    breaker_cooldown_seconds: float = 30.0
+
     # -- generation --------------------------------------------------------
     #: Local carries sustained load; hosted quota is a deliberate spend (D26).
     generation_provider: str = "ollama"

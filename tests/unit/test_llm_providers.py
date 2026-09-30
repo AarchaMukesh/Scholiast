@@ -10,6 +10,8 @@ GPU one.
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime, timedelta
+from email.utils import format_datetime
 
 import httpx
 import pytest
@@ -17,6 +19,7 @@ import respx
 
 from scholiast.application.ports.llm import GenerationUnavailable
 from scholiast.config.settings import Settings
+from scholiast.infrastructure.llm.breaker import BreakerState
 from scholiast.infrastructure.llm.chain import build_provider_chain
 from scholiast.infrastructure.llm.groq import GroqProvider
 from scholiast.infrastructure.llm.ollama import OllamaProvider
@@ -163,6 +166,10 @@ class TestGroqStreams:
         with pytest.raises(GenerationUnavailable) as caught:
             await drain(GroqProvider("key", base_url=GROQ), system="s", user="u")
         assert "retry-after=17" in caught.value.detail
+        # D103: and as a NUMBER, not only as prose. The string is for logs; the
+        # float is what the breaker opens its window from. Before this the value
+        # was parsed and then thrown away into a message.
+        assert caught.value.retry_after == pytest.approx(17.0)
 
     @respx.mock
     async def test_the_api_key_is_sent_as_a_bearer_token(self) -> None:
@@ -205,3 +212,107 @@ class TestTheChainIsOrderedAndHonest:
         # reproducibility rests on a pinned model id plus a pinned prompt version.
         chain = build_provider_chain(Settings(groq_api_key="key"))
         assert all(p.model for p in chain)
+
+    def test_every_rung_sits_behind_a_breaker(self) -> None:
+        # D104, including the local one. An Ollama that is not running refuses
+        # fast; an Ollama that is HUNG does not, and that is the case that costs
+        # a timeout on every question.
+        chain = build_provider_chain(Settings(groq_api_key="key"))
+        assert [type(p).__name__ for p in chain] == ["CircuitBreaker", "CircuitBreaker"]
+
+    def test_the_breakers_are_independent(self) -> None:
+        # One breaker per provider instance, not one per chain: a rate-limited
+        # Groq must not stop the chain trying a healthy Ollama.
+        chain = build_provider_chain(Settings(groq_api_key="key"))
+        first, second = chain
+        assert first is not second
+        assert first.state is BreakerState.CLOSED  # type: ignore[attr-defined]
+
+    @respx.mock
+    async def test_the_threshold_comes_from_settings_not_a_hardcoded_default(self) -> None:
+        # Asserted through behaviour rather than by reading `_threshold`: a
+        # breaker built with the default 3 would still be CLOSED after one
+        # failure, so one failure is what distinguishes wired from ignored.
+        respx.post(f"{OLLAMA}/api/chat").mock(return_value=httpx.Response(503, text="down"))
+        chain = build_provider_chain(
+            Settings(
+                ollama_url=OLLAMA,
+                groq_api_key=None,
+                breaker_failure_threshold=1,
+                breaker_cooldown_seconds=99.0,
+            )
+        )
+        breaker = chain[0]
+
+        with pytest.raises(GenerationUnavailable):
+            await drain(breaker, system="s", user="u")
+
+        assert breaker.state is BreakerState.OPEN  # type: ignore[attr-defined]
+
+
+class TestRetryAfterIsParsedNotGuessed:
+    """D103's header, in every form a server may legally send it.
+
+    An unparseable header must become None, not zero: None means "nothing was
+    said, use the cooldown" and zero means "come back now". Reading a malformed
+    header as zero would silently defeat the breaker on exactly the provider that
+    sent it.
+    """
+
+    async def _retry_after_for(self, headers: dict[str, str]) -> float | None:
+        respx.post(f"{GROQ}/chat/completions").mock(
+            return_value=httpx.Response(429, headers=headers, text="slow down")
+        )
+        with pytest.raises(GenerationUnavailable) as caught:
+            await drain(GroqProvider("key", base_url=GROQ), system="s", user="u")
+        return caught.value.retry_after
+
+    @respx.mock
+    async def test_a_fractional_value_survives(self) -> None:
+        # Groq sends these. Truncating to int would round a 7.66 s window down and
+        # the next request would 429 again.
+        assert await self._retry_after_for({"retry-after": "7.66"}) == pytest.approx(7.66)
+
+    @respx.mock
+    async def test_surrounding_whitespace_is_tolerated(self) -> None:
+        assert await self._retry_after_for({"retry-after": " 12 "}) == pytest.approx(12.0)
+
+    @respx.mock
+    async def test_an_http_date_is_converted_to_seconds(self) -> None:
+        # RFC 9110 §10.2.3 allows either form. Groq sends a number, but a proxy
+        # that rewrites the header would otherwise have it silently ignored — the
+        # breaker guessing while the server had stated the answer.
+        when = datetime.now(UTC) + timedelta(seconds=45)
+        seconds = await self._retry_after_for({"retry-after": format_datetime(when, usegmt=True)})
+        assert seconds is not None
+        assert 40 <= seconds <= 50
+
+    @respx.mock
+    async def test_a_date_in_the_past_is_zero_not_negative(self) -> None:
+        # A negative window would put `_opened_until` behind the clock and make
+        # the breaker read as HALF-OPEN forever.
+        when = datetime.now(UTC) - timedelta(seconds=60)
+        assert await self._retry_after_for(
+            {"retry-after": format_datetime(when, usegmt=True)}
+        ) == pytest.approx(0.0)
+
+    @respx.mock
+    async def test_a_negative_number_is_clamped(self) -> None:
+        assert await self._retry_after_for({"retry-after": "-5"}) == pytest.approx(0.0)
+
+    @respx.mock
+    async def test_an_unparseable_header_is_none(self) -> None:
+        assert await self._retry_after_for({"retry-after": "soon-ish"}) is None
+
+    @respx.mock
+    async def test_an_absent_header_is_none(self) -> None:
+        assert await self._retry_after_for({}) is None
+
+    @respx.mock
+    async def test_a_500_carries_no_window(self) -> None:
+        # Nothing was stated, so the breaker must use its cooldown rather than
+        # inherit a number from an unrelated response.
+        respx.post(f"{GROQ}/chat/completions").mock(return_value=httpx.Response(500, text="boom"))
+        with pytest.raises(GenerationUnavailable) as caught:
+            await drain(GroqProvider("key", base_url=GROQ), system="s", user="u")
+        assert caught.value.retry_after is None

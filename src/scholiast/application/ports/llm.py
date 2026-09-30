@@ -37,12 +37,25 @@ class GenerationUnavailable(Exception):
     (§5.11), so the chain catches it and a caller never sees it unless every
     provider raised. Rate limits, timeouts, 5xx and a model that is not pulled
     all arrive here; a malformed prompt does not.
+
+    **`retry_after` is structured rather than formatted into the message (D103).**
+    A 429 carries `Retry-After`, which is the server stating when it will accept
+    work again — the authority on the limit is the thing enforcing it, so no
+    estimate is needed and none can be wrong. The adapter used to parse that
+    header straight into a human-readable string, which meant the number was
+    read and then thrown away; a field is what lets the circuit breaker open for
+    exactly the stated window instead of guessing at it (D104).
+
+    None means the provider said nothing about when to come back, not "come back
+    immediately" — the breaker then falls back to its configured cooldown.
     """
 
-    def __init__(self, provider: str, detail: str) -> None:
+    def __init__(self, provider: str, detail: str, *, retry_after: float | None = None) -> None:
         super().__init__(f"{provider}: {detail}")
         self.provider = provider
         self.detail = detail
+        #: Seconds the provider asked us to wait, when it said so at all.
+        self.retry_after = retry_after
 
 
 @dataclass(frozen=True, slots=True)
