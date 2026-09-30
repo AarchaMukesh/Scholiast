@@ -5,15 +5,27 @@ and groundedness are **measured rather than asserted**. Portfolio project for ML
 Engineer interviews; the measurement discipline *is* the differentiator, not the
 feature list.
 
-**Status:** M0, M1 and **M2 complete** on `master`, built one phase per commit. M1 was the
-spine — schema, repositories, parser, index, pipeline, QA, API. M2 is the thesis: D-RET,
-the metric pipeline, four retrieval arms, the ablation axes, the GPU contention number and
-a CI regression gate. **796 tests, five gates green.** M3 is next: Celery, the worker
-split, and the operational surface.
+**Status:** M0, M1, M2 and **M3 complete**, built one phase per commit. M1 was the spine —
+schema, repositories, parser, index, pipeline, QA, API. M2 is the thesis: D-RET, the metric
+pipeline, four retrieval arms, the ablation axes, the GPU contention number and a CI
+regression gate. M3 is the operational surface: auth, three-layer tenant isolation, Celery,
+the §4.4.1 failure taxonomy, cascade deletion across three stores, a provider circuit
+breaker, observability, and rate limiting. **1218 tests, five gates green.** M4 is next:
+the discovery engine.
 
-**Read `docs/milestone-logs/M2-MILESTONE-LOG.md` before starting M3.** Milestone logs are
-the only tracked files under `docs/` (D67). M2's records what the numbers do *not* say,
-and that section sits above the findings on purpose.
+**Read `docs/milestone-logs/M3-MILESTONE-LOG.md` before starting M4**, then M2's for the
+retrieval numbers. Milestone logs are the only tracked files under `docs/` (D67), and each
+one's "what this does **not** establish" section sits above its findings on purpose.
+
+**M4 has two recorded preconditions** (M3 log §9): build the SSRF allowlist D115 moved
+there — discovery is the first thing that dereferences a URL it did not choose — and
+produce work on the `backfill` queue, which exists and is empty.
+
+**One of M3's eight acceptance criteria was amended rather than met**, by two decisions,
+both because a design document described behaviour the code could not perform: §5.11's `reranker_unavailable`
+and `dense_retrieval_unavailable` rungs are vacuous (D105), and `local_generation` now
+describes the happy path (D106). FR-O4 tracing is deferred (D109). Do not re-argue these
+either — they are in the M3 log §3.
 
 **Retrieval quality is now measured, and three of its four headline results are
 negative.** Do not re-argue any of these — they cost a phase each:
@@ -33,7 +45,7 @@ negative.** Do not re-argue any of these — they cost a phase each:
 
 ## Read this first
 
-**`docs/00-decisions-log.md` is the source of truth.** D1–D82, and several *reverse*
+**`docs/00-decisions-log.md` is the source of truth.** D1–D115, and several *reverse*
 what the earlier design docs say — including two that reverse *other decisions*.
 Reading doc 5, 6 or 7 without the log will lead you to recommend things already
 measured against:
@@ -71,7 +83,8 @@ measurements against a specific commit, so it belongs in history with it.
 
 | File | What it holds |
 |---|---|
-| `docs/00-decisions-log.md` | D1–D82 + measured hardware baseline. **Start here.** |
+| `docs/00-decisions-log.md` | D1–D115 + measured hardware baseline. **Start here.** |
+| `docs/milestone-logs/M3-MILESTONE-LOG.md` | M3's close-out: 7/8 criteria as written and 1 amended with cause, 15 defects and what found them, 96 mutations, debt to M4/M6 |
 | `docs/milestone-logs/M2-MILESTONE-LOG.md` | M2's close-out: 8/8 criteria, every measurement with its interval, 16 defects and what found them, debt to M3/M5/M6 |
 | `docs/milestone-logs/M1-MILESTONE-LOG.md` | M1's close-out: 7/7 criteria, what is *not* measured, debt to M2/M3/M5 |
 | `docs/03-requirements.md` | FR/NFR IDs referenced throughout the code |
