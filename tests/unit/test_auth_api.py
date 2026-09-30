@@ -37,6 +37,8 @@ from scholiast.application.use_cases.authentication import (
     RegisterUserUseCase,
     StartSessionUseCase,
 )
+from scholiast.config.settings import Settings
+from scholiast.infrastructure.security.ratelimit import FixedWindowLimiter
 from scholiast.infrastructure.security.tokens import JwtTokenService
 from tests.unit.test_authentication import FakeAccounts, FakeHasher, FakeSessions
 
@@ -68,6 +70,12 @@ def harness() -> Harness:
     register_error_handlers(app)
     app.include_router(auth.router)
     app.state.tokens = tokens
+    # This suite collapses twelve failure causes into one shape, which is more
+    # failing logins than NFR-SEC7's limit allows — so the limiter is off here.
+    # That it FIRES on the auth routes is asserted in `test_rate_limits.py`;
+    # keeping the two apart stops each test from depending on the other's number.
+    app.state.settings = Settings(rate_limit_enabled=False)
+    app.state.rate_limiter = FixedWindowLimiter()
 
     @app.get("/protected")
     async def _protected(tenant: deps.TenantDep) -> dict[str, str]:

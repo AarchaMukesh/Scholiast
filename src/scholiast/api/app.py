@@ -43,6 +43,7 @@ from scholiast.infrastructure.observability.logging import configure_logging
 from scholiast.infrastructure.queue.celery_app import build_celery_app
 from scholiast.infrastructure.queue.dispatch import CeleryDispatcher, NullDispatcher
 from scholiast.infrastructure.security.passwords import Argon2idHasher
+from scholiast.infrastructure.security.ratelimit import FixedWindowLimiter
 from scholiast.infrastructure.security.tokens import JwtTokenService
 from scholiast.infrastructure.storage.local import LocalObjectStore
 from scholiast.infrastructure.vector.qdrant import QdrantVectorIndex
@@ -148,6 +149,10 @@ def create_app(
     # a 500. The real lifespan replaces it when Celery is on.
     app.state.dispatcher = NullDispatcher()
     app.state.celery = None
+    # NFR-SEC7. Here for the same reason as the dispatcher: a lifespan override
+    # that forgot it would 500 on the first limited route. One per app, which in
+    # production is one per process (D112).
+    app.state.rate_limiter = FixedWindowLimiter()
 
     # FR-O1. Configured here rather than in the lifespan for the same reason the
     # dispatcher is: every lifespan override would otherwise have to remember it,

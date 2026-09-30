@@ -33,7 +33,7 @@ the two authentication repositories take the second one.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from typing import Annotated
 
 import structlog
@@ -41,6 +41,7 @@ from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from scholiast.api.errors import RateLimited
 from scholiast.application.ports.accounts import AccountRepository, SessionRepository
 from scholiast.application.ports.dispatch import JobDispatcher
 from scholiast.application.ports.llm import LLMProvider
@@ -76,6 +77,7 @@ from scholiast.infrastructure.db.repositories import (
     SqlWorkspaceRepository,
 )
 from scholiast.infrastructure.queue.postgres import PostgresQueue
+from scholiast.infrastructure.security.ratelimit import FixedWindowLimiter, Limit
 from scholiast.infrastructure.storage.local import LocalObjectStore
 
 log = structlog.get_logger(__name__)
@@ -253,6 +255,114 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 #: authentication repositories take it.
 AuthSessionDep = Annotated[AsyncSession, Depends(auth_session)]
 TenantDep = Annotated[TenantContext, Depends(current_tenant)]
+
+
+# --- rate limiting (NFR-SEC7, D112, D113) ---------------------------------
+#
+# A dependency rather than middleware, because the key needs the authenticated
+# principal and middleware runs before routing and before auth (D112). The known
+# cost is that every protected route has to remember it — the same trap phases 5
+# and 7 both hit — so the completeness test enumerates the routes that must carry
+# one and fails if a new expensive endpoint arrives without it.
+
+#: The limiter lives on `app.state`, defaulted in `create_app` alongside the
+#: dispatcher and for the same reason. It was module-level first, and that was
+#: wrong twice over: state shared across every app in a process makes one test's
+#: requests count against another's, so test order would change results — and in
+#: production there is exactly one app per process anyway, which makes app-scoped
+#: and process-scoped the same thing. The isolation is free.
+
+
+def _peer_key(request: Request) -> str:
+    """The socket peer. **`X-Forwarded-For` is deliberately not read** (D113).
+
+    Nothing sits in front of this app, so honouring the header would let any
+    caller mint a fresh bucket per forged value — a control an attacker opts out
+    of with one header — and would let them attribute their traffic to somebody
+    else's address. Under a future proxy this fails CLOSED: anonymous callers
+    share the proxy's bucket, which is too strict and says so, rather than
+    bypassable and silent.
+    """
+    client = request.client
+    return f"ip:{client.host}" if client is not None else "ip:unknown"
+
+
+def _enforce(request: Request, *, bucket: str, allowance: int, key: str) -> None:
+    settings: Settings = request.app.state.settings
+    if not settings.rate_limit_enabled:
+        return
+    limiter: FixedWindowLimiter = request.app.state.rate_limiter
+    decision = limiter.check(
+        key=key, bucket=bucket, limit=Limit(requests=allowance, window_seconds=60.0)
+    )
+    if not decision.allowed:
+        # Warning, not info: on a healthy system nobody hits these, so every line
+        # is either an attack or a limit set too low. Both want looking at.
+        log.warning("ratelimit.refused", bucket=bucket, route=request.url.path)
+        raise RateLimited(decision.retry_after)
+
+
+def user_rate_limit(bucket: str, allowance: Callable[[Settings], int]) -> Callable[..., None]:
+    """Limit an authenticated route, keyed by the principal.
+
+    **Takes `TenantDep` so the ordering is guaranteed rather than assumed.** A
+    dependency that read the user off `request.state` would depend on FastAPI
+    resolving authentication first; declaring the tenant as a parameter makes the
+    dependency graph enforce it, and an unauthenticated caller is refused by
+    `current_tenant` before any bucket is touched.
+
+    `allowance` is a function of `Settings`, not a number, so the limit is read
+    from the app actually serving the request — a value captured at import would
+    ignore a test's configuration and silently ignore an operator's.
+    """
+
+    def dependency(request: Request, scope: TenantDep) -> None:
+        _enforce(
+            request,
+            bucket=bucket,
+            allowance=allowance(request.app.state.settings),
+            key=f"user:{scope.user_id}",
+        )
+
+    # Read by the completeness test to see which routes are limited. An
+    # attribute rather than a name comparison, because a test that matched
+    # on "dependency" would silently start matching other closures.
+    dependency.rate_limit_bucket = bucket  # type: ignore[attr-defined]
+    return dependency
+
+
+def peer_rate_limit(bucket: str, allowance: Callable[[Settings], int]) -> Callable[..., None]:
+    """Limit an unauthenticated route, keyed by the socket peer.
+
+    This is the half that matters most: `/v1/auth/login` and `/register` have no
+    principal to key by, and they are what credential stuffing targets.
+    """
+
+    def dependency(request: Request) -> None:
+        _enforce(
+            request,
+            bucket=bucket,
+            allowance=allowance(request.app.state.settings),
+            key=_peer_key(request),
+        )
+
+    # Read by the completeness test to see which routes are limited. An
+    # attribute rather than a name comparison, because a test that matched
+    # on "dependency" would silently start matching other closures.
+    dependency.rate_limit_bucket = bucket  # type: ignore[attr-defined]
+    return dependency
+
+
+#: The buckets, named once so a route and its completeness test say the same
+#: string. Auth is peer-keyed; the rest are user-keyed.
+AUTH_BUCKET = "auth"
+QA_BUCKET = "qa"
+UPLOAD_BUCKET = "upload"
+
+AuthRateLimit = Depends(peer_rate_limit(AUTH_BUCKET, lambda s: s.rate_limit_auth_per_minute))
+QaRateLimit = Depends(user_rate_limit(QA_BUCKET, lambda s: s.rate_limit_qa_per_minute))
+UploadRateLimit = Depends(user_rate_limit(UPLOAD_BUCKET, lambda s: s.rate_limit_upload_per_minute))
+
 IndexDep = Annotated[VectorIndex, Depends(get_index)]
 EmbedderDep = Annotated[Embedder, Depends(get_embedder)]
 ProvidersDep = Annotated[list[LLMProvider], Depends(get_providers)]

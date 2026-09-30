@@ -142,6 +142,42 @@ def _is_sensitive(key: str) -> bool:
     return any(marker in lowered for marker in _SECRET_SUBSTRINGS)
 
 
+class _StdoutLogger:
+    """Writes one rendered line to `sys.stdout`, looked up at call time.
+
+    **Why not `structlog.PrintLoggerFactory(file=sys.stdout)`**, which is the
+    obvious spelling: it captures the stream object when the logger is built, and
+    `cache_logger_on_first_use` means that is once per process. Anything that
+    later replaces `sys.stdout` — a supervisor redirecting output, a reload, a
+    `contextlib.redirect_stdout`, or a test harness capturing per test — leaves
+    every subsequent write going to the old object, and a *closed* old object
+    raises.
+
+    That is not hypothetical: it surfaced as an unrelated 500 in the rate-limit
+    suite, because `create_app` configures logging and the first test to build an
+    app bound the stream for the whole process. Resolving per write costs one
+    attribute lookup and removes the class of bug.
+    """
+
+    def msg(self, message: str) -> None:
+        stream = sys.stdout
+        stream.write(f"{message}\n")
+        stream.flush()
+
+    log = debug = info = warn = warning = msg
+    error = critical = exception = fatal = msg
+
+
+class _StdoutLoggerFactory:
+    """structlog's factory protocol: called with the logger name, returns a logger."""
+
+    def __call__(self, *args: object) -> _StdoutLogger:  # noqa: ARG002 - protocol shape
+        # structlog passes the logger name positionally. Ignored: the name is
+        # already in the event dict via `add_logger_name`-style processors and the
+        # renderer, so a logger that also embedded it would print it twice.
+        return _StdoutLogger()
+
+
 _configured = False
 
 
@@ -152,6 +188,11 @@ def configure_logging(*, level: str = "INFO", json_format: bool = True) -> None:
     `worker_in_process` true (D63), one process is both of them. Re-running the
     configuration would be harmless today and is exactly the kind of thing that
     stops being harmless once a processor holds state.
+
+    **The stream is resolved per write, not bound here** — see
+    `_StdoutLoggerFactory`. Binding `sys.stdout` at configuration time is the
+    obvious implementation and it is wrong for any process that later replaces the
+    stream.
 
     `stdlib` logging is pointed at the same renderer so that uvicorn's and
     SQLAlchemy's records come out in the same shape. A log stream that is JSON
@@ -182,7 +223,7 @@ def configure_logging(*, level: str = "INFO", json_format: bool = True) -> None:
         wrapper_class=structlog.make_filtering_bound_logger(
             logging.getLevelNamesMapping().get(level.upper(), logging.INFO)
         ),
-        logger_factory=structlog.PrintLoggerFactory(file=sys.stdout),
+        logger_factory=_StdoutLoggerFactory(),
         cache_logger_on_first_use=True,
     )
 

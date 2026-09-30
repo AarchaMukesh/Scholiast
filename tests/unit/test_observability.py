@@ -29,6 +29,7 @@ from fastapi.testclient import TestClient
 
 from scholiast.api.middleware import UNMATCHED_ROUTE, ObservabilityMiddleware
 from scholiast.application.ports.llm import TokenUsage
+from scholiast.config.settings import Settings
 from scholiast.infrastructure.observability import metrics
 from scholiast.infrastructure.observability.logging import (
     CORRELATION_HEADER,
@@ -272,10 +273,16 @@ class TestLogOutputIsJson:
         bind_correlation_id("cid-1")
         try:
             structlog.get_logger("test").info("probe.event", job_id="j1", password="leak")
+            line = capsys.readouterr().out.strip().splitlines()[-1]
         finally:
             bind_correlation_id(None)
-
-        line = capsys.readouterr().out.strip().splitlines()[-1]
+            # `configure_logging` binds `sys.stdout` at configuration time, and
+            # pytest swaps it per test — so leaving the process configured here
+            # makes every LATER test's log write go to a closed stream. That
+            # surfaced as an unrelated 500 in the rate-limit suite, which is
+            # exactly the kind of order-dependent failure a global mutation
+            # causes. Unconfiguring restores structlog's own lazy default.
+            reset_for_tests()
         record = json.loads(line)
         assert record["event"] == "probe.event"
         assert record["job_id"] == "j1"
@@ -332,13 +339,18 @@ class FakeIndex:
 
 
 def ops_client(
-    *, db_ok: bool = True, index: object | None = None, providers: object | None = None
+    *,
+    db_ok: bool = True,
+    index: object | None = None,
+    providers: object | None = None,
+    token: str | None = None,
 ) -> TestClient:
     from scholiast.api.routers import health
 
     app = FastAPI()
     app.include_router(health.router)
     app.state.sessions = FakeSessions(fails=not db_ok)
+    app.state.settings = Settings(metrics_token=token)
     if index is not None:
         app.state.index = index
     if providers is not None:

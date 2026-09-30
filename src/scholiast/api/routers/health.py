@@ -32,11 +32,12 @@ unhealthy dependency tells an anonymous caller something about the deployment;
 
 from __future__ import annotations
 
+from hmac import compare_digest
 from http import HTTPStatus
 from typing import Any
 
 import structlog
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import text
 
 from scholiast.infrastructure.observability import metrics
@@ -46,13 +47,45 @@ log = structlog.get_logger(__name__)
 router = APIRouter(tags=["health"])
 
 
+def require_scrape_token(request: Request) -> None:
+    """Gate the ops endpoints on a static token, when one is configured (D114).
+
+    **Optional by design.** Requiring it unconditionally would break
+    `docker compose up` plus one command and every local `curl`, for an endpoint
+    that on a development machine is exposed to nobody. Off by default means a
+    deployment has something to switch on, which is what closing D110 was for.
+
+    A static token, not phase 1's bearer JWT: a scraper polls every fifteen
+    seconds forever and cannot refresh something that expires. The comparison is
+    constant-time, because a token checked with `==` leaks its prefix to anyone
+    willing to measure — the same reasoning phase 1 applied to password
+    verification, for a secret that travels on every scrape.
+
+    `/health/live` is NOT gated: an orchestrator's restart decision must not
+    require a credential, and it answers the same thing whatever is wrong.
+    """
+    configured: str | None = request.app.state.settings.metrics_token
+    if not configured:
+        return
+    header = request.headers.get("authorization", "")
+    scheme, _, presented = header.partition(" ")
+    if scheme.lower() != "bearer" or not compare_digest(presented, configured):
+        # 401 with `WWW-Authenticate`, per RFC 9110 — the same shape phase 1's
+        # unauthenticated handler uses, so a scraper sees one convention.
+        raise HTTPException(
+            status_code=HTTPStatus.UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+
 @router.get("/health/live")
 async def live() -> dict[str, str]:
     """The process is running and the event loop is turning."""
     return {"status": "ok"}
 
 
-@router.get("/health/ready")
+@router.get("/health/ready", dependencies=[Depends(require_scrape_token)])
 async def ready(request: Request, response: Response) -> dict[str, Any]:
     """Dependency status, with a 503 when something required is down (FR-O2).
 
@@ -79,7 +112,7 @@ async def ready(request: Request, response: Response) -> dict[str, Any]:
     return {"status": "ready" if required_ok else "not_ready", "checks": checks}
 
 
-@router.get("/metrics")
+@router.get("/metrics", dependencies=[Depends(require_scrape_token)])
 async def prometheus_metrics(request: Request) -> Response:
     """The exposition format (FR-O3).
 

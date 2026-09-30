@@ -85,6 +85,29 @@ class Settings(BaseSettings):
     #: there is residue. Shorter means faster convergence and more scanning.
     reconcile_interval_seconds: float = 300.0
 
+    # -- rate limiting and the ops surface (NFR-SEC7, D112-D114) -----------
+    #: Off switch for the limiter. Present so a load test can measure the system
+    #: rather than the limiter, and so a deployment that puts a real limiter in
+    #: front can turn this one off instead of stacking two.
+    rate_limit_enabled: bool = True
+    #: Login, register and refresh, keyed by socket peer (D113). Ten a minute
+    #: leaves room for typos and a password manager retrying, and makes
+    #: credential stuffing pay a rate the Argon2id cost already makes expensive.
+    rate_limit_auth_per_minute: int = 10
+    #: The QA path, keyed by user. The most expensive endpoint in the system:
+    #: retrieval plus generation, and NFR-P2's budget is per request. Twenty a
+    #: minute is well above a human reading answers and well below monopolising
+    #: the GPU.
+    rate_limit_qa_per_minute: int = 20
+    #: Uploads, keyed by user. Bounded because each one costs a GROBID parse and
+    #: an embedding pass, not because the HTTP request is expensive.
+    rate_limit_upload_per_minute: int = 30
+    #: When set, `/metrics` and `/health/ready` require it as a bearer token
+    #: (D114). Empty leaves them open, which is the development default;
+    #: `/health/live` is never gated, because an orchestrator's restart decision
+    #: must not need a credential.
+    metrics_token: str | None = None
+
     # -- observability (§5.12, FR-O1) --------------------------------------
     #: JSON because the consumer is a collector, not a terminal. `false` gives
     #: structlog's console renderer for local work — a format choice, not a

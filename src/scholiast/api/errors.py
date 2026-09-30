@@ -76,6 +76,20 @@ def problem(
     return JSONResponse(status_code=status, content=body, media_type=PROBLEM_CONTENT_TYPE)
 
 
+class RateLimited(Exception):
+    """This caller has used its allowance for now (NFR-SEC7, D112).
+
+    Defined here rather than in `domain/` because it is not a domain event: no
+    rule about papers or workspaces was broken, and a different deployment with
+    a proxy in front might refuse the same request before it ever reached this
+    process. It is an API policy, so it lives with the handler that renders it.
+    """
+
+    def __init__(self, retry_after: float) -> None:
+        super().__init__(f"rate limited, retry after {retry_after:.0f}s")
+        self.retry_after = retry_after
+
+
 #: Upload failures carry a `FailureClass`, and the class decides the status: a
 #: file that is too big is a 413, a file that is not a PDF is a 415. Mapping them
 #: both to 400 would throw away the only thing the client could act on.
@@ -160,6 +174,25 @@ def register_error_handlers(app: FastAPI) -> None:
             detail=str(exc),
             instance=request.url.path,
         )
+
+    @app.exception_handler(RateLimited)
+    async def _rate_limited(request: Request, exc: RateLimited) -> JSONResponse:
+        # 429 with `Retry-After`, which is the same courtesy this system expects
+        # from Groq (D103): a refusal that says when to come back costs nothing
+        # to honour and saves the caller from guessing.
+        #
+        # The detail deliberately does NOT say which limit was hit or how much of
+        # it remains. That would let a caller map the buckets and pace itself to
+        # just under each one, which is the opposite of what the limit is for.
+        response = problem(
+            status=HTTPStatus.TOO_MANY_REQUESTS,
+            slug="rate-limited",
+            title="Too many requests",
+            detail="Too many requests. Please slow down and try again shortly.",
+            instance=request.url.path,
+        )
+        response.headers["Retry-After"] = str(max(1, int(exc.retry_after) + 1))
+        return response
 
     @app.exception_handler(AuthenticationFailed)
     async def _unauthenticated(

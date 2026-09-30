@@ -27,6 +27,7 @@ from fastapi import APIRouter, HTTPException, Response
 
 from scholiast.api import schemas
 from scholiast.api.deps import (
+    AuthRateLimit,
     EndSessionDep,
     RefreshSessionDep,
     RegisterUserDep,
@@ -50,7 +51,11 @@ def _to_pair(tokens: SessionTokens) -> schemas.TokenPair:
     )
 
 
-@router.post("/register", status_code=HTTPStatus.CREATED)
+@router.post(
+    "/register",
+    status_code=HTTPStatus.CREATED,
+    dependencies=[AuthRateLimit],
+)
 async def register(body: schemas.RegisterRequest, use_case: RegisterUserDep) -> schemas.TokenPair:
     """Create an account and return its first session."""
     try:
@@ -61,13 +66,13 @@ async def register(body: schemas.RegisterRequest, use_case: RegisterUserDep) -> 
         ) from error
 
 
-@router.post("/login")
+@router.post("/login", dependencies=[AuthRateLimit])
 async def login(body: schemas.LoginRequest, use_case: StartSessionDep) -> schemas.TokenPair:
     """Exchange credentials for a token pair. One failure shape for every cause."""
     return _to_pair(await use_case.execute(email=body.email, password=body.password))
 
 
-@router.post("/refresh")
+@router.post("/refresh", dependencies=[AuthRateLimit])
 async def refresh(body: schemas.RefreshRequest, use_case: RefreshSessionDep) -> schemas.TokenPair:
     """Rotate a refresh token. Single-use: the presented one dies here (D84)."""
     return _to_pair(await use_case.execute(refresh_token=body.refresh_token))

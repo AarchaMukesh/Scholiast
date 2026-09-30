@@ -26,6 +26,7 @@ from scholiast.api.deps import (
     RemovePaperDep,
     SectionsDep,
     SessionDep,
+    UploadRateLimit,
     WorkspacesDep,
 )
 from scholiast.domain.errors import FailureClass, WorkspaceNotAvailable
@@ -45,7 +46,12 @@ async def _scoped_workspace(workspace_id: str, repo: WorkspacesDep) -> Workspace
     return workspace
 
 
-@router.post("/upload", status_code=HTTPStatus.ACCEPTED, response_model=schemas.UploadAccepted)
+@router.post(
+    "/upload",
+    status_code=HTTPStatus.ACCEPTED,
+    response_model=schemas.UploadAccepted,
+    dependencies=[UploadRateLimit],
+)
 async def upload_paper(
     workspace_id: str, use_case: AddPaperDep, file: UploadFile = File(...)
 ) -> schemas.UploadAccepted:

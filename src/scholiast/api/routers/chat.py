@@ -24,7 +24,7 @@ from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
 from scholiast.api import schemas
-from scholiast.api.deps import AnswerDep, ConversationsDep, WorkspacesDep
+from scholiast.api.deps import AnswerDep, ConversationsDep, QaRateLimit, WorkspacesDep
 from scholiast.application.ports.llm import TokenUsage
 from scholiast.application.use_cases.answer_question import (
     AnswerComplete,
@@ -88,7 +88,7 @@ async def list_messages(
     ]
 
 
-@router.post("/{conversation_id}/messages")
+@router.post("/{conversation_id}/messages", dependencies=[QaRateLimit])
 async def ask(
     workspace_id: str,
     conversation_id: str,
