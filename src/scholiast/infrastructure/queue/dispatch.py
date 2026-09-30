@@ -43,6 +43,11 @@ class CeleryDispatcher:
         self._queue = queue
         self._maintenance_queue = maintenance_queue
 
+    @property
+    def publishes(self) -> bool:
+        """True: a failed dispatch here is a real broker problem worth logging."""
+        return True
+
     async def dispatch(self, job_id: str) -> bool:
         """Publish a wake-up for one committed job.
 
@@ -90,6 +95,16 @@ class NullDispatcher:
     configuration is the only difference between the two topologies — the call
     site does not branch on which one it is talking to.
     """
+
+    @property
+    def publishes(self) -> bool:
+        """False: there is no broker, so a False from `dispatch` is not a failure.
+
+        This is what stops the composition root warning on every upload in the
+        default single-process topology (FR-O1, and D106's principle that a
+        warning firing on the normal path carries no information).
+        """
+        return False
 
     async def dispatch(self, job_id: str) -> bool:  # noqa: ARG002 - the point is to do nothing
         return False

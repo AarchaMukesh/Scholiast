@@ -85,6 +85,13 @@ class Settings(BaseSettings):
     #: there is residue. Shorter means faster convergence and more scanning.
     reconcile_interval_seconds: float = 300.0
 
+    # -- observability (§5.12, FR-O1) --------------------------------------
+    #: JSON because the consumer is a collector, not a terminal. `false` gives
+    #: structlog's console renderer for local work — a format choice, not a
+    #: different logging system.
+    log_json: bool = True
+    log_level: str = "INFO"
+
     # -- provider circuit breaker (§5.11, D104) ----------------------------
     #: Consecutive failures before a provider is skipped without being called.
     #: Three, matching D48's retry budget for the same reason: it survives a

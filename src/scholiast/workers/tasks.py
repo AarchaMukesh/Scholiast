@@ -51,6 +51,7 @@ from scholiast.application.ports.ml import Precision
 from scholiast.config.settings import Settings, get_settings
 from scholiast.infrastructure.db.engine import build_engine, build_session_factory
 from scholiast.infrastructure.ml.embedder import LocalEmbedder
+from scholiast.infrastructure.observability.logging import configure_logging
 from scholiast.infrastructure.parsing.grobid import GrobidParser
 from scholiast.infrastructure.queue.celery_app import (
     DELETE_TASK,
@@ -67,6 +68,12 @@ log = structlog.get_logger(__name__)
 
 #: Celery discovers tasks on this module-level object.
 app = build_celery_app(get_settings())
+
+# FR-O1. At import, because `celery -A ... worker` imports this module and then
+# starts logging from its own bootstrap before any task runs — configuring inside
+# `_process_context` would leave the worker's startup lines unstructured. Cheap
+# and idempotent, unlike the pool and the encoder, which is why those wait.
+configure_logging(level=get_settings().log_level, json_format=get_settings().log_json)
 
 
 @dataclass

@@ -445,6 +445,10 @@ class IngestionJob(Base):
         Integer, nullable=False, default=0, server_default=sa_text("0")
     )
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: FR-O1's correlation id, following the WORK rather than the message (D107).
+    #: Nullable because every row written before migration 0006 has no request
+    #: behind it, and because a job the sweep created has no request either.
+    correlation_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     #: The lease. A crashed worker's job becomes visible again rather than being
     #: lost, which is the at-least-once half of AD-5.
     visible_at: Mapped[datetime] = mapped_column(

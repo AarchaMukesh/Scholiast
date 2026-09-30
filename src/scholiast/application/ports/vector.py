@@ -127,6 +127,19 @@ class VectorIndex(Protocol):
         """
         ...
 
+    async def ping(self) -> bool:
+        """Whether the index is reachable. For FR-O2's readiness probe.
+
+        Deliberately not `count()`: an exact count is work proportional to the
+        collection, and a readiness probe runs every few seconds forever. What
+        readiness needs to know is whether the store answers at all, which is a
+        metadata call.
+
+        Returns False rather than raising, because a probe that 500s tells the
+        caller less than a probe that says which dependency is down.
+        """
+        ...
+
     async def count_orphans(self, live_paper_ids: Sequence[str]) -> int:
         """Vectors whose paper is no longer in Postgres (§5.6.4 step 4, D102).
 

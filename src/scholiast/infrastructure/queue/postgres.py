@@ -47,6 +47,7 @@ from scholiast.application.ports.tenancy import Scope, TenantIsolationViolation
 from scholiast.domain.errors import FailureClass
 from scholiast.domain.workspace import PaperState, terminal_state_for
 from scholiast.infrastructure.db import models, pending
+from scholiast.infrastructure.observability.logging import current_correlation_id
 
 #: Claimable states: queued, plus every in-flight stage. Including the in-flight
 #: stages is what makes the lease a redelivery mechanism — a worker that died
@@ -111,6 +112,11 @@ class PostgresQueue:
             paper_id=uuid.UUID(paper_id),
             state=PaperState.QUEUED.value,
             attempts=0,
+            # Read from the ambient context rather than taken as a parameter
+            # (D107). A correlation id is not a domain concept, so threading it
+            # through `AddPaperUseCase` would make the application layer
+            # describe logging; None outside a request is the truth.
+            correlation_id=current_correlation_id(),
         )
         self._session.add(row)
         await self._session.flush()
@@ -162,6 +168,10 @@ class PostgresQueue:
                     models.IngestionJob.paper_id,
                     models.IngestionJob.state,
                     models.IngestionJob.attempts,
+                    # D107. Returned by the claim because that is the only place
+                    # the worker learns anything about the job, and the id has to
+                    # arrive with the work rather than be fetched afterwards.
+                    models.IngestionJob.correlation_id,
                 )
             )
         ).all()
@@ -172,6 +182,7 @@ class PostgresQueue:
                 paper_id=str(row.paper_id),
                 state=PaperState(row.state),
                 attempts=row.attempts,
+                correlation_id=row.correlation_id,
             )
             for row in rows
         ]

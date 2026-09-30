@@ -52,6 +52,7 @@ from scholiast.infrastructure.db.repositories import (
     SqlPaperRepository,
     SqlSectionRepository,
 )
+from scholiast.infrastructure.observability.logging import bind_correlation_id
 from scholiast.infrastructure.queue.postgres import PostgresQueue
 
 log = structlog.get_logger(__name__)
@@ -157,6 +158,13 @@ class IngestionWorker:
             return jobs
 
     async def _process(self, job: QueuedJob) -> IngestionOutcome | None:
+        # FR-O1, D107. Bound from the ROW, so every line below joins to the
+        # request that accepted this paper — including on a redelivery, where the
+        # Celery message that woke this worker may have named a different job
+        # entirely. Bound before the first log line, and re-bound per job rather
+        # than per task: one `run_once` can process several.
+        bind_correlation_id(job.correlation_id)
+
         owner_id = await self._owner_of(job.workspace_id)
         if owner_id is None:
             # The workspace was deleted under the job. Nothing to ingest into

@@ -51,7 +51,15 @@ from scholiast.infrastructure.storage.local import LocalObjectStore
 from scholiast.infrastructure.vector.qdrant import QdrantVectorIndex
 from scholiast.workers.ingestion import IngestionWorker, WorkerConfig
 
-from scholiast.application.ports.tenancy import TenantContext  # isort: skip
+from scholiast.application.ports.tenancy import (  # isort: skip
+    WORKER_CLAIM_REASON,
+    SystemContext,
+    TenantContext,
+)
+from scholiast.infrastructure.observability.logging import (  # isort: skip
+    bind_correlation_id,
+    current_correlation_id,
+)
 
 pytestmark = [pytest.mark.integration]
 
@@ -782,3 +790,126 @@ class TestAClassifiedFailureSurvivesAPoisonedSession:
         assert row.failure_class == FailureClass.UNPARSEABLE.value
         assert "no extractable text" in (row.failure_detail or "")
         assert "transaction" not in (row.failure_detail or "").lower()
+
+
+@needs_qdrant
+class TestTheCorrelationIdFollowsTheWork:
+    """FR-O1 and D107, against real Postgres and a real migration.
+
+    The half that matters is the one a Celery header could not do. Under D95 the
+    message is a wake-up and the worker claims whatever is due, so the id has to
+    be on the ROW to survive a redelivery and to describe the job that actually
+    ran rather than the one a message happened to name.
+
+    The HTTP end of the chain — request header to contextvar — is covered in
+    `tests/unit/test_observability.py`; this is contextvar to row to claim.
+    """
+
+    async def test_an_upload_stamps_its_correlation_id_on_the_job(self, harness: Harness) -> None:
+        bind_correlation_id("cid-upload-1")
+        try:
+            result = await harness.upload(MINIMAL_PDF, "correlated.pdf")
+        finally:
+            bind_correlation_id(None)
+
+        async with harness.sessions() as session:
+            stored = (
+                await session.execute(
+                    text(
+                        "SELECT correlation_id FROM ingestion_jobs "
+                        "WHERE paper_id = CAST(:p AS uuid)"
+                    ),
+                    {"p": result.paper_id},
+                )
+            ).scalar_one()
+
+        assert stored == "cid-upload-1"
+
+    async def test_the_claim_hands_it_back_to_the_worker(self, harness: Harness) -> None:
+        # The join an operator needs: a worker log line and the request that
+        # accepted the paper carry the same id. Read back through `claim` rather
+        # than by re-querying, because the worker only ever sees `QueuedJob`.
+        bind_correlation_id("cid-claim-1")
+        try:
+            await harness.upload(MINIMAL_PDF, "correlated.pdf")
+        finally:
+            bind_correlation_id(None)
+
+        async with harness.sessions() as session:
+            claimed = await PostgresQueue(session, SystemContext(reason=WORKER_CLAIM_REASON)).claim(
+                limit=1
+            )
+
+        assert [job.correlation_id for job in claimed] == ["cid-claim-1"]
+
+    async def test_a_job_enqueued_outside_a_request_has_none_not_a_fabricated_id(
+        self, harness: Harness
+    ) -> None:
+        # None is the truth for work with no request behind it — a sweep, a CLI,
+        # a backfill. Minting one here would fabricate a link to a log line that
+        # does not exist, which is the reason migration 0006 leaves the column
+        # nullable rather than backfilling it.
+        bind_correlation_id(None)
+        result = await harness.upload(MINIMAL_PDF, "uncorrelated.pdf")
+
+        async with harness.sessions() as session:
+            stored = (
+                await session.execute(
+                    text(
+                        "SELECT correlation_id FROM ingestion_jobs "
+                        "WHERE paper_id = CAST(:p AS uuid)"
+                    ),
+                    {"p": result.paper_id},
+                )
+            ).scalar_one()
+
+        assert stored is None
+
+
+class CorrelationWatchingParser:
+    """Records the correlation id in force at the moment real work begins."""
+
+    version = "correlation-watch/1.0.0"
+
+    def __init__(self) -> None:
+        self.seen: list[str | None] = []
+
+    async def parse(self, pdf: bytes, *, filename: str = "") -> ParsedDocument:
+        self.seen.append(current_correlation_id())
+        raise DocumentUnparseable(FailureClass.UNPARSEABLE, "watched and stopped")
+
+
+@needs_qdrant
+class TestTheWorkerBindsTheIdBeforeItWorks:
+    """The other half of FR-O1's propagation, and the half a mutation exposed.
+
+    Asserting that `claim` RETURNS the id proves the column round-trips; it does
+    not prove the worker ever binds it, so deleting `bind_correlation_id` from
+    `_process` left every test passing. This observes the id from inside the
+    pipeline — a stub parser reading the ambient context — which is the same
+    place a real log line would read it from.
+    """
+
+    async def test_the_pipeline_runs_under_the_uploaders_correlation_id(
+        self, harness: Harness
+    ) -> None:
+        bind_correlation_id("cid-through-the-worker")
+        try:
+            await harness.upload(MINIMAL_PDF, "watched.pdf")
+        finally:
+            # Unbound before the worker runs, so a pass cannot come from the id
+            # simply still being set in this test's own context.
+            bind_correlation_id(None)
+
+        parser = CorrelationWatchingParser()
+        worker = IngestionWorker(
+            sessions=harness.sessions,
+            store=harness.store,
+            parser=parser,
+            embedder=harness.embedder,
+            index=harness.index,
+            config=WorkerConfig(poll_seconds=0.05),
+        )
+        await worker.run_once()
+
+        assert parser.seen == ["cid-through-the-worker"]

@@ -32,12 +32,14 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from scholiast.api.errors import register_error_handlers
+from scholiast.api.middleware import ObservabilityMiddleware
 from scholiast.api.routers import auth, chat, health, papers, workspaces
 from scholiast.application.ports.ml import Precision
 from scholiast.config.settings import Settings, get_settings
 from scholiast.infrastructure.db.engine import build_engine, build_session_factory
 from scholiast.infrastructure.llm.chain import build_provider_chain
 from scholiast.infrastructure.ml.embedder import LocalEmbedder
+from scholiast.infrastructure.observability.logging import configure_logging
 from scholiast.infrastructure.queue.celery_app import build_celery_app
 from scholiast.infrastructure.queue.dispatch import CeleryDispatcher, NullDispatcher
 from scholiast.infrastructure.security.passwords import Argon2idHasher
@@ -146,6 +148,17 @@ def create_app(
     # a 500. The real lifespan replaces it when Celery is on.
     app.state.dispatcher = NullDispatcher()
     app.state.celery = None
+
+    # FR-O1. Configured here rather than in the lifespan for the same reason the
+    # dispatcher is: every lifespan override would otherwise have to remember it,
+    # and the one that forgot would produce an app whose logs are unstructured
+    # with nothing failing to say so. Idempotent, so the worker process calling
+    # it too is not a conflict.
+    configure_logging(level=app.state.settings.log_level, json_format=app.state.settings.log_json)
+    # Outermost, so it sees the status and duration of everything including the
+    # error handlers below — a middleware added after them would time the app
+    # and miss the response they produce.
+    app.add_middleware(ObservabilityMiddleware)
 
     register_error_handlers(app)
     app.include_router(auth.router)

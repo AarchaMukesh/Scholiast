@@ -25,6 +25,7 @@ from fastapi.responses import StreamingResponse
 
 from scholiast.api import schemas
 from scholiast.api.deps import AnswerDep, ConversationsDep, WorkspacesDep
+from scholiast.application.ports.llm import TokenUsage
 from scholiast.application.use_cases.answer_question import (
     AnswerComplete,
     AnswerEvent,
@@ -32,6 +33,7 @@ from scholiast.application.use_cases.answer_question import (
     EvidenceReady,
 )
 from scholiast.domain.errors import WorkspaceNotAvailable
+from scholiast.infrastructure.observability import metrics
 
 router = APIRouter(prefix="/v1/workspaces/{workspace_id}/conversations", tags=["chat"])
 
@@ -178,8 +180,41 @@ async def _frames(events: AsyncIterator[AnswerEvent]) -> AsyncIterator[str]:
                         "prompt_version": event.prompt_version,
                         "message_id": event.message_id,
                         "latency_ms": event.timings.as_dict(),
+                        "tokens": {
+                            "prompt": event.prompt_tokens,
+                            "completion": event.completion_tokens,
+                        },
                     },
                 )
+                # Recorded HERE rather than in the use case, because the use case
+                # is in `application/` and may not import an adapter — the
+                # layering contract makes the router the innermost place that can
+                # see a finished answer and reach a metrics registry (FR-O3).
+                _record_answer_metrics(event)
+
+
+def _record_answer_metrics(event: AnswerComplete) -> None:
+    """Stage timings, token spend and degradations for one finished answer.
+
+    Timings arrive in milliseconds and are exported in seconds, because the
+    Prometheus convention is base units and a dashboard that mixes the two
+    produces graphs that are wrong by a thousand without looking wrong.
+    """
+    metrics.record_stages(
+        {
+            stage.removesuffix("_ms"): value / 1000.0
+            for stage, value in event.timings.as_dict().items()
+        }
+    )
+    metrics.record_generation(
+        provider=event.provider,
+        usage=TokenUsage(
+            prompt_tokens=event.prompt_tokens or 0,
+            completion_tokens=event.completion_tokens or 0,
+            reported=event.prompt_tokens is not None,
+        ),
+    )
+    metrics.record_degradations(event.degraded)
 
 
 def _frame(event: str, payload: dict[str, object]) -> str:

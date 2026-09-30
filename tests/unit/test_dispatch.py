@@ -50,6 +50,10 @@ class FakeCelery:
 
 
 class RecordingDispatcher:
+    #: True, because this fake stands in for a real broker. A False here would
+    #: silence the warning the composition root logs on a failed publish.
+    publishes = True
+
     def __init__(self) -> None:
         self.dispatched: list[str] = []
         self.deleted: list[str] = []
@@ -113,6 +117,18 @@ class TestTheCeleryDispatcher:
 
     async def test_the_null_dispatcher_declines_deletions_too(self) -> None:
         assert await NullDispatcher().dispatch_deletion("ws-1") is False
+
+    def test_only_a_real_broker_claims_to_publish(self) -> None:
+        """FR-O1's log line depends on this distinction being in the contract.
+
+        `dispatch` returns False both when a broker was unreachable and when
+        there is no broker by design (D63's single-process topology). Without
+        `publishes` to tell them apart, the composition root's warning would fire
+        on EVERY upload in the default development configuration — which is the
+        mistake D106 names: a warning on the normal path carries no information.
+        """
+        assert CeleryDispatcher(FakeCelery()).publishes is True
+        assert NullDispatcher().publishes is False
 
 
 class TestDispatchHappensAfterTheCommit:

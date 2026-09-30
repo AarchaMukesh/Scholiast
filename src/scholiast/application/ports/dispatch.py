@@ -34,6 +34,21 @@ from typing import Protocol, runtime_checkable
 class JobDispatcher(Protocol):
     """Tell a worker there is something to claim."""
 
+    @property
+    def publishes(self) -> bool:
+        """Whether this dispatcher talks to a broker at all.
+
+        **The distinction exists so a log line can mean something** (FR-O1).
+        `dispatch` returns False both when a broker was unreachable and when
+        there is no broker by design — the single-process topology, where the
+        in-process worker already polls the same database (D63). Without a way to
+        tell those apart, a warning on a failed publish would fire on *every*
+        upload in the default development configuration, which is the mistake
+        D106 names: a warning that fires on the normal path stops carrying
+        information.
+        """
+        ...
+
     async def dispatch(self, job_id: str) -> bool:
         """Best-effort wake-up for one committed job.
 

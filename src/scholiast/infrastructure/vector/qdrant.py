@@ -331,6 +331,17 @@ class QdrantVectorIndex:
         )
         return int(result.count)
 
+    async def ping(self) -> bool:
+        """Reachability, for FR-O2. A metadata call, not a count."""
+        try:
+            await self._client.get_collections()
+        except Exception:
+            # Deliberately broad: connection refused, DNS, auth and a protocol
+            # mismatch all mean the same thing to a readiness probe, and a probe
+            # that raised would report "the API is broken" for "Qdrant is down".
+            return False
+        return True
+
     async def count_orphans(self, live_paper_ids: Sequence[str]) -> int:
         """Points whose paper is not in `live_paper_ids` (§5.6.4 step 4)."""
         result = await self._client.count(

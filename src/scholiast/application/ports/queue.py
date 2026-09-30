@@ -62,6 +62,14 @@ class QueuedJob:
     paper_id: str
     state: PaperState
     attempts: int
+    #: FR-O1's correlation id, captured when the job was accepted (D107). The
+    #: worker binds it so its log lines join to the request that created the
+    #: work — which the Celery message cannot supply, because under D95 the
+    #: message is a wake-up and the claim decides what actually runs.
+    #:
+    #: None for a job enqueued outside a request, and for every row written
+    #: before migration 0006.
+    correlation_id: str | None = None
 
 
 @runtime_checkable

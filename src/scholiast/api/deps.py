@@ -36,6 +36,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Annotated
 
+import structlog
 from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -77,6 +78,8 @@ from scholiast.infrastructure.db.repositories import (
 from scholiast.infrastructure.queue.postgres import PostgresQueue
 from scholiast.infrastructure.storage.local import LocalObjectStore
 
+log = structlog.get_logger(__name__)
+
 
 async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
     """One unit of work per request: commit on success, roll back on failure.
@@ -114,14 +117,17 @@ async def _dispatch_committed_jobs(request: Request, session: AsyncSession) -> N
     That is the whole reason Celery can be the transport without giving up D47's
     single-transaction guarantee.
 
-    The adapter reports failure by returning False rather than raising, and that
-    result is **deliberately ignored here**: the request has already succeeded,
-    turning a broker hiccup into a failed upload would be a worse answer than a
-    slower one, and there is nothing useful this path can do about it. The cost
-    is that a broker outage is currently invisible — it shows up as ingestion
-    starting at the poll interval instead of immediately, with nothing saying
-    why. `api` has no logger yet; phase 7 owns that, and this is a named place
-    for it to land rather than an oversight.
+    The adapter reports failure by returning False rather than raising, and the
+    request still succeeds: turning a broker hiccup into a failed upload would be
+    a worse answer than a slower one, and the lease already covers the work.
+
+    **What phase 7 changed is that the failure is no longer invisible** (FR-O1).
+    Phases 3 and 5 both left this comment saying `api` had no logger and a broker
+    outage therefore showed up only as ingestion starting at the poll interval
+    with nothing saying why. It now logs at warning, with the correlation id the
+    middleware bound, so the slow path is attributable to the outage that caused
+    it. The result is still not raised — logging it is the useful thing available
+    here, and failing the request is not.
     """
     jobs = pending.drain(session, pending.PENDING_DISPATCH)
     deletions = pending.drain(session, pending.PENDING_DELETION_DISPATCH)
@@ -129,9 +135,13 @@ async def _dispatch_committed_jobs(request: Request, session: AsyncSession) -> N
         return
     dispatcher: JobDispatcher = request.app.state.dispatcher
     for job_id in jobs:
-        await dispatcher.dispatch(job_id)
+        published = await dispatcher.dispatch(job_id)
+        if dispatcher.publishes and not published:
+            log.warning("dispatch.not_published", job_id=job_id, kind="ingestion")
     for workspace_id in deletions:
-        await dispatcher.dispatch_deletion(workspace_id)
+        published = await dispatcher.dispatch_deletion(workspace_id)
+        if dispatcher.publishes and not published:
+            log.warning("dispatch.not_published", workspace_id=workspace_id, kind="deletion")
 
 
 async def auth_session(request: Request) -> AsyncIterator[AsyncSession]:
