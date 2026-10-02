@@ -20,7 +20,7 @@ dependencies = [
     "celery>=5.4",
     "httpx>=0.28",
     "structlog>=25.1",
-    "pyjwt>=2.10",
+    "pyjwt>=2.15",
     "argon2-cffi>=23.1",
     "pymupdf>=1.25",
     "prometheus-client>=0.21",
@@ -31,6 +31,8 @@ dependencies = [
 # `uv run eval`) reproduces the published report". This is it.
 [project.scripts]
 eval = "scholiast.eval.cli:main"
+# NFR-R6: "rebuildable from scratch by a documented command" (D101).
+scholiast-reindex = "scholiast.workers.reindex:main"
 
 [project.optional-dependencies]
 # Local inference. Installed on the worker and in dev, not in the API image.

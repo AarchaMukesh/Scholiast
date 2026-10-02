@@ -10,6 +10,7 @@ where a real paper or a real answer is, and are marked accordingly.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import uuid
@@ -39,6 +40,14 @@ FIXTURES = ROOT / "spike" / "fixtures"
 GROBID_URL = "http://localhost:8070"
 QDRANT_URL = "http://localhost:6333"
 DIMENSIONS = 32
+
+
+#: Migration 0005 made `users.password_hash` NOT NULL (D85). These rows exist
+#: to own data, never to log in, so they get a string that is not a valid
+#: Argon2 encoding: `Argon2idHasher.verify` returns False for it against any
+#: password, so the account is unreachable by construction rather than by
+#: nobody knowing the password.
+UNUSABLE_HASH = "not-a-real-argon2-hash"
 
 
 def _alive(url: str) -> bool:
@@ -78,6 +87,16 @@ class Harness:
     postgres: str
 
 
+#: Migration 0005 gives the seeded M1 account a development password read from
+#: the environment (D85). It is set explicitly here rather than left to the
+#: documented default, so a developer who exports the variable does not silently
+#: break this suite — and so these tests authenticate as the SAME principal M1's
+#: `current_tenant` used to return unconditionally, which is what keeps the
+#: ownership assertions below meaning what they meant.
+SEED_EMAIL = "demo@scholiast.local"
+SEED_PASSWORD = "integration-suite-password"
+
+
 @pytest.fixture(scope="module")
 def postgres() -> Iterator[str]:
     with PostgresContainer("postgres:17-alpine", driver="asyncpg") as container:
@@ -88,10 +107,27 @@ def postgres() -> Iterator[str]:
             capture_output=True,
             text=True,
             check=False,
+            env={**os.environ, "SEED_USER_PASSWORD": SEED_PASSWORD},
         )
         if result.returncode != 0:
             pytest.fail(f"alembic upgrade failed:\n{result.stdout}\n{result.stderr}")
         yield url
+
+
+async def authenticate(client: httpx.AsyncClient) -> str:
+    """Log in as the seeded account and attach the bearer token to the client.
+
+    M3 phase 1 replaced the inside of `current_tenant`: every router now needs a
+    verified token, and no router changed to gain that. The tests therefore do
+    what any client does — they log in.
+    """
+    response = await client.post(
+        "/v1/auth/login", json={"email": SEED_EMAIL, "password": SEED_PASSWORD}
+    )
+    assert response.status_code == 200, response.text
+    token = response.json()["access_token"]
+    client.headers["Authorization"] = f"Bearer {token}"
+    return str(response.json()["user_id"])
 
 
 @pytest_asyncio.fixture
@@ -112,11 +148,13 @@ async def api(postgres: str, tmp_path: Path) -> AsyncIterator[Harness]:
         app.state.embedder = DeterministicEmbedder()
         transport = httpx.ASGITransport(app=manager.app)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            await authenticate(client)
             yield Harness(client=client, app=app, postgres=postgres)
 
         engine = create_async_engine(postgres)
         async with engine.begin() as connection:
             for table in (
+                "refresh_tokens",
                 "messages",
                 "conversations",
                 "ingestion_jobs",
@@ -231,8 +269,12 @@ class TestUploadValidationHappensAtTheEdge:
         stranger = TenantContext(user_id=str(uuid.uuid4()))
         async with api.app.state.sessions() as session:
             await session.execute(
-                text("INSERT INTO users (id, email) VALUES (:id, :email)"),
-                {"id": stranger.user_id, "email": f"{stranger.user_id}@x.test"},
+                text("INSERT INTO users (id, email, password_hash) VALUES (:id, :email, :hash)"),
+                {
+                    "id": stranger.user_id,
+                    "email": f"{stranger.user_id}@x.test",
+                    "hash": UNUSABLE_HASH,
+                },
             )
             await session.commit()
         async with api.app.state.sessions() as session:

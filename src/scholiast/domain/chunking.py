@@ -254,12 +254,27 @@ class ChunkingResult:
 
     @property
     def embeddable(self) -> list[Chunk]:
-        """What actually gets embedded: children and tables, not parent windows.
+        """What actually gets embedded: children and tables, not parent windows."""
+        return embeddable_chunks(self.chunks)
 
-        Embedding parents too would double the index for no retrieval gain —
-        parents exist to be *returned*, not matched.
-        """
-        return [c for c in self.chunks if c.role is not ChunkRole.PARENT]
+
+def embeddable_chunks(chunks: Sequence[Chunk]) -> list[Chunk]:
+    """Which chunks belong in the vector index: children and tables, never parents.
+
+    Embedding parents too would double the index for no retrieval gain — parents
+    exist to be *returned*, not matched. Indexing them would also change what
+    retrieval returns, because a parent window would become a hit in its own
+    right and compete with the child it contains.
+
+    **A free function, not only a property on `ChunkingResult`, because two
+    callers need it from different starting points.** Ingestion has the chunking
+    result and asks it directly; the NFR-R6 rebuild (D101) has plain `Chunk`
+    rows read back from Postgres and no document to ask. If the rebuild applied
+    its own filter the two would drift, and the drift would be invisible: the
+    rebuilt index would simply contain more than the one it replaced, silently
+    re-baselining every retrieval measurement rather than failing.
+    """
+    return [c for c in chunks if c.role is not ChunkRole.PARENT]
 
 
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+(?=[A-Z(\[])")

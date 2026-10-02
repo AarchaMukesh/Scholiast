@@ -29,6 +29,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
+from scholiast.application.ports.security import AuthenticationFailed
 from scholiast.domain.errors import (
     DomainError,
     FailureClass,
@@ -73,6 +74,20 @@ def problem(
         body["instance"] = instance
     body.update(extra)
     return JSONResponse(status_code=status, content=body, media_type=PROBLEM_CONTENT_TYPE)
+
+
+class RateLimited(Exception):
+    """This caller has used its allowance for now (NFR-SEC7, D112).
+
+    Defined here rather than in `domain/` because it is not a domain event: no
+    rule about papers or workspaces was broken, and a different deployment with
+    a proxy in front might refuse the same request before it ever reached this
+    process. It is an API policy, so it lives with the handler that renders it.
+    """
+
+    def __init__(self, retry_after: float) -> None:
+        super().__init__(f"rate limited, retry after {retry_after:.0f}s")
+        self.retry_after = retry_after
 
 
 #: Upload failures carry a `FailureClass`, and the class decides the status: a
@@ -159,6 +174,46 @@ def register_error_handlers(app: FastAPI) -> None:
             detail=str(exc),
             instance=request.url.path,
         )
+
+    @app.exception_handler(RateLimited)
+    async def _rate_limited(request: Request, exc: RateLimited) -> JSONResponse:
+        # 429 with `Retry-After`, which is the same courtesy this system expects
+        # from Groq (D103): a refusal that says when to come back costs nothing
+        # to honour and saves the caller from guessing.
+        #
+        # The detail deliberately does NOT say which limit was hit or how much of
+        # it remains. That would let a caller map the buckets and pace itself to
+        # just under each one, which is the opposite of what the limit is for.
+        response = problem(
+            status=HTTPStatus.TOO_MANY_REQUESTS,
+            slug="rate-limited",
+            title="Too many requests",
+            detail="Too many requests. Please slow down and try again shortly.",
+            instance=request.url.path,
+        )
+        response.headers["Retry-After"] = str(max(1, int(exc.retry_after) + 1))
+        return response
+
+    @app.exception_handler(AuthenticationFailed)
+    async def _unauthenticated(
+        request: Request,
+        exc: AuthenticationFailed,  # noqa: ARG001 - the reason is logged, never returned
+    ) -> JSONResponse:
+        # ONE shape for every cause (FR-A5): unknown account, wrong password,
+        # expired token, tampered signature, revoked session, reused refresh. The
+        # specific reason travels on the exception for the server's logs; letting
+        # any of it reach the client hands over an account-enumeration oracle.
+        response = problem(
+            status=HTTPStatus.UNAUTHORIZED,
+            slug="unauthenticated",
+            title="Not authenticated",
+            detail="Invalid or expired credentials.",
+            instance=request.url.path,
+        )
+        # RFC 9110 requires this on a 401, and it is what tells a client to
+        # refresh rather than to re-prompt for a password.
+        response.headers["WWW-Authenticate"] = "Bearer"
+        return response
 
     @app.exception_handler(InvariantViolation)
     async def _invariant(

@@ -14,15 +14,23 @@ unusable as a development default, so quota is spent deliberately rather than by
 accident.
 
 Rate limits arrive as 429 with `Retry-After`. This adapter surfaces them as
-`GenerationUnavailable` so the chain moves on; honouring `Retry-After` with a
-token bucket and a circuit breaker is M3's deliverable, and a breaker with no
-measured failure rate to tune against would be furniture.
+`GenerationUnavailable` **carrying that header as a number** (D103), which is
+what lets the circuit breaker in `breaker.py` open for exactly the window the
+server stated instead of guessing at it.
+
+**No token bucket, and that deviates from doc 8 deliberately** (D103). Groq
+meters *tokens* — 12,000 per minute against a ~6k-token RAG request — and a
+token count is not known until after the call, so a bucket sized in requests
+limits the wrong quantity and one sized in estimated tokens limits the right
+quantity with an invented number. The 429 already answers the question exactly.
 """
 
 from __future__ import annotations
 
 import json
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 
 import httpx
 
@@ -98,7 +106,9 @@ class GroqProvider:
                 if response.status_code != 200:
                     await response.aread()
                     raise GenerationUnavailable(
-                        PROVIDER_NAME, _describe(response.status_code, response)
+                        PROVIDER_NAME,
+                        _describe(response.status_code, response),
+                        retry_after=_retry_after(response),
                     )
                 async for line in response.aiter_lines():
                     chunk = _parse_sse(line)
@@ -113,13 +123,48 @@ class GroqProvider:
 def _describe(status: int, response: httpx.Response) -> str:
     """A failure message that says what to do about it.
 
-    429 carries `Retry-After`, and recording it is what makes the M3 rate limiter
-    tunable against real numbers rather than guessed ones.
+    Still formats `Retry-After` for a human reader, but it is no longer the only
+    place the value goes — `_retry_after` returns it as a number the breaker can
+    act on (D103). The string is for logs; the float is for behaviour.
     """
     if status == 429:
         retry_after = response.headers.get("retry-after", "unknown")
         return f"rate limited, retry-after={retry_after}"
     return f"HTTP {status}: {response.text[:200]}"
+
+
+def _retry_after(response: httpx.Response) -> float | None:
+    """`Retry-After` as seconds, or None when the header is absent or unusable.
+
+    **Both legal forms are accepted** (RFC 9110 §10.2.3): Groq sends a number,
+    but the spec also allows an HTTP-date, and a deployment behind a proxy that
+    rewrites it would otherwise have the header silently ignored — a breaker
+    falling back to its guessed cooldown while the server had stated the answer.
+
+    None rather than zero for an unparseable value, because the two mean
+    opposite things to the breaker: None is "nothing was said, use the
+    cooldown", zero is "the server says come back now".
+
+    Not clamped at the top. A daily quota legitimately answers with hours, and
+    honouring that is the point (D103) — the window is in-process anyway (D104),
+    so a restart clears it.
+    """
+    raw = response.headers.get("retry-after")
+    if raw is None:
+        return None
+    try:
+        return max(0.0, float(raw.strip()))
+    except ValueError:
+        pass
+    try:
+        when = parsedate_to_datetime(raw)
+    except (TypeError, ValueError):
+        return None
+    if when.tzinfo is None:
+        # RFC 9110 dates are GMT; a naive one from a sloppy proxy is read as
+        # UTC rather than as local time, which would be wrong by the offset.
+        when = when.replace(tzinfo=UTC)
+    return max(0.0, (when - datetime.now(UTC)).total_seconds())
 
 
 def _parse_sse(line: str) -> GenerationChunk | None:

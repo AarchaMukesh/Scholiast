@@ -26,6 +26,7 @@ from scholiast.api.deps import (
     RemovePaperDep,
     SectionsDep,
     SessionDep,
+    UploadRateLimit,
     WorkspacesDep,
 )
 from scholiast.domain.errors import FailureClass, WorkspaceNotAvailable
@@ -45,7 +46,12 @@ async def _scoped_workspace(workspace_id: str, repo: WorkspacesDep) -> Workspace
     return workspace
 
 
-@router.post("/upload", status_code=HTTPStatus.ACCEPTED, response_model=schemas.UploadAccepted)
+@router.post(
+    "/upload",
+    status_code=HTTPStatus.ACCEPTED,
+    response_model=schemas.UploadAccepted,
+    dependencies=[UploadRateLimit],
+)
 async def upload_paper(
     workspace_id: str, use_case: AddPaperDep, file: UploadFile = File(...)
 ) -> schemas.UploadAccepted:
@@ -183,8 +189,13 @@ async def job_status(job_id: str, session: SessionDep, repo: WorkspacesDep) -> s
     if row is None:
         raise WorkspaceNotAvailable(job_id)
     # The scoped read that authorises it. A job whose workspace this tenant
-    # cannot reach is indistinguishable from one that does not exist.
-    await _scoped_workspace(str(row.workspace_id), repo)
+    # cannot reach must be indistinguishable from one that does not exist — so
+    # the refusal is raised HERE, naming `job_id`, rather than delegated to
+    # `_scoped_workspace`, which would name the job's own workspace instead.
+    # That uuid is one the caller never supplied and could not otherwise learn,
+    # and it would also make the two 404s tell each other apart (D93).
+    if await repo.get(str(row.workspace_id)) is None:
+        raise WorkspaceNotAvailable(job_id)
 
     return schemas.JobStatus(
         job_id=str(row.id),

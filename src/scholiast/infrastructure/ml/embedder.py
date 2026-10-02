@@ -27,7 +27,7 @@ import asyncio
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any
 
-from scholiast.application.ports.ml import Precision, TextRole
+from scholiast.application.ports.ml import GpuBudgetExceeded, Precision, TextRole
 from scholiast.infrastructure.ml.gpu import GpuPriorityGate, Priority
 
 if TYPE_CHECKING:  # pragma: no cover - import cost is the point
@@ -59,6 +59,73 @@ def _prefix_for(model_name: str) -> str:
         if family in lowered:
             return prefix
     return ""
+
+
+def _is_out_of_memory(exc: BaseException) -> bool:
+    """Whether this exception means "the GPU had no room".
+
+    Two ways of asking, because there are two ways torch says it. Modern builds
+    raise `torch.cuda.OutOfMemoryError`; older ones, and some allocator paths,
+    raise a plain `RuntimeError` whose message carries "out of memory". Matching
+    on the message as well as the type is also what makes the halving ladder
+    testable without a GPU — CI has none, so a test that could only raise the
+    typed error would exercise nothing there.
+
+    Torch is imported lazily and its absence is not an error: this adapter is
+    constructed on CPU-only machines, where a CUDA OOM cannot occur and pulling
+    in torch to name an impossible exception would be a large import for nothing.
+    """
+    if isinstance(exc, RuntimeError) and "out of memory" in str(exc).lower():
+        return True
+    try:
+        import torch
+    except ImportError:  # pragma: no cover - CPU-only environments
+        return False
+    return isinstance(exc, torch.cuda.OutOfMemoryError)
+
+
+def _release_cached_blocks() -> None:
+    """Return a failed allocation's reservation to the device.
+
+    A caught OOM does not free what torch had already reserved for the attempt,
+    so a retry at half the size can fail against memory nothing is using.
+    """
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+    except Exception:  # pragma: no cover - never worth failing an encode over
+        return
+
+
+def _reserved_gb() -> float:
+    """What torch had reserved when the allocation failed. 0.0 without CUDA."""
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            return float(torch.cuda.memory_reserved()) / 1024**3
+    except Exception:  # pragma: no cover - diagnostic only
+        return 0.0
+    return 0.0
+
+
+def _free_gb() -> float:
+    """What the device reports free. See D24 on why this is NOT a budget.
+
+    It excludes other processes entirely on Windows WDDM, so it is carried as a
+    diagnostic on the exception rather than used to decide anything.
+    """
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            free, _total = torch.cuda.mem_get_info()
+            return float(free) / 1024**3
+    except Exception:  # pragma: no cover - diagnostic only
+        return 0.0
+    return 0.0
 
 
 class LocalEmbedder:
@@ -169,7 +236,47 @@ class LocalEmbedder:
         return vectors
 
     def _encode(self, texts: list[str], batch_size: int) -> list[list[float]]:
+        """Encode, halving the batch on an out-of-memory error (FR-I10, D98).
+
+        **Reactive, not predictive.** No VRAM is estimated before allocating,
+        because on Windows WDDM there is nothing trustworthy to estimate against:
+        D24 measured that `nvidia-smi` reports `0 MiB`/`[N/A]` and torch sees only
+        its own context, so a budget check would be blind to the desktop
+        compositor's 1.1-1.3 GB and to every other process. Letting the
+        allocation fail cannot be wrong about what it never measured.
+
+        **Two levels, because two different things go wrong.** A batch that is
+        momentarily too large is the caller's sizing problem and is solved here,
+        in milliseconds, by trying a smaller one. A *single item* that cannot
+        allocate is a capacity problem this process cannot solve by trying
+        harder, so it escalates to `GpuBudgetExceeded` → `RESOURCE_EXHAUSTED` →
+        a requeue with backoff, which runs it when whatever else held the GPU
+        has finished.
+
+        The cache is emptied between attempts because a caught OOM leaves the
+        failed allocation's reservation in torch's pool; retrying without it
+        would keep failing against memory nothing is using.
+        """
         model = self._load()
+        attempt = batch_size
+        while True:
+            try:
+                return self._encode_at(model, texts, attempt)
+            except Exception as exc:
+                if not _is_out_of_memory(exc):
+                    raise
+                if attempt <= 1:
+                    # A single item will not fit. Nothing smaller to try.
+                    raise GpuBudgetExceeded(
+                        requested_gb=_reserved_gb(), available_gb=_free_gb()
+                    ) from exc
+                attempt = max(1, attempt // 2)
+                _release_cached_blocks()
+
+    @staticmethod
+    def _encode_at(
+        model: SentenceTransformer, texts: list[str], batch_size: int
+    ) -> list[list[float]]:
         vectors: Any = model.encode(
             texts,
             batch_size=batch_size,

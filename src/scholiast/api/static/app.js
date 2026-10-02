@@ -8,6 +8,25 @@
  * Errors are RFC 9457 problem documents, so `detail` is shown verbatim. That is
  * the whole point of NFR-U2's "actionable and specific": the server already
  * decided what the user can do about it, and the client should not paraphrase.
+ *
+ * ---------------------------------------------------------------------------
+ * KNOWN BREAKAGE, DEFERRED ON PURPOSE (D88).
+ *
+ * M3 phase 1 made every endpoint require a verified bearer token. Nothing
+ * below sends one, and there is no login form, so **this page now gets 401 on
+ * its first call.** No test fails, because the suite drives the API directly;
+ * the breakage is recorded in D88 and in the phase-1 commit message so it
+ * cannot go unnoticed.
+ *
+ * What this needs, when a phase picks up the front end: a login view posting
+ * to `/v1/auth/login`, the returned access token on every request here, and a
+ * 401 handler that posts the refresh token to `/v1/auth/refresh` once and
+ * retries. `POST /v1/auth/register` and `/logout` complete the surface.
+ *
+ * Deliberately NOT done as a stopgap: a dev-mode header or an auto-login would
+ * put a bypass-authentication path into shipped code to keep a demo working.
+ * A 401 is the better broken state.
+ * ---------------------------------------------------------------------------
  */
 
 const api = {

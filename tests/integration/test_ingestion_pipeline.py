@@ -18,6 +18,7 @@ The criteria under test come from doc 8 §M1:
 
 from __future__ import annotations
 
+import contextlib
 import subprocess
 import sys
 import uuid
@@ -50,7 +51,15 @@ from scholiast.infrastructure.storage.local import LocalObjectStore
 from scholiast.infrastructure.vector.qdrant import QdrantVectorIndex
 from scholiast.workers.ingestion import IngestionWorker, WorkerConfig
 
-from scholiast.application.ports.tenancy import TenantContext  # isort: skip
+from scholiast.application.ports.tenancy import (  # isort: skip
+    WORKER_CLAIM_REASON,
+    SystemContext,
+    TenantContext,
+)
+from scholiast.infrastructure.observability.logging import (  # isort: skip
+    bind_correlation_id,
+    current_correlation_id,
+)
 
 pytestmark = [pytest.mark.integration]
 
@@ -59,6 +68,14 @@ FIXTURES = ROOT / "spike" / "fixtures"
 GROBID_URL = "http://localhost:8070"
 QDRANT_URL = "http://localhost:6333"
 DIMENSIONS = 32
+
+
+#: Migration 0005 made `users.password_hash` NOT NULL (D85). These rows exist
+#: to own data, never to log in, so they get a string that is not a valid
+#: Argon2 encoding: `Argon2idHasher.verify` returns False for it against any
+#: password, so the account is unreachable by construction rather than by
+#: nobody knowing the password.
+UNUSABLE_HASH = "not-a-real-argon2-hash"
 
 
 def _alive(url: str) -> bool:
@@ -103,6 +120,11 @@ class DeterministicEmbedder:
             seed = abs(hash(item)) % 9973
             vectors.append([((seed + i * 37) % 100) / 100.0 for i in range(DIMENSIONS)])
         return vectors
+
+
+#: Enough to clear `validate_upload`'s magic-byte check. The parser is
+#: stubbed, so nothing ever looks inside it.
+MINIMAL_PDF = b"%PDF-1.4\n% stub\n%%EOF\n"
 
 
 class UnreachableGrobid:
@@ -194,8 +216,8 @@ class Harness:
         self.workspace_id = str(uuid.uuid4())
         async with self.sessions() as session:
             await session.execute(
-                text("INSERT INTO users (id, email) VALUES (:id, :email)"),
-                {"id": self.user_id, "email": f"{self.user_id}@test.local"},
+                text("INSERT INTO users (id, email, password_hash) VALUES (:id, :email, :hash)"),
+                {"id": self.user_id, "email": f"{self.user_id}@test.local", "hash": UNUSABLE_HASH},
             )
             await session.execute(
                 text(
@@ -667,3 +689,227 @@ class TestTheWorkerStaysInsideItsTenant:
                 )
             ).scalar_one()
         assert state == PaperState.INDEXED.value, "the orphaned job was left claimable"
+
+
+class UnparseablePdf:
+    """A parser that classifies, so there is a classification worth losing."""
+
+    version = "unparseable-stub/1.0.0"
+
+    async def parse(self, pdf: bytes, *, filename: str = "") -> ParsedDocument:
+        raise DocumentUnparseable(FailureClass.UNPARSEABLE, "no extractable text")
+
+
+class PoisoningWorker(IngestionWorker):
+    """A worker whose job session is aborted just before the failure is written.
+
+    The poisoning is injected; **the write failure is not**. A genuinely invalid
+    statement leaves the transaction in the aborted state Postgres puts it in
+    after any constraint violation, so the `queue.fail` that follows raises for
+    exactly the reason it would in production — rather than because a mock was
+    told to. That distinction is the point: the test exercises a poisoned
+    session, not a stand-in for one.
+    """
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        super().__init__(*args, **kwargs)  # type: ignore[arg-type]
+        self.poisoned = False
+
+    async def _record_failure(self, job, outcome, *, queue, papers) -> None:  # type: ignore[no-untyped-def]
+        if not self.poisoned:
+            self.poisoned = True
+            # The job's own session is the one that has to be aborted, and only
+            # the repositories hold it — hence the private read.
+            session = queue._session
+            with contextlib.suppress(Exception):
+                await session.execute(text("SELECT 1 / 0"))
+        await super()._record_failure(job, outcome, queue=queue, papers=papers)
+
+
+@needs_qdrant
+class TestAClassifiedFailureSurvivesAPoisonedSession:
+    """The M1 debt, closed and kept closed (§4.4.1, FR-I9).
+
+    A DB-level failure earlier in the pipeline leaves the job's session inside an
+    aborted transaction, so the statement recording WHY the paper failed raises
+    too. Before this, the crash handler saw only that write's error and
+    re-classified everything as TRANSIENT — so the most informative failures were
+    the ones most likely to be rewritten, and the user was shown a rollback
+    message instead of "no extractable text".
+
+    This goes through the real `run_once` rather than calling the crash handler
+    directly, because the half worth protecting is the one that *creates* the
+    carrier: a unit test driving `_abandon` still passes with the wrapping
+    deleted, which a mutation run demonstrated.
+    """
+
+    def _worker(self, harness: Harness) -> PoisoningWorker:
+        return PoisoningWorker(
+            sessions=harness.sessions,
+            store=harness.store,
+            parser=UnparseablePdf(),
+            embedder=harness.embedder,
+            index=harness.index,
+            config=WorkerConfig(poll_seconds=0.05),
+        )
+
+    async def test_the_original_class_is_recorded_not_the_write_error(
+        self, harness: Harness
+    ) -> None:
+        result = await harness.upload(MINIMAL_PDF, "poisoned.pdf")
+        worker = self._worker(harness)
+
+        await worker.run_once()
+
+        assert worker.poisoned, "the test did not exercise the path it claims to"
+        # UNPARSEABLE is terminal, so the paper must land UNSUPPORTED. If the
+        # classification had been lost it would read QUEUED — retryable — and
+        # three deliveries would be spent rediscovering a known failure.
+        assert await harness.membership_state(result.paper_id) == PaperState.UNSUPPORTED.value
+
+    async def test_the_reason_reaches_the_user_not_the_rollback_message(
+        self, harness: Harness
+    ) -> None:
+        # NFR-U2: the detail is what the user reads. "current transaction is
+        # aborted" is unactionable; "no extractable text" is the truth about
+        # their file.
+        result = await harness.upload(MINIMAL_PDF, "poisoned.pdf")
+        await self._worker(harness).run_once()
+
+        async with harness.sessions() as session:
+            row = (
+                await session.execute(
+                    text(
+                        "SELECT failure_class, failure_detail FROM workspace_papers "
+                        "WHERE paper_id = CAST(:paper AS uuid)"
+                    ),
+                    {"paper": result.paper_id},
+                )
+            ).one()
+
+        assert row.failure_class == FailureClass.UNPARSEABLE.value
+        assert "no extractable text" in (row.failure_detail or "")
+        assert "transaction" not in (row.failure_detail or "").lower()
+
+
+@needs_qdrant
+class TestTheCorrelationIdFollowsTheWork:
+    """FR-O1 and D107, against real Postgres and a real migration.
+
+    The half that matters is the one a Celery header could not do. Under D95 the
+    message is a wake-up and the worker claims whatever is due, so the id has to
+    be on the ROW to survive a redelivery and to describe the job that actually
+    ran rather than the one a message happened to name.
+
+    The HTTP end of the chain — request header to contextvar — is covered in
+    `tests/unit/test_observability.py`; this is contextvar to row to claim.
+    """
+
+    async def test_an_upload_stamps_its_correlation_id_on_the_job(self, harness: Harness) -> None:
+        bind_correlation_id("cid-upload-1")
+        try:
+            result = await harness.upload(MINIMAL_PDF, "correlated.pdf")
+        finally:
+            bind_correlation_id(None)
+
+        async with harness.sessions() as session:
+            stored = (
+                await session.execute(
+                    text(
+                        "SELECT correlation_id FROM ingestion_jobs "
+                        "WHERE paper_id = CAST(:p AS uuid)"
+                    ),
+                    {"p": result.paper_id},
+                )
+            ).scalar_one()
+
+        assert stored == "cid-upload-1"
+
+    async def test_the_claim_hands_it_back_to_the_worker(self, harness: Harness) -> None:
+        # The join an operator needs: a worker log line and the request that
+        # accepted the paper carry the same id. Read back through `claim` rather
+        # than by re-querying, because the worker only ever sees `QueuedJob`.
+        bind_correlation_id("cid-claim-1")
+        try:
+            await harness.upload(MINIMAL_PDF, "correlated.pdf")
+        finally:
+            bind_correlation_id(None)
+
+        async with harness.sessions() as session:
+            claimed = await PostgresQueue(session, SystemContext(reason=WORKER_CLAIM_REASON)).claim(
+                limit=1
+            )
+
+        assert [job.correlation_id for job in claimed] == ["cid-claim-1"]
+
+    async def test_a_job_enqueued_outside_a_request_has_none_not_a_fabricated_id(
+        self, harness: Harness
+    ) -> None:
+        # None is the truth for work with no request behind it — a sweep, a CLI,
+        # a backfill. Minting one here would fabricate a link to a log line that
+        # does not exist, which is the reason migration 0006 leaves the column
+        # nullable rather than backfilling it.
+        bind_correlation_id(None)
+        result = await harness.upload(MINIMAL_PDF, "uncorrelated.pdf")
+
+        async with harness.sessions() as session:
+            stored = (
+                await session.execute(
+                    text(
+                        "SELECT correlation_id FROM ingestion_jobs "
+                        "WHERE paper_id = CAST(:p AS uuid)"
+                    ),
+                    {"p": result.paper_id},
+                )
+            ).scalar_one()
+
+        assert stored is None
+
+
+class CorrelationWatchingParser:
+    """Records the correlation id in force at the moment real work begins."""
+
+    version = "correlation-watch/1.0.0"
+
+    def __init__(self) -> None:
+        self.seen: list[str | None] = []
+
+    async def parse(self, pdf: bytes, *, filename: str = "") -> ParsedDocument:
+        self.seen.append(current_correlation_id())
+        raise DocumentUnparseable(FailureClass.UNPARSEABLE, "watched and stopped")
+
+
+@needs_qdrant
+class TestTheWorkerBindsTheIdBeforeItWorks:
+    """The other half of FR-O1's propagation, and the half a mutation exposed.
+
+    Asserting that `claim` RETURNS the id proves the column round-trips; it does
+    not prove the worker ever binds it, so deleting `bind_correlation_id` from
+    `_process` left every test passing. This observes the id from inside the
+    pipeline — a stub parser reading the ambient context — which is the same
+    place a real log line would read it from.
+    """
+
+    async def test_the_pipeline_runs_under_the_uploaders_correlation_id(
+        self, harness: Harness
+    ) -> None:
+        bind_correlation_id("cid-through-the-worker")
+        try:
+            await harness.upload(MINIMAL_PDF, "watched.pdf")
+        finally:
+            # Unbound before the worker runs, so a pass cannot come from the id
+            # simply still being set in this test's own context.
+            bind_correlation_id(None)
+
+        parser = CorrelationWatchingParser()
+        worker = IngestionWorker(
+            sessions=harness.sessions,
+            store=harness.store,
+            parser=parser,
+            embedder=harness.embedder,
+            index=harness.index,
+            config=WorkerConfig(poll_seconds=0.05),
+        )
+        await worker.run_once()
+
+        assert parser.seen == ["cid-through-the-worker"]

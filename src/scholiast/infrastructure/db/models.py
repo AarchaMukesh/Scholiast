@@ -84,16 +84,56 @@ def _created_at() -> Mapped[datetime]:
 
 
 class User(Base):
-    """M1 seeds exactly one of these. Auth arrives in M3 (doc 8)."""
+    """An account. M1 seeded one; M3 phase 1 gave it a password (D85)."""
 
     __tablename__ = "users"
 
     id: Mapped[uuid.UUID] = _pk()
     email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False)
-    # Argon2id in M3. Nullable now so the M1 seed user needs no fake hash —
-    # a placeholder hash would be indistinguishable from a real one later.
-    password_hash: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Argon2id, NOT NULL since migration 0005: an account that cannot
+    # authenticate is not an account, and a nullable hash invites a login path
+    # that treats "no password set" as "no password needed" (D85).
+    password_hash: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = _created_at()
+
+
+class RefreshToken(Base):
+    """One issued refresh token — the stateful half of D84's split.
+
+    Stored as a fingerprint, never as the secret, so a database leak yields
+    nothing usable. `family_id` groups the rotation chain: refreshing revokes the
+    presented token and issues its successor in the same family, and presenting
+    an already-used token revokes the family entire, because a second use means
+    either a replay or a theft and there is no third reading.
+    """
+
+    __tablename__ = "refresh_tokens"
+
+    id: Mapped[uuid.UUID] = _pk()
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    #: The rotation chain this token belongs to. Not a foreign key: the first
+    #: token in a family has no predecessor, and pointing at oneself to satisfy a
+    #: constraint is how a schema starts lying.
+    family_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    #: SHA-256 hex of the secret. Unique, so the same secret cannot be recorded
+    #: twice even if two requests race.
+    fingerprint: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    issued_at: Mapped[datetime] = _created_at()
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    #: Set on logout, on rotation, and on family revocation. A row is usable only
+    #: while this is NULL and `expires_at` is in the future.
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        # Refresh presents a fingerprint; expiry sweeps scan by expiry. Both are
+        # hot enough to index, and the fingerprint's unique constraint already
+        # provides its own.
+        Index("ix_refresh_tokens_user", "user_id"),
+        Index("ix_refresh_tokens_family", "family_id"),
+        Index("ix_refresh_tokens_expires_at", "expires_at"),
+    )
 
 
 class Workspace(Base):
@@ -405,6 +445,10 @@ class IngestionJob(Base):
         Integer, nullable=False, default=0, server_default=sa_text("0")
     )
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: FR-O1's correlation id, following the WORK rather than the message (D107).
+    #: Nullable because every row written before migration 0006 has no request
+    #: behind it, and because a job the sweep created has no request either.
+    correlation_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     #: The lease. A crashed worker's job becomes visible again rather than being
     #: lost, which is the at-least-once half of AD-5.
     visible_at: Mapped[datetime] = mapped_column(

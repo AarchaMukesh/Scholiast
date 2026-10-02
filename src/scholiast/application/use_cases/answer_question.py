@@ -152,6 +152,12 @@ class AnswerComplete:
     model: str | None = None
     message_id: str | None = None
     fabricated_labels: tuple[str, ...] = ()
+    #: The accounting, for the same reason D59 persists it on the Turn: with no
+    #: paid inference the scarce resource is quota, so tokens-per-answer is the
+    #: number that replaces cost-per-answer (NFR-C2). None when the provider
+    #: reported no usage, which is distinct from having spent nothing.
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
 
 
 AnswerEvent = EvidenceReady | AnswerToken | AnswerComplete
@@ -362,6 +368,8 @@ class AnswerQuestionUseCase:
             model=result.model,
             message_id=message_id,
             fabricated_labels=audit.fabricated_labels,
+            prompt_tokens=result.usage.prompt_tokens if result.usage else None,
+            completion_tokens=result.usage.completion_tokens if result.usage else None,
         )
 
     # -- retrieval ---------------------------------------------------------

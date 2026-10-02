@@ -48,6 +48,42 @@ class WorkspaceRepository(Protocol):
         """Mark DELETING and stamp `deleted_at` (§5.6.4 step 1)."""
         ...
 
+    async def list_deleting(self) -> tuple[str, ...]:
+        """Workspaces marked DELETING whose sweep has not finished (D99).
+
+        The resumption point for §5.6.4 step 3. A cascade that crashed halfway,
+        or whose dispatch never reached the broker, is found here and run again
+        — which is why the mark needs no accompanying job row: the marked row
+        *is* the record that work is outstanding.
+
+        System scope only. A deletion outlives the request that asked for it,
+        and by the time this runs there is no tenant to attribute it to.
+        """
+        ...
+
+    async def is_deleting(self, workspace_id: str) -> bool:
+        """Whether this workspace is marked for deletion (D99).
+
+        The cascade's precondition, and it is a **safety check rather than a
+        convenience**. The sweep runs under `SystemContext`, so nothing else
+        constrains which workspace it may delete, and its argument arrives over
+        a broker — a task message naming a live workspace would otherwise wipe
+        it. Marked-first means the only workspaces reachable by the cascade are
+        ones an authenticated owner already asked to delete.
+        """
+        ...
+
+    async def purge(self, workspace_id: str) -> bool:
+        """Delete the workspace row for real, ending the cascade.
+
+        Separate from `soft_delete` because they are different events: one stops
+        the workspace serving reads and returns 202, the other is the last step
+        of the sweep that ran afterwards. The database cascades from here to
+        conversations, messages, memberships and ingestion jobs, so this is one
+        statement rather than four.
+        """
+        ...
+
 
 @runtime_checkable
 class PaperRepository(Protocol):
@@ -146,6 +182,40 @@ class PaperRepository(Protocol):
         This is where layer 3's mandatory vector filter comes from, which is why
         it is a scoped query rather than a value the caller supplies: the id set
         is *derived from* the tenant predicate rather than passed alongside it.
+        """
+        ...
+
+    async def membership_paper_ids(self, workspace_id: str) -> tuple[str, ...]:
+        """Every paper the workspace holds, in ANY state — the cascade's input.
+
+        Deliberately the opposite of `queryable_paper_ids` on both filters it
+        applies. That one answers a retrieval question, so it excludes papers
+        that are not INDEXED and workspaces that are soft-deleted; the cascade
+        needs neither exclusion. A paper that failed to ingest still owns rows
+        and blobs, and by the time the sweep runs the workspace is soft-deleted
+        **by construction** — filtering it out would make the cascade find
+        nothing to delete. Same ownership-not-visibility distinction D92 drew
+        for the queue, and for the same reason.
+        """
+        ...
+
+    async def orphaned_paper_ids(self) -> tuple[str, ...]:
+        """Papers no workspace holds any more — the invisible residue (D102).
+
+        Cross-tenant by necessity, and safe for the same reason
+        `has_any_membership` is, only more so: a paper with zero memberships
+        belongs to no tenant, so there is no scope that could ask for it and
+        nobody it could leak to. It is unreachable by every scoped query, which
+        is exactly why nothing else will ever find it.
+        """
+        ...
+
+    async def all_paper_ids(self) -> tuple[str, ...]:
+        """Every paper id in Postgres — the live set the sweep compares against.
+
+        Cross-tenant, and ids only: the question it feeds is "which vectors and
+        which blobs have no paper", which is a question about absence and needs
+        no attribute of the papers that do exist.
         """
         ...
 

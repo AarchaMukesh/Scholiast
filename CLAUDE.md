@@ -5,15 +5,27 @@ and groundedness are **measured rather than asserted**. Portfolio project for ML
 Engineer interviews; the measurement discipline *is* the differentiator, not the
 feature list.
 
-**Status:** M0, M1 and **M2 complete** on `master`, built one phase per commit. M1 was the
-spine — schema, repositories, parser, index, pipeline, QA, API. M2 is the thesis: D-RET,
-the metric pipeline, four retrieval arms, the ablation axes, the GPU contention number and
-a CI regression gate. **796 tests, five gates green.** M3 is next: Celery, the worker
-split, and the operational surface.
+**Status:** M0, M1, M2 and **M3 complete**, built one phase per commit. M1 was the spine —
+schema, repositories, parser, index, pipeline, QA, API. M2 is the thesis: D-RET, the metric
+pipeline, four retrieval arms, the ablation axes, the GPU contention number and a CI
+regression gate. M3 is the operational surface: auth, three-layer tenant isolation, Celery,
+the §4.4.1 failure taxonomy, cascade deletion across three stores, a provider circuit
+breaker, observability, and rate limiting. **1218 tests, five gates green.** M4 is next:
+the discovery engine.
 
-**Read `docs/milestone-logs/M2-MILESTONE-LOG.md` before starting M3.** Milestone logs are
-the only tracked files under `docs/` (D67). M2's records what the numbers do *not* say,
-and that section sits above the findings on purpose.
+**Read `docs/milestone-logs/M3-MILESTONE-LOG.md` before starting M4**, then M2's for the
+retrieval numbers. Milestone logs are the only tracked files under `docs/` (D67), and each
+one's "what this does **not** establish" section sits above its findings on purpose.
+
+**M4 has two recorded preconditions** (M3 log §9): build the SSRF allowlist D115 moved
+there — discovery is the first thing that dereferences a URL it did not choose — and
+produce work on the `backfill` queue, which exists and is empty.
+
+**One of M3's eight acceptance criteria was amended rather than met**, by two decisions,
+both because a design document described behaviour the code could not perform: §5.11's `reranker_unavailable`
+and `dense_retrieval_unavailable` rungs are vacuous (D105), and `local_generation` now
+describes the happy path (D106). FR-O4 tracing is deferred (D109). Do not re-argue these
+either — they are in the M3 log §3.
 
 **Retrieval quality is now measured, and three of its four headline results are
 negative.** Do not re-argue any of these — they cost a phase each:
@@ -33,7 +45,7 @@ negative.** Do not re-argue any of these — they cost a phase each:
 
 ## Read this first
 
-**`docs/00-decisions-log.md` is the source of truth.** D1–D82, and several *reverse*
+**`docs/00-decisions-log.md` is the source of truth.** D1–D115, and several *reverse*
 what the earlier design docs say — including two that reverse *other decisions*.
 Reading doc 5, 6 or 7 without the log will lead you to recommend things already
 measured against:
@@ -71,7 +83,8 @@ measurements against a specific commit, so it belongs in history with it.
 
 | File | What it holds |
 |---|---|
-| `docs/00-decisions-log.md` | D1–D82 + measured hardware baseline. **Start here.** |
+| `docs/00-decisions-log.md` | D1–D115 + measured hardware baseline. **Start here.** |
+| `docs/milestone-logs/M3-MILESTONE-LOG.md` | M3's close-out: 7/8 criteria as written and 1 amended with cause, 15 defects and what found them, 96 mutations, debt to M4/M6 |
 | `docs/milestone-logs/M2-MILESTONE-LOG.md` | M2's close-out: 8/8 criteria, every measurement with its interval, 16 defects and what found them, debt to M3/M5/M6 |
 | `docs/milestone-logs/M1-MILESTONE-LOG.md` | M1's close-out: 7/7 criteria, what is *not* measured, debt to M2/M3/M5 |
 | `docs/03-requirements.md` | FR/NFR IDs referenced throughout the code |
@@ -186,6 +199,7 @@ Every one of these cost real time in M0 or M1. Do not rediscover them.
 | **Coverage under-reports async DB code** | `[tool.coverage.run]` has no `concurrency`, and SQLAlchemy's asyncio layer runs inside greenlets — coverage.py's default `thread` tracer does not follow a greenlet switch, so lines executing under an `await` on the database read as dead. Measured: one passing test covers `remove_paper.py` at 72% (`thread`) vs 86% (`greenlet,thread`). **Do not read a low number on a repository or use case as a missing test** until re-run with `concurrency = greenlet, thread`. Unfixed on purpose — changing it changes what CI computes (M1 log §7) |
 | **`.gitignore` cannot re-include under an excluded directory** | `docs/` + `!docs/milestone-logs/` silently does nothing: git never descends into an excluded *directory*, so the negation is unreachable. It must be `docs/*` + `!docs/milestone-logs/` (D67). Verify with `git check-ignore -v <path>`, never by eye |
 | **⚠️ An exit code read through a pipe is the pipe's** | `cmd \| grep ...; echo $?` reports GREP's status, which is 0 whatever `cmd` did. This "verified" the CI smoke gate's failure path once — a gate that would have passed every build forever. Check an exit code on the command itself, or use `PIPESTATUS`. The same trap hides behind `\| tail` in a background wrapper |
+| **⚠️ `python -m importlinter.cli` is a NO-OP that exits 0** | It has no `if __name__ == "__main__"` guard, so `-m` imports the module, defines the click commands and exits — **accepting any arguments and checking nothing**. `python -m importlinter.cli lint-imports`, `--help` and `total nonsense --bogus` all print zero output and return 0, which in a CI log is indistinguishable from a passing gate. It reported "imports=0" for a gate that never ran, during M3 phase 4. **Gate 4 is `lint-imports` (or `.\.venv\Scripts\lint-imports.exe`), and a real pass always prints `Contracts: 3 kept, 0 broken`** — treat a silent gate 4 as a failed one. This is NOT the SAC workaround above: that route is the `lint_imports_command` *function* called in-process, not `-m` on the module |
 | **⚠️ Latency drifts with machine state; compare WITHIN a run** | Idle rerank p50 measured **156 ms and 228 ms on the same tree an hour apart** — the whole machine was ~1.4× slower, which turned an in-budget stage into an over-budget one. One contention run was discarded for this. Every latency comparison must measure its own baseline in the same process; cross-run absolute latencies are not comparable |
 | **Warm models before any clock that divides by wall-clock** | Whichever condition touches a model first pays its load. Per-query percentiles survive it (they have warm-ups); throughput does not — it once deflated a gated arm by a fifth, nearly publishing "the gate costs 32% of ingestion" when it costs 17% |
 | **The corpus text is LaTeX-derived, and carries `BIBREF` markers** | QASPER's `full_text` comes from arXiv LaTeX, not the typeset PDF: **47.8% of indexed chunks contain `BIBREF<n>`**, which the lexical tokenizer indexes as real terms (`bibref0`…). It qualifies every lexical result, and it is why judgments cannot be transferred to a GROBID build by string matching (T12, D81) |

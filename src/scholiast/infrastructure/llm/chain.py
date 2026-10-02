@@ -14,12 +14,21 @@ questions, while the local 3B sustains 125 tok/s with no quota.
 A provider with no credential is **absent, not broken**. Building a Groq client
 around an empty API key would turn every request into a 401 that the chain reads
 as a transient outage — a misconfiguration wearing a failure's clothes.
+
+**Every rung sits behind a circuit breaker, the local one included** (D104). It
+is tempting to exempt Ollama on the grounds that localhost cannot be slow, but
+an Ollama that is not running refuses fast while one that is *hung* does not, and
+the second case is the one that costs a timeout on every question. The breaker
+does not change what the user is told — the use case still sees
+`GenerationUnavailable` and still discloses `provider_failover` — it changes what
+discovering an outage costs.
 """
 
 from __future__ import annotations
 
 from scholiast.application.ports.llm import LLMProvider
 from scholiast.config.settings import Settings
+from scholiast.infrastructure.llm.breaker import CircuitBreaker
 from scholiast.infrastructure.llm.groq import GroqProvider
 from scholiast.infrastructure.llm.ollama import OllamaProvider
 
@@ -32,7 +41,20 @@ def build_provider_chain(settings: Settings) -> list[LLMProvider]:
     contained one provider would look identical to one that contained three
     until the day the first fails.
     """
-    chain: list[LLMProvider] = [OllamaProvider(settings.ollama_url, model=settings.ollama_model)]
+    providers: list[LLMProvider] = [
+        OllamaProvider(settings.ollama_url, model=settings.ollama_model)
+    ]
     if settings.groq_api_key:
-        chain.append(GroqProvider(settings.groq_api_key, model=settings.groq_model))
-    return chain
+        providers.append(GroqProvider(settings.groq_api_key, model=settings.groq_model))
+
+    # One breaker per provider INSTANCE, not one per chain (D104): the states are
+    # independent facts, and a shared breaker would let a rate-limited Groq stop
+    # the chain from trying a healthy Ollama.
+    return [
+        CircuitBreaker(
+            provider,
+            failure_threshold=settings.breaker_failure_threshold,
+            cooldown_seconds=settings.breaker_cooldown_seconds,
+        )
+        for provider in providers
+    ]

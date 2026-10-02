@@ -35,7 +35,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 
-from scholiast.application.ports.ml import Embedder, TextRole
+from scholiast.application.ports.ml import Embedder, GpuBudgetExceeded, TextRole
 from scholiast.application.ports.parsing import (
     DocumentParser,
     DocumentUnparseable,
@@ -129,6 +129,13 @@ class IngestPaperUseCase:
             # sense — the bytes are not coming back — and distinct enough from a
             # bad PDF to be worth its own classification.
             return _failed(paper_id, FailureClass.SOURCE_UNAVAILABLE, str(exc))
+        except GpuBudgetExceeded as exc:
+            # FR-I10 / D98. The embedder already halved to a single item and
+            # still could not allocate, so this is capacity rather than sizing —
+            # nothing this process can fix by trying again immediately.
+            # Retryable because the GPU may well be free in thirty seconds, which
+            # is exactly what the backoff is for.
+            return _failed(paper_id, FailureClass.RESOURCE_EXHAUSTED, str(exc))
         except InvariantViolation:
             # A domain rule was broken: the same input will break it again, so
             # retrying is pure waste. Re-raised rather than classified, because

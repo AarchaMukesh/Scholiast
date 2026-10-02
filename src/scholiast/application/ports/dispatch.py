@@ -1,0 +1,74 @@
+"""Waking a worker for a job that is already durable (§5.4.2, §5.7.4, D95, D96).
+
+Separate from `ports.queue` because the two answer different questions, and
+keeping them apart is what makes the durability argument checkable.
+
+  `Queue`           where a job *lives*. Postgres, in the same transaction as
+                    the paper and the membership, with a lease and an attempt
+                    count that outlive the process holding them.
+
+  `JobDispatcher`   how a worker learns about it *sooner than the next sweep*.
+
+**A dispatch is an optimisation, never a commitment.** By the time it is called
+the job row is committed, so the work cannot be lost: an unclaimed job becomes
+claimable again when its lease passes, and the periodic sweep finds it. That is
+the whole reason Celery can be the transport without giving up D47's
+single-transaction guarantee — a broker that cannot join the transaction is not
+being asked to. A failed publish costs latency, not work, and the adapter is
+therefore allowed to swallow its own errors rather than fail the request that
+already succeeded.
+
+**Dispatch happens after the commit, never inside it.** Publishing first would
+announce a job that a rollback then erased, and a worker fast enough to claim it
+would find nothing — the classic dual-write inversion. The ordering is enforced
+where the transaction ends rather than where the job is created, because the use
+case does not own the commit.
+"""
+
+from __future__ import annotations
+
+from typing import Protocol, runtime_checkable
+
+
+@runtime_checkable
+class JobDispatcher(Protocol):
+    """Tell a worker there is something to claim."""
+
+    @property
+    def publishes(self) -> bool:
+        """Whether this dispatcher talks to a broker at all.
+
+        **The distinction exists so a log line can mean something** (FR-O1).
+        `dispatch` returns False both when a broker was unreachable and when
+        there is no broker by design — the single-process topology, where the
+        in-process worker already polls the same database (D63). Without a way to
+        tell those apart, a warning on a failed publish would fire on *every*
+        upload in the default development configuration, which is the mistake
+        D106 names: a warning that fires on the normal path stops carrying
+        information.
+        """
+        ...
+
+    async def dispatch(self, job_id: str) -> bool:
+        """Best-effort wake-up for one committed job.
+
+        Returns whether the broker accepted it, for logging and tests. **Never
+        raises for a broker failure**: the caller is past the point where failing
+        would help, and the lease already covers the case.
+        """
+        ...
+
+    async def dispatch_deletion(self, workspace_id: str) -> bool:
+        """Best-effort wake-up for one committed workspace deletion (D99).
+
+        A separate method rather than a generic `send(task, arg)` because the
+        two carry different ids to different queues, and a single stringly-typed
+        entry point would let an ingestion id be dispatched as a deletion with
+        nothing to catch it.
+
+        Same best-effort contract as `dispatch`, resting on a different backstop:
+        an undispatched job is found by its lease, an undispatched deletion is
+        found by `list_deleting` on the next reconciliation pass. Neither loses
+        work; both cost latency.
+        """
+        ...

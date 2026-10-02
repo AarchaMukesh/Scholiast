@@ -57,6 +57,11 @@ def point_id_for(chunk_id: str) -> str:
     return str(uuid.uuid5(POINT_NAMESPACE, chunk_id))
 
 
+#: Stands in for "no live papers" in the orphan filter. Not a UUID, so it
+#: cannot collide with a real paper id, and it is never written to the index.
+_NO_SUCH_PAPER = "__no_live_papers__"
+
+
 class QdrantVectorIndex:
     """The `VectorIndex` adapter."""
 
@@ -325,6 +330,66 @@ class QdrantVectorIndex:
             exact=True,
         )
         return int(result.count)
+
+    async def ping(self) -> bool:
+        """Reachability, for FR-O2. A metadata call, not a count."""
+        try:
+            await self._client.get_collections()
+        except Exception:
+            # Deliberately broad: connection refused, DNS, auth and a protocol
+            # mismatch all mean the same thing to a readiness probe, and a probe
+            # that raised would report "the API is broken" for "Qdrant is down".
+            return False
+        return True
+
+    async def count_orphans(self, live_paper_ids: Sequence[str]) -> int:
+        """Points whose paper is not in `live_paper_ids` (§5.6.4 step 4)."""
+        result = await self._client.count(
+            self._collection,
+            count_filter=self._orphan_filter(live_paper_ids),
+            exact=True,
+        )
+        return int(result.count)
+
+    async def delete_orphans(self, live_paper_ids: Sequence[str]) -> int:
+        """Remove every point whose paper is gone from Postgres (D102).
+
+        Counted first so the sweep can report residue it did not create: a
+        number above zero here means something upstream failed to clean up, and
+        a sweeper that silently fixes that is indistinguishable from one with
+        nothing to fix.
+        """
+        before = await self.count_orphans(live_paper_ids)
+        if not before:
+            return 0
+        await self._client.delete(
+            self._collection,
+            points_selector=models.FilterSelector(filter=self._orphan_filter(live_paper_ids)),
+            wait=True,
+        )
+        return before
+
+    @staticmethod
+    def _orphan_filter(live_paper_ids: Sequence[str]) -> models.Filter:
+        """Everything whose `paper_id` is NOT one of the live ones.
+
+        **The empty case is the dangerous one and is handled by construction
+        rather than by a branch.** An empty live set means Postgres holds no
+        papers at all, so every point is an orphan — the exact opposite of the
+        "nothing to do" an empty-list guard would produce. Substituting a
+        sentinel that cannot be a paper id keeps one code path: `must_not
+        MatchAny([sentinel])` excludes nothing and therefore matches the whole
+        collection. Paper ids are UUIDs, so the sentinel can never collide with
+        one, and it never reaches the index as data.
+        """
+        return models.Filter(
+            must_not=[
+                models.FieldCondition(
+                    key=PAYLOAD_PAPER_ID,
+                    match=models.MatchAny(any=list(live_paper_ids) or [_NO_SUCH_PAPER]),
+                )
+            ]
+        )
 
     @staticmethod
     def _paper_filter(paper_ids: Sequence[str]) -> models.Filter:

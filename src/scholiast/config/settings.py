@@ -76,6 +76,55 @@ class Settings(BaseSettings):
     #: this off when Celery arrives: a configuration change, not a restructuring.
     worker_in_process: bool = True
 
+    # -- maintenance (§5.6.4 step 4, D100) ---------------------------------
+    #: How often the reconciliation sweep runs. Five minutes is a judgement
+    #: call, not a measurement, and the two things it trades off are named so
+    #: the number can be argued with: a cascade whose dispatch was lost waits at
+    #: most this long before `list_deleting` finds it, and every pass scans the
+    #: whole index and object store (D102), so the cost is paid whether or not
+    #: there is residue. Shorter means faster convergence and more scanning.
+    reconcile_interval_seconds: float = 300.0
+
+    # -- rate limiting and the ops surface (NFR-SEC7, D112-D114) -----------
+    #: Off switch for the limiter. Present so a load test can measure the system
+    #: rather than the limiter, and so a deployment that puts a real limiter in
+    #: front can turn this one off instead of stacking two.
+    rate_limit_enabled: bool = True
+    #: Login, register and refresh, keyed by socket peer (D113). Ten a minute
+    #: leaves room for typos and a password manager retrying, and makes
+    #: credential stuffing pay a rate the Argon2id cost already makes expensive.
+    rate_limit_auth_per_minute: int = 10
+    #: The QA path, keyed by user. The most expensive endpoint in the system:
+    #: retrieval plus generation, and NFR-P2's budget is per request. Twenty a
+    #: minute is well above a human reading answers and well below monopolising
+    #: the GPU.
+    rate_limit_qa_per_minute: int = 20
+    #: Uploads, keyed by user. Bounded because each one costs a GROBID parse and
+    #: an embedding pass, not because the HTTP request is expensive.
+    rate_limit_upload_per_minute: int = 30
+    #: When set, `/metrics` and `/health/ready` require it as a bearer token
+    #: (D114). Empty leaves them open, which is the development default;
+    #: `/health/live` is never gated, because an orchestrator's restart decision
+    #: must not need a credential.
+    metrics_token: str | None = None
+
+    # -- observability (§5.12, FR-O1) --------------------------------------
+    #: JSON because the consumer is a collector, not a terminal. `false` gives
+    #: structlog's console renderer for local work — a format choice, not a
+    #: different logging system.
+    log_json: bool = True
+    log_level: str = "INFO"
+
+    # -- provider circuit breaker (§5.11, D104) ----------------------------
+    #: Consecutive failures before a provider is skipped without being called.
+    #: Three, matching D48's retry budget for the same reason: it survives a
+    #: restart of the thing being called without sitting through an outage.
+    breaker_failure_threshold: int = 3
+    #: How long to skip it when the provider said nothing about when to return.
+    #: A 429's `Retry-After` overrides this, because the provider has stated the
+    #: answer and this number can only guess at it (D103).
+    breaker_cooldown_seconds: float = 30.0
+
     # -- generation --------------------------------------------------------
     #: Local carries sustained load; hosted quota is a deliberate spend (D26).
     generation_provider: str = "ollama"
@@ -88,6 +137,29 @@ class Settings(BaseSettings):
     #: chain (D30). A user's unpublished manuscript must not reach a tier that
     #: trains on it or shows it to human reviewers.
     private_papers_local_only: bool = True
+
+    # -- queue transport (M3 phase 3, D95, D97) ----------------------------
+    #: D95. False puts ingestion in a Celery worker and makes `worker_in_process`
+    #: false the sensible companion; true keeps M1's single-process topology,
+    #: where a broker round trip would buy nothing because the same process is
+    #: already polling the same database.
+    celery_enabled: bool = False
+
+    # -- authentication (M3 phase 1, D84) ----------------------------------
+    #: HMAC key for access tokens. **The default is a development key and the
+    #: adapter refuses anything under 32 characters.** A deployment that forgets
+    #: to set this gets a well-known secret, which is why M6's checklist treats
+    #: it as a release blocker rather than a warning.
+    jwt_secret: str = "dev-only-insecure-jwt-secret-change-me"  # noqa: S105
+    #: Goes into every token's `iss`, and is required on the way back in, so a
+    #: token minted by another service sharing the secret is still rejected.
+    jwt_issuer: str = "scholiast"
+    #: Short, because nothing can revoke an access token before it expires
+    #: (D84) — this number IS the revocation latency.
+    access_token_minutes: int = 15
+    #: Long, because the refresh token is revocable: rotation on every use and
+    #: family revocation on reuse make a long life safe to offer.
+    refresh_token_days: int = 14
 
     @field_validator("embedding_precision")
     @classmethod

@@ -41,7 +41,6 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from testcontainers.community.postgres import PostgresContainer
 
 from scholiast.api.app import create_app
-from scholiast.api.deps import M1_USER_ID
 from scholiast.application.ports.ml import TextRole
 from scholiast.config.settings import Settings
 from scholiast.domain.chunking import CHUNKER_VERSION
@@ -103,6 +102,21 @@ class DeterministicEmbedder:
         ]
 
 
+#: Migration 0005 gives the seeded M1 account a development password read from
+#: the environment (D85). It is set explicitly here rather than left to the
+#: documented default, so a developer who exports the variable does not silently
+#: break this suite — and so these tests authenticate as the SAME principal M1's
+#: `current_tenant` used to return unconditionally, which is what keeps the
+#: ownership assertions below meaning what they meant.
+#: Migration 0003 seeds this id. M3 phase 1 removed the constant from
+#: `api.deps` — no production module names a principal any more, which is
+#: the point of the phase — so the suite that asserts on the seeded owner
+#: keeps its own copy.
+M1_USER_ID = "00000000-0000-4000-8000-000000000001"
+SEED_EMAIL = "demo@scholiast.local"
+SEED_PASSWORD = "integration-suite-password"
+
+
 @pytest.fixture(scope="module")
 def postgres() -> Iterator[str]:
     with PostgresContainer("postgres:17-alpine", driver="asyncpg") as container:
@@ -113,10 +127,27 @@ def postgres() -> Iterator[str]:
             capture_output=True,
             text=True,
             check=False,
+            env={**os.environ, "SEED_USER_PASSWORD": SEED_PASSWORD},
         )
         if result.returncode != 0:
             pytest.fail(f"alembic upgrade failed:\n{result.stdout}\n{result.stderr}")
         yield url
+
+
+async def authenticate(client: httpx.AsyncClient) -> str:
+    """Log in as the seeded account and attach the bearer token to the client.
+
+    M3 phase 1 replaced the inside of `current_tenant`: every router now needs a
+    verified token, and no router changed to gain that. The tests therefore do
+    what any client does — they log in.
+    """
+    response = await client.post(
+        "/v1/auth/login", json={"email": SEED_EMAIL, "password": SEED_PASSWORD}
+    )
+    assert response.status_code == 200, response.text
+    token = response.json()["access_token"]
+    client.headers["Authorization"] = f"Bearer {token}"
+    return str(response.json()["user_id"])
 
 
 @dataclass
@@ -158,11 +189,13 @@ async def api(postgres: str, tmp_path: Path) -> AsyncIterator[Harness]:
         app.state.embedder = DeterministicEmbedder()
         transport = httpx.ASGITransport(app=manager.app)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+            await authenticate(client)
             yield Harness(client=client, app=app)
 
         engine = create_async_engine(postgres)
         async with engine.begin() as connection:
             for table in (
+                "refresh_tokens",
                 "messages",
                 "conversations",
                 "ingestion_jobs",
