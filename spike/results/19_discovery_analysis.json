@@ -1,0 +1,2782 @@
+{
+ "protocol_sha256": "6f46de9af888c2998f9c3faf61d8c902692e8e688db012aef307a098df820884",
+ "protocol_original_sha256": "6a2809025626b29b96119cd4d06639fd3341cd325c74c121e82ba5e9e8677a34",
+ "protocol_hashes_in_run_logs": [
+  "6a2809025626b29b96119cd4d06639fd3341cd325c74c121e82ba5e9e8677a34",
+  "6f46de9af888c2998f9c3faf61d8c902692e8e688db012aef307a098df820884"
+ ],
+ "generated_at": "2026-10-01T12:13:33.206+00:00",
+ "s2_mode": "keyless",
+ "deviations": {
+  "events": [
+   {
+    "event": "deviation",
+    "id": "DEV-2",
+    "at": "2026-10-01T05:23:01.209+00:00",
+    "refused": [
+     "P1/t01-natural_language/openalex",
+     "P1/t09-natural_language/openalex",
+     "P1/t07-natural_language/openalex",
+     "P1/t08-natural_language/openalex",
+     "P1/t02-natural_language/openalex"
+    ],
+    "detail": "OpenAlex refused these searches for a wildcard ('?'); each is repeated once with '?' and '*' replaced by spaces (protocol amended, D117)"
+   }
+  ],
+  "DEV-1": [],
+  "DEV-2": [
+   {
+    "rid": "P1/t01-natural_language/openalex",
+    "refused": {
+     "status": 400,
+     "outcome": "client_error"
+    },
+    "repeat": {
+     "status": 200,
+     "outcome": "ok",
+     "latency_s": 1.7853
+    }
+   },
+   {
+    "rid": "P1/t02-natural_language/openalex",
+    "refused": {
+     "status": 400,
+     "outcome": "client_error"
+    },
+    "repeat": {
+     "status": 200,
+     "outcome": "ok",
+     "latency_s": 0.9082
+    }
+   },
+   {
+    "rid": "P1/t07-natural_language/openalex",
+    "refused": {
+     "status": 400,
+     "outcome": "client_error"
+    },
+    "repeat": {
+     "status": 200,
+     "outcome": "ok",
+     "latency_s": 0.9614
+    }
+   },
+   {
+    "rid": "P1/t08-natural_language/openalex",
+    "refused": {
+     "status": 400,
+     "outcome": "client_error"
+    },
+    "repeat": {
+     "status": 200,
+     "outcome": "ok",
+     "latency_s": 2.4532
+    }
+   },
+   {
+    "rid": "P1/t09-natural_language/openalex",
+    "refused": {
+     "status": 400,
+     "outcome": "client_error"
+    },
+    "repeat": {
+     "status": 200,
+     "outcome": "ok",
+     "latency_s": 1.7043
+    }
+   }
+  ]
+ },
+ "stopped_hosts": [
+  {
+   "api.semanticscholar.org": "5 consecutive 429/5xx"
+  },
+  {
+   "api.semanticscholar.org": "5 consecutive 429/5xx"
+  }
+ ],
+ "seed_streams": "20260930/P1, /P2/<source>, /P3, /P4, /P5",
+ "interpretations": {
+  "hops": "at most 5 redirects are followed, so a chain is at most 6 requests; every one counts",
+  "retry_after_ceiling_s": 600,
+  "latency": "request issued to last body byte, 2xx only; failures count as never completing",
+  "host_stopped_works": "a work whose remaining URLs went unsent because the host-stop rule fired counts as a failure, as the ASM-2 denominator is written; asm2.failed_with_a_stopped_host shows how many, so the other reading can be computed without rerunning",
+  "s2_chain_urls": "every hop of a chain that started from an S2-only URL is recorded as host plus hash, not only the URL itself",
+  "host_stop_on_resume": "a resumed run replays the stop rule and Retry-After from the same session's log; a request logged as sent with no end is taken to have ended when the resume starts"
+ },
+ "planned_coverage": {
+  "missing": [],
+  "complete": true
+ },
+ "log_check": {
+  "sent_requests": 354,
+  "violations": [],
+  "sent_without_outcome": []
+ },
+ "asm1": {
+  "verdict": "FAIL",
+  "per_source": {
+   "openalex": {
+    "1a": false,
+    "1b": true,
+    "1c": true,
+    "1d": true,
+    "meets_all": false
+   },
+   "semantic_scholar": {
+    "1a": false,
+    "1b": false,
+    "1c": false,
+    "1d": false,
+    "meets_all": false
+   },
+   "arxiv": {
+    "1a": true,
+    "1b": true,
+    "1c": true,
+    "1d": false,
+    "meets_all": false
+   }
+  },
+  "latency_session1": {
+   "openalex": {
+    "requests": 20,
+    "ok": 20,
+    "outcomes": {
+     "ok": 20
+    },
+    "stand_in_repeats": [
+     "P1/t01-natural_language/openalex",
+     "P1/t02-natural_language/openalex",
+     "P1/t07-natural_language/openalex",
+     "P1/t08-natural_language/openalex",
+     "P1/t09-natural_language/openalex"
+    ],
+    "latency_s": {
+     "n": 20,
+     "p50": 1.9414,
+     "p90": 2.4716,
+     "p95": 2.6056,
+     "max": 2.88
+    },
+    "warm_only_s": {
+     "n": 19,
+     "p50": 1.9414,
+     "p90": 2.4716,
+     "p95": 2.88,
+     "max": 2.88
+    },
+    "completion": {
+     "1.0": {
+      "k": 2,
+      "n": 20,
+      "rate": 0.1,
+      "lo": 0.0279,
+      "hi": 0.301
+     },
+     "1.5": {
+      "k": 2,
+      "n": 20,
+      "rate": 0.1,
+      "lo": 0.0279,
+      "hi": 0.301
+     },
+     "2.0": {
+      "k": 12,
+      "n": 20,
+      "rate": 0.6,
+      "lo": 0.3866,
+      "hi": 0.7812
+     },
+     "2.5": {
+      "k": 18,
+      "n": 20,
+      "rate": 0.9,
+      "lo": 0.699,
+      "hi": 0.9721
+     },
+     "3.0": {
+      "k": 20,
+      "n": 20,
+      "rate": 1.0,
+      "lo": 0.8389,
+      "hi": 1.0
+     }
+    },
+    "verdict": "truncation_only",
+    "headers_s_p50": 0.7051
+   },
+   "semantic_scholar": {
+    "requests": 5,
+    "ok": 0,
+    "outcomes": {
+     "throttled": 5
+    },
+    "stand_in_repeats": [],
+    "latency_s": {
+     "n": 0,
+     "p50": null,
+     "p90": null,
+     "p95": null,
+     "max": null
+    },
+    "warm_only_s": {
+     "n": 0,
+     "p50": null,
+     "p90": null,
+     "p95": null,
+     "max": null
+    },
+    "completion": {
+     "1.0": {
+      "k": 0,
+      "n": 5,
+      "rate": 0.0,
+      "lo": 0.0,
+      "hi": 0.4345
+     },
+     "1.5": {
+      "k": 0,
+      "n": 5,
+      "rate": 0.0,
+      "lo": 0.0,
+      "hi": 0.4345
+     },
+     "2.0": {
+      "k": 0,
+      "n": 5,
+      "rate": 0.0,
+      "lo": 0.0,
+      "hi": 0.4345
+     },
+     "2.5": {
+      "k": 0,
+      "n": 5,
+      "rate": 0.0,
+      "lo": 0.0,
+      "hi": 0.4345
+     },
+     "3.0": {
+      "k": 0,
+      "n": 5,
+      "rate": 0.0,
+      "lo": 0.0,
+      "hi": 0.4345
+     }
+    },
+    "verdict": null,
+    "headers_s_p50": null
+   },
+   "arxiv": {
+    "requests": 20,
+    "ok": 20,
+    "outcomes": {
+     "ok": 20
+    },
+    "stand_in_repeats": [],
+    "latency_s": {
+     "n": 20,
+     "p50": 0.8809,
+     "p90": 1.3189,
+     "p95": 1.5982,
+     "max": 16.3435
+    },
+    "warm_only_s": {
+     "n": 19,
+     "p50": 0.8833,
+     "p90": 1.5982,
+     "p95": 16.3435,
+     "max": 16.3435
+    },
+    "completion": {
+     "1.0": {
+      "k": 14,
+      "n": 20,
+      "rate": 0.7,
+      "lo": 0.481,
+      "hi": 0.8545
+     },
+     "1.5": {
+      "k": 18,
+      "n": 20,
+      "rate": 0.9,
+      "lo": 0.699,
+      "hi": 0.9721
+     },
+     "2.0": {
+      "k": 19,
+      "n": 20,
+      "rate": 0.95,
+      "lo": 0.7639,
+      "hi": 0.9911
+     },
+     "2.5": {
+      "k": 19,
+      "n": 20,
+      "rate": 0.95,
+      "lo": 0.7639,
+      "hi": 0.9911
+     },
+     "3.0": {
+      "k": 19,
+      "n": 20,
+      "rate": 0.95,
+      "lo": 0.7639,
+      "hi": 0.9911
+     }
+    },
+    "verdict": "fits",
+    "headers_s_p50": 0.8642
+   },
+   "all_three": {
+    "completion": {
+     "1.0": {
+      "k": 0,
+      "n": 20,
+      "rate": 0.0,
+      "lo": 0.0,
+      "hi": 0.1611
+     },
+     "1.5": {
+      "k": 0,
+      "n": 20,
+      "rate": 0.0,
+      "lo": 0.0,
+      "hi": 0.1611
+     },
+     "2.0": {
+      "k": 0,
+      "n": 20,
+      "rate": 0.0,
+      "lo": 0.0,
+      "hi": 0.1611
+     },
+     "2.5": {
+      "k": 0,
+      "n": 20,
+      "rate": 0.0,
+      "lo": 0.0,
+      "hi": 0.1611
+     },
+     "3.0": {
+      "k": 0,
+      "n": 20,
+      "rate": 0.0,
+      "lo": 0.0,
+      "hi": 0.1611
+     }
+    },
+    "fan_out_max_latency_s": {
+     "n": 0,
+     "p50": null,
+     "p90": null,
+     "p95": null,
+     "max": null
+    }
+   }
+  },
+  "latency_session2": {
+   "openalex": {
+    "requests": 10,
+    "ok": 10,
+    "outcomes": {
+     "ok": 10
+    },
+    "stand_in_repeats": [],
+    "latency_s": {
+     "n": 10,
+     "p50": 1.978,
+     "p90": 2.3539,
+     "p95": 2.3748,
+     "max": 2.3748
+    },
+    "warm_only_s": {
+     "n": 9,
+     "p50": 1.978,
+     "p90": 2.3748,
+     "p95": 2.3748,
+     "max": 2.3748
+    },
+    "completion": {
+     "1.0": {
+      "k": 0,
+      "n": 10,
+      "rate": 0.0,
+      "lo": 0.0,
+      "hi": 0.2775
+     },
+     "1.5": {
+      "k": 0,
+      "n": 10,
+      "rate": 0.0,
+      "lo": 0.0,
+      "hi": 0.2775
+     },
+     "2.0": {
+      "k": 6,
+      "n": 10,
+      "rate": 0.6,
+      "lo": 0.3127,
+      "hi": 0.8318
+     },
+     "2.5": {
+      "k": 10,
+      "n": 10,
+      "rate": 1.0,
+      "lo": 0.7225,
+      "hi": 1.0
+     },
+     "3.0": {
+      "k": 10,
+      "n": 10,
+      "rate": 1.0,
+      "lo": 0.7225,
+      "hi": 1.0
+     }
+    },
+    "verdict": "tight",
+    "headers_s_p50": 0.6563
+   },
+   "semantic_scholar": {
+    "requests": 5,
+    "ok": 0,
+    "outcomes": {
+     "throttled": 5
+    },
+    "stand_in_repeats": [],
+    "latency_s": {
+     "n": 0,
+     "p50": null,
+     "p90": null,
+     "p95": null,
+     "max": null
+    },
+    "warm_only_s": {
+     "n": 0,
+     "p50": null,
+     "p90": null,
+     "p95": null,
+     "max": null
+    },
+    "completion": {
+     "1.0": {
+      "k": 0,
+      "n": 5,
+      "rate": 0.0,
+      "lo": 0.0,
+      "hi": 0.4345
+     },
+     "1.5": {
+      "k": 0,
+      "n": 5,
+      "rate": 0.0,
+      "lo": 0.0,
+      "hi": 0.4345
+     },
+     "2.0": {
+      "k": 0,
+      "n": 5,
+      "rate": 0.0,
+      "lo": 0.0,
+      "hi": 0.4345
+     },
+     "2.5": {
+      "k": 0,
+      "n": 5,
+      "rate": 0.0,
+      "lo": 0.0,
+      "hi": 0.4345
+     },
+     "3.0": {
+      "k": 0,
+      "n": 5,
+      "rate": 0.0,
+      "lo": 0.0,
+      "hi": 0.4345
+     }
+    },
+    "verdict": null,
+    "headers_s_p50": null
+   },
+   "arxiv": {
+    "requests": 10,
+    "ok": 10,
+    "outcomes": {
+     "ok": 10
+    },
+    "stand_in_repeats": [],
+    "latency_s": {
+     "n": 10,
+     "p50": 1.0323,
+     "p90": 1.276,
+     "p95": 1.5143,
+     "max": 1.5143
+    },
+    "warm_only_s": {
+     "n": 9,
+     "p50": 1.0323,
+     "p90": 1.5143,
+     "p95": 1.5143,
+     "max": 1.5143
+    },
+    "completion": {
+     "1.0": {
+      "k": 3,
+      "n": 10,
+      "rate": 0.3,
+      "lo": 0.1078,
+      "hi": 0.6032
+     },
+     "1.5": {
+      "k": 9,
+      "n": 10,
+      "rate": 0.9,
+      "lo": 0.5958,
+      "hi": 0.9821
+     },
+     "2.0": {
+      "k": 10,
+      "n": 10,
+      "rate": 1.0,
+      "lo": 0.7225,
+      "hi": 1.0
+     },
+     "2.5": {
+      "k": 10,
+      "n": 10,
+      "rate": 1.0,
+      "lo": 0.7225,
+      "hi": 1.0
+     },
+     "3.0": {
+      "k": 10,
+      "n": 10,
+      "rate": 1.0,
+      "lo": 0.7225,
+      "hi": 1.0
+     }
+    },
+    "verdict": "fits",
+    "headers_s_p50": 1.0002
+   },
+   "all_three": {
+    "completion": {
+     "1.0": {
+      "k": 0,
+      "n": 10,
+      "rate": 0.0,
+      "lo": 0.0,
+      "hi": 0.2775
+     },
+     "1.5": {
+      "k": 0,
+      "n": 10,
+      "rate": 0.0,
+      "lo": 0.0,
+      "hi": 0.2775
+     },
+     "2.0": {
+      "k": 0,
+      "n": 10,
+      "rate": 0.0,
+      "lo": 0.0,
+      "hi": 0.2775
+     },
+     "2.5": {
+      "k": 0,
+      "n": 10,
+      "rate": 0.0,
+      "lo": 0.0,
+      "hi": 0.2775
+     },
+     "3.0": {
+      "k": 0,
+      "n": 10,
+      "rate": 0.0,
+      "lo": 0.0,
+      "hi": 0.2775
+     }
+    },
+    "fan_out_max_latency_s": {
+     "n": 0,
+     "p50": null,
+     "p90": null,
+     "p95": null,
+     "max": null
+    }
+   }
+  },
+  "completeness": {
+   "openalex": {
+    "records": 1000,
+    "fields": {
+     "title": {
+      "k": 1000,
+      "n": 1000,
+      "rate": 1.0,
+      "lo": 0.9962,
+      "hi": 1.0
+     },
+     "authors": {
+      "k": 999,
+      "n": 1000,
+      "rate": 0.999,
+      "lo": 0.9944,
+      "hi": 0.9998
+     },
+     "year": {
+      "k": 1000,
+      "n": 1000,
+      "rate": 1.0,
+      "lo": 0.9962,
+      "hi": 1.0
+     },
+     "venue": {
+      "k": 717,
+      "n": 1000,
+      "rate": 0.717,
+      "lo": 0.6883,
+      "hi": 0.744
+     },
+     "abstract": {
+      "k": 921,
+      "n": 1000,
+      "rate": 0.921,
+      "lo": 0.9026,
+      "hi": 0.9362
+     },
+     "citation_count": {
+      "k": 1000,
+      "n": 1000,
+      "rate": 1.0,
+      "lo": 0.9962,
+      "hi": 1.0
+     },
+     "doi": {
+      "k": 825,
+      "n": 1000,
+      "rate": 0.825,
+      "lo": 0.8002,
+      "hi": 0.8473
+     },
+     "arxiv_id": {
+      "k": 350,
+      "n": 1000,
+      "rate": 0.35,
+      "lo": 0.3211,
+      "hi": 0.3801
+     },
+     "oa_link": {
+      "k": 939,
+      "n": 1000,
+      "rate": 0.939,
+      "lo": 0.9224,
+      "hi": 0.9522
+     },
+     "full_date": {
+      "k": 1000,
+      "n": 1000,
+      "rate": 1.0,
+      "lo": 0.9962,
+      "hi": 1.0
+     }
+    },
+    "failed_bars": [],
+    "meets": true,
+    "structural_gap": []
+   },
+   "semantic_scholar": {
+    "records": 0,
+    "fields": {
+     "title": {
+      "k": 0,
+      "n": 0,
+      "rate": null,
+      "lo": null,
+      "hi": null
+     },
+     "authors": {
+      "k": 0,
+      "n": 0,
+      "rate": null,
+      "lo": null,
+      "hi": null
+     },
+     "year": {
+      "k": 0,
+      "n": 0,
+      "rate": null,
+      "lo": null,
+      "hi": null
+     },
+     "venue": {
+      "k": 0,
+      "n": 0,
+      "rate": null,
+      "lo": null,
+      "hi": null
+     },
+     "abstract": {
+      "k": 0,
+      "n": 0,
+      "rate": null,
+      "lo": null,
+      "hi": null
+     },
+     "citation_count": {
+      "k": 0,
+      "n": 0,
+      "rate": null,
+      "lo": null,
+      "hi": null
+     },
+     "doi": {
+      "k": 0,
+      "n": 0,
+      "rate": null,
+      "lo": null,
+      "hi": null
+     },
+     "arxiv_id": {
+      "k": 0,
+      "n": 0,
+      "rate": null,
+      "lo": null,
+      "hi": null
+     },
+     "oa_link": {
+      "k": 0,
+      "n": 0,
+      "rate": null,
+      "lo": null,
+      "hi": null
+     },
+     "full_date": {
+      "k": 0,
+      "n": 0,
+      "rate": null,
+      "lo": null,
+      "hi": null
+     }
+    },
+    "failed_bars": [
+     "title",
+     "authors",
+     "year",
+     "abstract",
+     "citation_count"
+    ],
+    "meets": false,
+    "structural_gap": []
+   },
+   "arxiv": {
+    "records": 900,
+    "fields": {
+     "title": {
+      "k": 900,
+      "n": 900,
+      "rate": 1.0,
+      "lo": 0.9957,
+      "hi": 1.0
+     },
+     "authors": {
+      "k": 900,
+      "n": 900,
+      "rate": 1.0,
+      "lo": 0.9957,
+      "hi": 1.0
+     },
+     "year": {
+      "k": 900,
+      "n": 900,
+      "rate": 1.0,
+      "lo": 0.9957,
+      "hi": 1.0
+     },
+     "venue": {
+      "k": 62,
+      "n": 900,
+      "rate": 0.0689,
+      "lo": 0.0541,
+      "hi": 0.0873
+     },
+     "abstract": {
+      "k": 900,
+      "n": 900,
+      "rate": 1.0,
+      "lo": 0.9957,
+      "hi": 1.0
+     },
+     "citation_count": {
+      "k": 0,
+      "n": 900,
+      "rate": 0.0,
+      "lo": 0.0,
+      "hi": 0.0043
+     },
+     "doi": {
+      "k": 77,
+      "n": 900,
+      "rate": 0.0856,
+      "lo": 0.069,
+      "hi": 0.1056
+     },
+     "arxiv_id": {
+      "k": 900,
+      "n": 900,
+      "rate": 1.0,
+      "lo": 0.9957,
+      "hi": 1.0
+     },
+     "oa_link": {
+      "k": 900,
+      "n": 900,
+      "rate": 1.0,
+      "lo": 0.9957,
+      "hi": 1.0
+     },
+     "full_date": {
+      "k": 900,
+      "n": 900,
+      "rate": 1.0,
+      "lo": 0.9957,
+      "hi": 1.0
+     }
+    },
+    "failed_bars": [],
+    "meets": true,
+    "structural_gap": [
+     "citation_count"
+    ]
+   }
+  },
+  "limits": {
+   "openalex": {
+    "requests": 41,
+    "statuses": {
+     "200": 41
+    },
+    "throttled_429": 0,
+    "share_429": {
+     "k": 0,
+     "n": 41,
+     "rate": 0.0,
+     "lo": 0.0,
+     "hi": 0.0857
+    },
+    "busy_503": 0,
+    "retry_after_values": [],
+    "rate_limit_headers": {
+     "search": {
+      "x-ratelimit-cost-usd": [
+       "0.001"
+      ],
+      "x-ratelimit-credits-used": [
+       "10"
+      ],
+      "x-ratelimit-limit": [
+       "10000"
+      ],
+      "x-ratelimit-limit-usd": [
+       "1"
+      ],
+      "x-ratelimit-onetime-remaining": [
+       "0"
+      ],
+      "x-ratelimit-prepaid-remaining-usd": [
+       "0"
+      ],
+      "x-ratelimit-remaining": [
+       "9990",
+       "9980",
+       "9970",
+       "9960",
+       "9950",
+       "9940",
+       "9930",
+       "9920",
+       "9910",
+       "9900",
+       "9890",
+       "9880"
+      ],
+      "x-ratelimit-remaining-usd": [
+       "0.999",
+       "0.998",
+       "0.997",
+       "0.996",
+       "0.995",
+       "0.994",
+       "0.993",
+       "0.992",
+       "0.991",
+       "0.99",
+       "0.989",
+       "0.988"
+      ],
+      "x-ratelimit-reset": [
+       "67093",
+       "67089",
+       "67085",
+       "67065",
+       "67062",
+       "67057",
+       "67053",
+       "67048",
+       "67043",
+       "67040",
+       "67036",
+       "67031"
+      ]
+     },
+     "lookup": {
+      "x-ratelimit-cost-usd": [
+       "0.0001",
+       "0"
+      ],
+      "x-ratelimit-credits-used": [
+       "1",
+       "0"
+      ],
+      "x-ratelimit-limit": [
+       "10000"
+      ],
+      "x-ratelimit-limit-usd": [
+       "1"
+      ],
+      "x-ratelimit-onetime-remaining": [
+       "0"
+      ],
+      "x-ratelimit-prepaid-remaining-usd": [
+       "0"
+      ],
+      "x-ratelimit-remaining": [
+       "9799"
+      ],
+      "x-ratelimit-remaining-usd": [
+       "0.9799"
+      ],
+      "x-ratelimit-reset": [
+       "67010",
+       "67008",
+       "67007",
+       "67006",
+       "67005",
+       "67004",
+       "67003",
+       "67002",
+       "67000",
+       "66999",
+       "66998"
+      ]
+     }
+    },
+    "response_bytes": {
+     "n": 41,
+     "p50": 602884.0,
+     "p90": 825978.0,
+     "p95": 866303.0,
+     "max": 1004176.0
+    },
+    "rule": "keyed: zero 429s",
+    "meets": true
+   },
+   "semantic_scholar": {
+    "requests": 10,
+    "statuses": {
+     "429": 10
+    },
+    "throttled_429": 10,
+    "share_429": {
+     "k": 10,
+     "n": 10,
+     "rate": 1.0,
+     "lo": 0.7225,
+     "hi": 1.0
+    },
+    "busy_503": 0,
+    "retry_after_values": [],
+    "rate_limit_headers": {},
+    "response_bytes": {
+     "n": 0,
+     "p50": null,
+     "p90": null,
+     "p95": null,
+     "max": null
+    },
+    "rule": "keyless: 429s on <= 10% of requests",
+    "meets": false
+   },
+   "arxiv": {
+    "requests": 35,
+    "statuses": {
+     "200": 35
+    },
+    "throttled_429": 0,
+    "share_429": {
+     "k": 0,
+     "n": 35,
+     "rate": 0.0,
+     "lo": 0.0,
+     "hi": 0.0989
+    },
+    "busy_503": 0,
+    "retry_after_values": [],
+    "rate_limit_headers": {},
+    "response_bytes": {
+     "n": 35,
+     "p50": 115771.0,
+     "p90": 122014.0,
+     "p95": 123132.0,
+     "max": 123313.0
+    },
+    "rule": "zero 429s or 503s",
+    "meets": true
+   }
+  },
+  "anchors": {
+   "id_verified": {
+    "2005.11401": true,
+    "2307.03172": true,
+    "2106.09685": true,
+    "2305.14314": true,
+    "2004.04906": true,
+    "2112.09118": true,
+    "2303.08896": true,
+    "2202.03629": true,
+    "2111.00396": true,
+    "2312.00752": true,
+    "1704.01212": true,
+    "1905.12265": true,
+    "1503.02531": true,
+    "1910.01108": true,
+    "2006.11239": true,
+    "2112.10752": true,
+    "2104.08821": true,
+    "1908.10084": true,
+    "2201.11903": true,
+    "2203.11171": true
+   },
+   "id_mismatches": [],
+   "present_in_source": {
+    "openalex": [
+     "1503.02531",
+     "1704.01212",
+     "1905.12265",
+     "1908.10084",
+     "2005.11401",
+     "2006.11239",
+     "2104.08821",
+     "2106.09685",
+     "2111.00396",
+     "2112.09118",
+     "2112.10752",
+     "2201.11903",
+     "2203.11171",
+     "2303.08896",
+     "2305.14314",
+     "2307.03172",
+     "2312.00752"
+    ],
+    "semantic_scholar": [],
+    "arxiv": [
+     "1503.02531",
+     "1704.01212",
+     "1905.12265",
+     "1908.10084",
+     "1910.01108",
+     "2004.04906",
+     "2005.11401",
+     "2006.11239",
+     "2104.08821",
+     "2106.09685",
+     "2111.00396",
+     "2112.09118",
+     "2112.10752",
+     "2201.11903",
+     "2202.03629",
+     "2203.11171",
+     "2303.08896",
+     "2305.14314",
+     "2307.03172",
+     "2312.00752"
+    ]
+   },
+   "recall": {
+    "openalex": {
+     "keyword": {
+      "top10": {
+       "k": 12,
+       "n": 20,
+       "rate": 0.6,
+       "lo": 0.3866,
+       "hi": 0.7812
+      },
+      "top50": {
+       "k": 14,
+       "n": 20,
+       "rate": 0.7,
+       "lo": 0.481,
+       "hi": 0.8545
+      },
+      "anchors": [
+       {
+        "topic": "t01",
+        "anchor": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t01",
+        "anchor": "Lost in the Middle: How Language Models Use Long Contexts",
+        "rank": 26,
+        "rule": "title",
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t02",
+        "anchor": "LoRA: Low-Rank Adaptation of Large Language Models",
+        "rank": 1,
+        "rule": "arxiv_id",
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t02",
+        "anchor": "QLoRA: Efficient Finetuning of Quantized LLMs",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t03",
+        "anchor": "Dense Passage Retrieval for Open-Domain Question Answering",
+        "rank": 1,
+        "rule": "arxiv_id",
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": false
+       },
+       {
+        "topic": "t03",
+        "anchor": "Unsupervised Dense Information Retrieval with Contrastive Learning",
+        "rank": 38,
+        "rule": "arxiv_id",
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t04",
+        "anchor": "SelfCheckGPT: Zero-Resource Black-Box Hallucination Detection for Generative Large Language Models",
+        "rank": 1,
+        "rule": "title",
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t04",
+        "anchor": "Survey of Hallucination in Natural Language Generation",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": false
+       },
+       {
+        "topic": "t05",
+        "anchor": "Efficiently Modeling Long Sequences with Structured State Spaces",
+        "rank": 2,
+        "rule": "arxiv_id",
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t05",
+        "anchor": "Mamba: Linear-Time Sequence Modeling with Selective State Spaces",
+        "rank": 7,
+        "rule": "arxiv_id",
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t06",
+        "anchor": "Neural Message Passing for Quantum Chemistry",
+        "rank": 4,
+        "rule": "arxiv_id",
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t06",
+        "anchor": "Strategies for Pre-training Graph Neural Networks",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t07",
+        "anchor": "Distilling the Knowledge in a Neural Network",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t07",
+        "anchor": "DistilBERT, a distilled version of BERT: smaller, faster, cheaper and lighter",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": false
+       },
+       {
+        "topic": "t08",
+        "anchor": "Denoising Diffusion Probabilistic Models",
+        "rank": 2,
+        "rule": "arxiv_id",
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t08",
+        "anchor": "High-Resolution Image Synthesis with Latent Diffusion Models",
+        "rank": 1,
+        "rule": "title",
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t09",
+        "anchor": "SimCSE: Simple Contrastive Learning of Sentence Embeddings",
+        "rank": 1,
+        "rule": "title",
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t09",
+        "anchor": "Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks",
+        "rank": 2,
+        "rule": "title",
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t10",
+        "anchor": "Chain-of-Thought Prompting Elicits Reasoning in Large Language Models",
+        "rank": 1,
+        "rule": "title",
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t10",
+        "anchor": "Self-Consistency Improves Chain of Thought Reasoning in Language Models",
+        "rank": 4,
+        "rule": "arxiv_id",
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       }
+      ]
+     },
+     "natural_language": {
+      "top10": {
+       "k": 9,
+       "n": 20,
+       "rate": 0.45,
+       "lo": 0.2582,
+       "hi": 0.6579
+      },
+      "top50": {
+       "k": 11,
+       "n": 20,
+       "rate": 0.55,
+       "lo": 0.3421,
+       "hi": 0.7418
+      },
+      "anchors": [
+       {
+        "topic": "t01",
+        "anchor": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t01",
+        "anchor": "Lost in the Middle: How Language Models Use Long Contexts",
+        "rank": 9,
+        "rule": "title",
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t02",
+        "anchor": "LoRA: Low-Rank Adaptation of Large Language Models",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t02",
+        "anchor": "QLoRA: Efficient Finetuning of Quantized LLMs",
+        "rank": 21,
+        "rule": "arxiv_id",
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t03",
+        "anchor": "Dense Passage Retrieval for Open-Domain Question Answering",
+        "rank": 1,
+        "rule": "arxiv_id",
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": false
+       },
+       {
+        "topic": "t03",
+        "anchor": "Unsupervised Dense Information Retrieval with Contrastive Learning",
+        "rank": 32,
+        "rule": "arxiv_id",
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t04",
+        "anchor": "SelfCheckGPT: Zero-Resource Black-Box Hallucination Detection for Generative Large Language Models",
+        "rank": 4,
+        "rule": "title",
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t04",
+        "anchor": "Survey of Hallucination in Natural Language Generation",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": false
+       },
+       {
+        "topic": "t05",
+        "anchor": "Efficiently Modeling Long Sequences with Structured State Spaces",
+        "rank": 7,
+        "rule": "arxiv_id",
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t05",
+        "anchor": "Mamba: Linear-Time Sequence Modeling with Selective State Spaces",
+        "rank": 4,
+        "rule": "arxiv_id",
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t06",
+        "anchor": "Neural Message Passing for Quantum Chemistry",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t06",
+        "anchor": "Strategies for Pre-training Graph Neural Networks",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t07",
+        "anchor": "Distilling the Knowledge in a Neural Network",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t07",
+        "anchor": "DistilBERT, a distilled version of BERT: smaller, faster, cheaper and lighter",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": false
+       },
+       {
+        "topic": "t08",
+        "anchor": "Denoising Diffusion Probabilistic Models",
+        "rank": 1,
+        "rule": "arxiv_id",
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t08",
+        "anchor": "High-Resolution Image Synthesis with Latent Diffusion Models",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t09",
+        "anchor": "SimCSE: Simple Contrastive Learning of Sentence Embeddings",
+        "rank": 2,
+        "rule": "title",
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t09",
+        "anchor": "Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks",
+        "rank": 1,
+        "rule": "title",
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t10",
+        "anchor": "Chain-of-Thought Prompting Elicits Reasoning in Large Language Models",
+        "rank": 10,
+        "rule": "arxiv_id",
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t10",
+        "anchor": "Self-Consistency Improves Chain of Thought Reasoning in Language Models",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       }
+      ]
+     },
+     "meets": true
+    },
+    "semantic_scholar": {
+     "keyword": {
+      "top10": {
+       "k": 0,
+       "n": 20,
+       "rate": 0.0,
+       "lo": 0.0,
+       "hi": 0.1611
+      },
+      "top50": {
+       "k": 0,
+       "n": 20,
+       "rate": 0.0,
+       "lo": 0.0,
+       "hi": 0.1611
+      },
+      "anchors": [
+       {
+        "topic": "t01",
+        "anchor": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": true,
+        "in_source": false
+       },
+       {
+        "topic": "t01",
+        "anchor": "Lost in the Middle: How Language Models Use Long Contexts",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": true,
+        "in_source": false
+       },
+       {
+        "topic": "t02",
+        "anchor": "LoRA: Low-Rank Adaptation of Large Language Models",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": true,
+        "in_source": false
+       },
+       {
+        "topic": "t02",
+        "anchor": "QLoRA: Efficient Finetuning of Quantized LLMs",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": true,
+        "in_source": false
+       },
+       {
+        "topic": "t03",
+        "anchor": "Dense Passage Retrieval for Open-Domain Question Answering",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": true,
+        "in_source": false
+       },
+       {
+        "topic": "t03",
+        "anchor": "Unsupervised Dense Information Retrieval with Contrastive Learning",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": true,
+        "in_source": false
+       },
+       {
+        "topic": "t04",
+        "anchor": "SelfCheckGPT: Zero-Resource Black-Box Hallucination Detection for Generative Large Language Models",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": true,
+        "in_source": false
+       },
+       {
+        "topic": "t04",
+        "anchor": "Survey of Hallucination in Natural Language Generation",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": true,
+        "in_source": false
+       },
+       {
+        "topic": "t05",
+        "anchor": "Efficiently Modeling Long Sequences with Structured State Spaces",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": true,
+        "in_source": false
+       },
+       {
+        "topic": "t05",
+        "anchor": "Mamba: Linear-Time Sequence Modeling with Selective State Spaces",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": true,
+        "in_source": false
+       },
+       {
+        "topic": "t06",
+        "anchor": "Neural Message Passing for Quantum Chemistry",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": true,
+        "in_source": false
+       },
+       {
+        "topic": "t06",
+        "anchor": "Strategies for Pre-training Graph Neural Networks",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": true,
+        "in_source": false
+       },
+       {
+        "topic": "t07",
+        "anchor": "Distilling the Knowledge in a Neural Network",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": true,
+        "in_source": false
+       },
+       {
+        "topic": "t07",
+        "anchor": "DistilBERT, a distilled version of BERT: smaller, faster, cheaper and lighter",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": true,
+        "in_source": false
+       },
+       {
+        "topic": "t08",
+        "anchor": "Denoising Diffusion Probabilistic Models",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": true,
+        "in_source": false
+       },
+       {
+        "topic": "t08",
+        "anchor": "High-Resolution Image Synthesis with Latent Diffusion Models",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": true,
+        "in_source": false
+       },
+       {
+        "topic": "t09",
+        "anchor": "SimCSE: Simple Contrastive Learning of Sentence Embeddings",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": true,
+        "in_source": false
+       },
+       {
+        "topic": "t09",
+        "anchor": "Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": true,
+        "in_source": false
+       },
+       {
+        "topic": "t10",
+        "anchor": "Chain-of-Thought Prompting Elicits Reasoning in Large Language Models",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": true,
+        "in_source": false
+       },
+       {
+        "topic": "t10",
+        "anchor": "Self-Consistency Improves Chain of Thought Reasoning in Language Models",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": true,
+        "in_source": false
+       }
+      ]
+     },
+     "natural_language": {
+      "top10": {
+       "k": 0,
+       "n": 20,
+       "rate": 0.0,
+       "lo": 0.0,
+       "hi": 0.1611
+      },
+      "top50": {
+       "k": 0,
+       "n": 20,
+       "rate": 0.0,
+       "lo": 0.0,
+       "hi": 0.1611
+      },
+      "anchors": [
+       {
+        "topic": "t01",
+        "anchor": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": true,
+        "in_source": false
+       },
+       {
+        "topic": "t01",
+        "anchor": "Lost in the Middle: How Language Models Use Long Contexts",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": true,
+        "in_source": false
+       },
+       {
+        "topic": "t02",
+        "anchor": "LoRA: Low-Rank Adaptation of Large Language Models",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": true,
+        "in_source": false
+       },
+       {
+        "topic": "t02",
+        "anchor": "QLoRA: Efficient Finetuning of Quantized LLMs",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": true,
+        "in_source": false
+       },
+       {
+        "topic": "t03",
+        "anchor": "Dense Passage Retrieval for Open-Domain Question Answering",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": true,
+        "in_source": false
+       },
+       {
+        "topic": "t03",
+        "anchor": "Unsupervised Dense Information Retrieval with Contrastive Learning",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": true,
+        "in_source": false
+       },
+       {
+        "topic": "t04",
+        "anchor": "SelfCheckGPT: Zero-Resource Black-Box Hallucination Detection for Generative Large Language Models",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": true,
+        "in_source": false
+       },
+       {
+        "topic": "t04",
+        "anchor": "Survey of Hallucination in Natural Language Generation",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": true,
+        "in_source": false
+       },
+       {
+        "topic": "t05",
+        "anchor": "Efficiently Modeling Long Sequences with Structured State Spaces",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": true,
+        "in_source": false
+       },
+       {
+        "topic": "t05",
+        "anchor": "Mamba: Linear-Time Sequence Modeling with Selective State Spaces",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": true,
+        "in_source": false
+       },
+       {
+        "topic": "t06",
+        "anchor": "Neural Message Passing for Quantum Chemistry",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": true,
+        "in_source": false
+       },
+       {
+        "topic": "t06",
+        "anchor": "Strategies for Pre-training Graph Neural Networks",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": true,
+        "in_source": false
+       },
+       {
+        "topic": "t07",
+        "anchor": "Distilling the Knowledge in a Neural Network",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": true,
+        "in_source": false
+       },
+       {
+        "topic": "t07",
+        "anchor": "DistilBERT, a distilled version of BERT: smaller, faster, cheaper and lighter",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": true,
+        "in_source": false
+       },
+       {
+        "topic": "t08",
+        "anchor": "Denoising Diffusion Probabilistic Models",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": true,
+        "in_source": false
+       },
+       {
+        "topic": "t08",
+        "anchor": "High-Resolution Image Synthesis with Latent Diffusion Models",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": true,
+        "in_source": false
+       },
+       {
+        "topic": "t09",
+        "anchor": "SimCSE: Simple Contrastive Learning of Sentence Embeddings",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": true,
+        "in_source": false
+       },
+       {
+        "topic": "t09",
+        "anchor": "Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": true,
+        "in_source": false
+       },
+       {
+        "topic": "t10",
+        "anchor": "Chain-of-Thought Prompting Elicits Reasoning in Large Language Models",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": true,
+        "in_source": false
+       },
+       {
+        "topic": "t10",
+        "anchor": "Self-Consistency Improves Chain of Thought Reasoning in Language Models",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": true,
+        "in_source": false
+       }
+      ]
+     },
+     "meets": false
+    },
+    "arxiv": {
+     "keyword": {
+      "top10": {
+       "k": 3,
+       "n": 20,
+       "rate": 0.15,
+       "lo": 0.0524,
+       "hi": 0.3604
+      },
+      "top50": {
+       "k": 7,
+       "n": 20,
+       "rate": 0.35,
+       "lo": 0.1812,
+       "hi": 0.5671
+      },
+      "anchors": [
+       {
+        "topic": "t01",
+        "anchor": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t01",
+        "anchor": "Lost in the Middle: How Language Models Use Long Contexts",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t02",
+        "anchor": "LoRA: Low-Rank Adaptation of Large Language Models",
+        "rank": 15,
+        "rule": "arxiv_id",
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t02",
+        "anchor": "QLoRA: Efficient Finetuning of Quantized LLMs",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t03",
+        "anchor": "Dense Passage Retrieval for Open-Domain Question Answering",
+        "rank": 1,
+        "rule": "arxiv_id",
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t03",
+        "anchor": "Unsupervised Dense Information Retrieval with Contrastive Learning",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t04",
+        "anchor": "SelfCheckGPT: Zero-Resource Black-Box Hallucination Detection for Generative Large Language Models",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t04",
+        "anchor": "Survey of Hallucination in Natural Language Generation",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t05",
+        "anchor": "Efficiently Modeling Long Sequences with Structured State Spaces",
+        "rank": 6,
+        "rule": "arxiv_id",
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t05",
+        "anchor": "Mamba: Linear-Time Sequence Modeling with Selective State Spaces",
+        "rank": 29,
+        "rule": "arxiv_id",
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t06",
+        "anchor": "Neural Message Passing for Quantum Chemistry",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t06",
+        "anchor": "Strategies for Pre-training Graph Neural Networks",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t07",
+        "anchor": "Distilling the Knowledge in a Neural Network",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t07",
+        "anchor": "DistilBERT, a distilled version of BERT: smaller, faster, cheaper and lighter",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t08",
+        "anchor": "Denoising Diffusion Probabilistic Models",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t08",
+        "anchor": "High-Resolution Image Synthesis with Latent Diffusion Models",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t09",
+        "anchor": "SimCSE: Simple Contrastive Learning of Sentence Embeddings",
+        "rank": 12,
+        "rule": "arxiv_id",
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t09",
+        "anchor": "Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t10",
+        "anchor": "Chain-of-Thought Prompting Elicits Reasoning in Large Language Models",
+        "rank": 3,
+        "rule": "arxiv_id",
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t10",
+        "anchor": "Self-Consistency Improves Chain of Thought Reasoning in Language Models",
+        "rank": 25,
+        "rule": "arxiv_id",
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       }
+      ]
+     },
+     "natural_language": {
+      "top10": {
+       "k": 4,
+       "n": 20,
+       "rate": 0.2,
+       "lo": 0.0807,
+       "hi": 0.416
+      },
+      "top50": {
+       "k": 5,
+       "n": 20,
+       "rate": 0.25,
+       "lo": 0.1119,
+       "hi": 0.4687
+      },
+      "anchors": [
+       {
+        "topic": "t01",
+        "anchor": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t01",
+        "anchor": "Lost in the Middle: How Language Models Use Long Contexts",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t02",
+        "anchor": "LoRA: Low-Rank Adaptation of Large Language Models",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t02",
+        "anchor": "QLoRA: Efficient Finetuning of Quantized LLMs",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t03",
+        "anchor": "Dense Passage Retrieval for Open-Domain Question Answering",
+        "rank": 1,
+        "rule": "arxiv_id",
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t03",
+        "anchor": "Unsupervised Dense Information Retrieval with Contrastive Learning",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t04",
+        "anchor": "SelfCheckGPT: Zero-Resource Black-Box Hallucination Detection for Generative Large Language Models",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t04",
+        "anchor": "Survey of Hallucination in Natural Language Generation",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t05",
+        "anchor": "Efficiently Modeling Long Sequences with Structured State Spaces",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t05",
+        "anchor": "Mamba: Linear-Time Sequence Modeling with Selective State Spaces",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t06",
+        "anchor": "Neural Message Passing for Quantum Chemistry",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t06",
+        "anchor": "Strategies for Pre-training Graph Neural Networks",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t07",
+        "anchor": "Distilling the Knowledge in a Neural Network",
+        "rank": 21,
+        "rule": "arxiv_id",
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t07",
+        "anchor": "DistilBERT, a distilled version of BERT: smaller, faster, cheaper and lighter",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t08",
+        "anchor": "Denoising Diffusion Probabilistic Models",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t08",
+        "anchor": "High-Resolution Image Synthesis with Latent Diffusion Models",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t09",
+        "anchor": "SimCSE: Simple Contrastive Learning of Sentence Embeddings",
+        "rank": 3,
+        "rule": "arxiv_id",
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t09",
+        "anchor": "Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks",
+        "rank": null,
+        "rule": null,
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t10",
+        "anchor": "Chain-of-Thought Prompting Elicits Reasoning in Large Language Models",
+        "rank": 2,
+        "rule": "arxiv_id",
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       },
+       {
+        "topic": "t10",
+        "anchor": "Self-Consistency Improves Chain of Thought Reasoning in Language Models",
+        "rank": 10,
+        "rule": "arxiv_id",
+        "near_miss_ranks": [],
+        "query_failed": false,
+        "in_source": true
+       }
+      ]
+     },
+     "meets": false
+    }
+   }
+  },
+  "single_record": {
+   "openalex": {
+    "requests": 10,
+    "outcomes": {
+     "ok": 10
+    },
+    "latency_s": {
+     "n": 10,
+     "p50": 0.6044,
+     "p90": 0.6507,
+     "p95": 0.6645,
+     "max": 0.6645
+    }
+   },
+   "semantic_scholar": {
+    "requests": 0,
+    "outcomes": {},
+    "latency_s": {
+     "n": 0,
+     "p50": null,
+     "p90": null,
+     "p95": null,
+     "max": null
+    }
+   },
+   "arxiv": {
+    "requests": 4,
+    "outcomes": {
+     "ok": 4
+    },
+    "latency_s": {
+     "n": 4,
+     "p50": 0.3144,
+     "p90": 0.3593,
+     "p95": 0.3593,
+     "max": 0.3593
+    }
+   }
+  },
+  "openalex_bodies_with_relevance_score": 20
+ },
+ "asm2": {
+  "works_total": 192,
+  "denominator": 180,
+  "excluded_by_cap": {
+   "unprobed_budget": 12
+  },
+  "failed_with_a_stopped_host": 0,
+  "L0_has_link": {
+   "k": 170,
+   "n": 180,
+   "rate": 0.9444,
+   "lo": 0.9008,
+   "hi": 0.9695
+  },
+  "L1_https_usable": {
+   "k": 170,
+   "n": 180,
+   "rate": 0.9444,
+   "lo": 0.9008,
+   "hi": 0.9695
+  },
+  "L2_fetched_A3": {
+   "k": 151,
+   "n": 180,
+   "rate": 0.8389,
+   "lo": 0.7782,
+   "hi": 0.8854
+  },
+  "A1_arxiv_only": {
+   "k": 119,
+   "n": 180,
+   "rate": 0.6611,
+   "lo": 0.5892,
+   "hi": 0.7262,
+   "unknown_excluded": 0
+  },
+  "A2": {
+   "k": 136,
+   "n": 180,
+   "rate": 0.7556,
+   "lo": 0.6879,
+   "hi": 0.8126,
+   "hosts": [
+    "arxiv.org",
+    "aclanthology.org"
+   ]
+  },
+  "L3_sample": {
+   "chosen": 30,
+   "downloaded": 30,
+   "passed_checks": {
+    "k": 30,
+    "n": 30,
+    "rate": 1.0,
+    "lo": 0.8865,
+    "hi": 1.0
+   },
+   "checks": {
+    "ok": 30
+   },
+   "bytes": {
+    "n": 30,
+    "p50": 1561193.0,
+    "p90": 4949302.0,
+    "p95": 7473846.0,
+    "max": 19959552.0
+   },
+   "pages": {
+    "n": 30,
+    "p50": 17.0,
+    "p90": 32.0,
+    "p95": 46.0,
+    "max": 581.0
+   }
+  },
+  "per_source": {
+   "openalex": {
+    "works": 93,
+    "fetched": {
+     "k": 65,
+     "n": 93,
+     "rate": 0.6989,
+     "lo": 0.5993,
+     "hi": 0.7827
+    },
+    "has_link_from_this_source": {
+     "k": 83,
+     "n": 93,
+     "rate": 0.8925,
+     "lo": 0.8133,
+     "hi": 0.9405
+    }
+   },
+   "semantic_scholar": {
+    "works": 0,
+    "fetched": {
+     "k": 0,
+     "n": 0,
+     "rate": null,
+     "lo": null,
+     "hi": null
+    },
+    "has_link_from_this_source": {
+     "k": 0,
+     "n": 0,
+     "rate": null,
+     "lo": null,
+     "hi": null
+    }
+   },
+   "arxiv": {
+    "works": 91,
+    "fetched": {
+     "k": 90,
+     "n": 91,
+     "rate": 0.989,
+     "lo": 0.9404,
+     "hi": 0.9981
+    },
+    "has_link_from_this_source": {
+     "k": 91,
+     "n": 91,
+     "rate": 1.0,
+     "lo": 0.9595,
+     "hi": 1.0
+    }
+   }
+  },
+  "verdict": "PASS"
+ },
+ "evidence": {
+  "allowlist": {
+   "candidate_initial_hosts": {
+    "arxiv.org": 132,
+    "aclanthology.org": 16,
+    "doi.org": 8,
+    "www.nature.com": 8,
+    "ojs.aaai.org": 6,
+    "www.aclweb.org": 5,
+    "dl.acm.org": 4,
+    "academic.oup.com": 3,
+    "pmc.ncbi.nlm.nih.gov": 3,
+    "direct.mit.edu": 2,
+    "link.springer.com": 2,
+    "drops.dagstuhl.de": 1,
+    "link.aps.org": 1,
+    "dspace.mit.edu": 1,
+    "www.osti.gov": 1,
+    "nlp.stanford.edu": 1,
+    "ars.els-cdn.com": 1,
+    "repository.ubn.ru.nl": 1,
+    "www.ideals.illinois.edu": 1,
+    "lirias.kuleuven.be": 1,
+    "kar.kent.ac.uk": 1,
+    "eprints.bbk.ac.uk": 1,
+    "dare.uva.nl": 1,
+    "research.vu.nl": 1,
+    "www.sciencedirect.com": 1,
+    "aaai.org": 1,
+    "hdl.handle.net": 1,
+    "bmcbioinformatics.biomedcentral.com": 1,
+    "ieeexplore.ieee.org": 1,
+    "repository.upenn.edu": 1,
+    "works.bepress.com": 1
+   },
+   "candidate_schemes_as_given": {
+    "https": 207,
+    "http": 2
+   },
+   "candidate_kinds": {
+    "arxiv_pdf": 132,
+    "openalex_best_pdf": 52,
+    "openalex_location_pdf": 15,
+    "openalex_oa_url": 10
+   },
+   "attempt_outcomes": {
+    "fetched": 151,
+    "client_error": 16,
+    "not_pdf": 6,
+    "too_many_redirects": 1,
+    "not_sent_budget": 12,
+    "server_error": 1
+   },
+   "fetched_final_hosts": {
+    "arxiv.org": 119,
+    "aclanthology.org": 17,
+    "ojs.aaai.org": 6,
+    "www.nature.com": 5,
+    "link.springer.com": 2,
+    "nlp.stanford.edu": 1,
+    "kar.kent.ac.uk": 1
+   },
+   "fetched_via_intermediate_hosts": {
+    "idp.nature.com": 10,
+    "www.nature.com": 5,
+    "idp.springer.com": 4,
+    "www.aclweb.org": 2,
+    "bmcbioinformatics.biomedcentral.com": 2,
+    "link.springer.com": 2
+   },
+   "fetched_redirect_counts": {
+    "0": 142,
+    "1": 2,
+    "3": 6,
+    "5": 1
+   },
+   "final_content_types": {
+    "application/pdf -> fetched": 151,
+    "text/html -> client_error": 16,
+    "text/html -> not_pdf": 6
+   },
+   "fetched_pdf_sizes": {
+    "1-5MB": 57,
+    "<1MB": 69,
+    "5-20MB": 14,
+    "20-50MB": 4,
+    ">50MB": 1
+   },
+   "failure_reasons": {
+    "client_error:403": 14,
+    "not_sent_budget:None": 12,
+    "not_pdf:206": 3,
+    "not_pdf:200": 3,
+    "client_error:404": 2,
+    "too_many_redirects:302": 1,
+    "server_error:503": 1
+   },
+   "upgraded_http_attempts": 1
+  },
+  "licence": {
+   "openalex_licence_of_fetched": {
+    "no OpenAlex record": 86,
+    "none reported": 36,
+    "cc-by": 26,
+    "public-domain": 2,
+    "cc-by-nc-nd": 1
+   },
+   "s2_licence_field_on_fetched": {
+    "none reported": 151
+   }
+  },
+  "dedup": {
+   "scope": "per topic, session-1 keyword results, all 50 ranks per source",
+   "identifier_coverage": {
+    "arxiv": {
+     "records": 500,
+     "doi": {
+      "k": 45,
+      "n": 500,
+      "rate": 0.09,
+      "lo": 0.0679,
+      "hi": 0.1183
+     },
+     "arxiv_id": {
+      "k": 500,
+      "n": 500,
+      "rate": 1.0,
+      "lo": 0.9924,
+      "hi": 1.0
+     }
+    },
+    "openalex": {
+     "records": 500,
+     "doi": {
+      "k": 414,
+      "n": 500,
+      "rate": 0.828,
+      "lo": 0.7925,
+      "hi": 0.8585
+     },
+     "arxiv_id": {
+      "k": 175,
+      "n": 500,
+      "rate": 0.35,
+      "lo": 0.3095,
+      "hi": 0.3928
+     }
+    }
+   },
+   "cross_source_linked_works": {
+    "arxiv+openalex": 32
+   },
+   "cross_source_link_type": {
+    "arxiv": 30,
+    "doi": 2
+   },
+   "title_only_pairs": 57,
+   "title_only_pairs_across_different_source_sets": 51,
+   "within_source_same_title_pairs": 15,
+   "year_spread_of_linked_works": {
+    "0": 28,
+    "1": 5
+   }
+  },
+  "stability": {
+   "openalex": {
+    "topics": 10,
+    "mean_top10_overlap": 0.97,
+    "min": 0.9
+   },
+   "semantic_scholar": {
+    "topics": 0,
+    "mean_top10_overlap": null,
+    "min": null
+   },
+   "arxiv": {
+    "topics": 10,
+    "mean_top10_overlap": 0.99,
+    "min": 0.9
+   }
+  },
+  "phrasing": {
+   "openalex": {
+    "keyword": {
+     "queries_ok": 10,
+     "zero_result": {
+      "k": 0,
+      "n": 10,
+      "rate": 0.0,
+      "lo": 0.0,
+      "hi": 0.2775
+     },
+     "mean_returned": 50.0,
+     "reported_totals": [
+      42368,
+      88911,
+      84661,
+      121965,
+      43791,
+      71967,
+      15121,
+      1945681,
+      259840,
+      51237
+     ]
+    },
+    "natural_language": {
+     "queries_ok": 10,
+     "zero_result": {
+      "k": 0,
+      "n": 10,
+      "rate": 0.0,
+      "lo": 0.0,
+      "hi": 0.2775
+     },
+     "mean_returned": 50.0,
+     "reported_totals": [
+      86605,
+      35609,
+      85464,
+      37027,
+      486188,
+      71819,
+      169577,
+      20261,
+      546648,
+      2692
+     ]
+    }
+   },
+   "semantic_scholar": {
+    "keyword": {
+     "queries_ok": 0,
+     "zero_result": {
+      "k": 0,
+      "n": 0,
+      "rate": null,
+      "lo": null,
+      "hi": null
+     },
+     "mean_returned": null,
+     "reported_totals": []
+    },
+    "natural_language": {
+     "queries_ok": 0,
+     "zero_result": {
+      "k": 0,
+      "n": 0,
+      "rate": null,
+      "lo": null,
+      "hi": null
+     },
+     "mean_returned": null,
+     "reported_totals": []
+    }
+   },
+   "arxiv": {
+    "keyword": {
+     "queries_ok": 10,
+     "zero_result": {
+      "k": 0,
+      "n": 10,
+      "rate": 0.0,
+      "lo": 0.0,
+      "hi": 0.2775
+     },
+     "mean_returned": 50.0,
+     "reported_totals": [
+      1032,
+      380,
+      320,
+      1892,
+      2301,
+      947,
+      51,
+      961,
+      271,
+      1073
+     ]
+    },
+    "natural_language": {
+     "queries_ok": 10,
+     "zero_result": {
+      "k": 0,
+      "n": 10,
+      "rate": 0.0,
+      "lo": 0.0,
+      "hi": 0.2775
+     },
+     "mean_returned": 40.0,
+     "reported_totals": [
+      81,
+      104,
+      271,
+      12192,
+      3,
+      918,
+      18,
+      218,
+      389,
+      29
+     ]
+    }
+   }
+  }
+ }
+}

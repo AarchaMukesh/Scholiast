@@ -1,0 +1,381 @@
+{
+  "protocol": "scholiast-m4-discovery-spike",
+  "version": 2,
+  "decision": "D116",
+  "prepared": "2026-09-30",
+  "amended": {"on": "2026-10-01", "by": "DEV-2, approved by the owner during session 1 (D117)", "original_sha256": "6a2809025626b29b96119cd4d06639fd3341cd325c74c121e82ba5e9e8677a34"},
+  "purpose": "Measure ASM-1 (each academic source is fast, complete and permissive enough to serve a 3 s discovery search) and ASM-2 (the share of discovered papers with a retrievable open-access PDF) before any M4 production code exists, and record frozen candidate pools for phases 2, 7 and 8.",
+  "hashing": "protocol_sha256 is the SHA-256 of the UTF-8 bytes of json.dumps(protocol, sort_keys=True, separators=(',', ':'), ensure_ascii=False). Canonical JSON rather than raw bytes, because core.autocrlf=true rewrites line endings on checkout, so a raw-byte hash taken on Windows would not reproduce on a Linux checkout. Every results file records it.",
+  "rules": {
+    "pre_registration": "Everything in this file is fixed before the first live call. A departure from it is recorded as a deviation in every results file, never made silently.",
+    "no_repeats": "No request is ever repeated. A failure is an outcome: classified, recorded and counted. The one exception is deviation DEV-1. If a run stops part-way, it resumes by sending only planned requests the log does not already contain.",
+    "secrets": "Keys are read from spike/.env (OPENALEX_API_KEY, required; S2_API_KEY, optional), sent only in request headers to their own API host, and never written to a URL, a log line or a results file.",
+    "s2_data_stays_local": "Nothing Semantic Scholar returns (titles, abstracts, identifiers, links) is written to a tracked file. S2 appears in tracked files only as counts, timings and statuses; S2 identifiers and S2-only URLs are replaced by their SHA-256.",
+    "pdfs_stay_local": "Downloaded PDF bytes are written only under var/spike/pdf/ (gitignored) and are never committed.",
+    "go_ahead": "No live call is made before the owner's go-ahead on this protocol."
+  },
+  "seed": 20260930,
+  "topics": [
+    {
+      "id": "t01",
+      "keyword": "retrieval-augmented generation long documents",
+      "natural_language": "How can retrieval-augmented generation work over long documents?",
+      "reversed_keyword": "documents long generation retrieval-augmented",
+      "anchors": [
+        {"title": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks", "first_author": "Lewis", "year": 2020, "arxiv_id": "2005.11401", "id_checked": "m0-fixture"},
+        {"title": "Lost in the Middle: How Language Models Use Long Contexts", "first_author": "Liu", "year": 2023, "arxiv_id": "2307.03172", "id_checked": "m0-fixture"}
+      ]
+    },
+    {
+      "id": "t02",
+      "keyword": "low-rank adaptation fine-tuning large language models",
+      "natural_language": "How can large language models be fine-tuned cheaply with low-rank adapters?",
+      "reversed_keyword": "models language large fine-tuning adaptation low-rank",
+      "anchors": [
+        {"title": "LoRA: Low-Rank Adaptation of Large Language Models", "first_author": "Hu", "year": 2021, "arxiv_id": "2106.09685", "id_checked": "at-run-time"},
+        {"title": "QLoRA: Efficient Finetuning of Quantized LLMs", "first_author": "Dettmers", "year": 2023, "arxiv_id": "2305.14314", "id_checked": "at-run-time"}
+      ]
+    },
+    {
+      "id": "t03",
+      "keyword": "dense passage retrieval open-domain question answering",
+      "natural_language": "What dense retrieval methods work for open-domain question answering?",
+      "reversed_keyword": "answering question open-domain retrieval passage dense",
+      "anchors": [
+        {"title": "Dense Passage Retrieval for Open-Domain Question Answering", "first_author": "Karpukhin", "year": 2020, "arxiv_id": "2004.04906", "id_checked": "m0-fixture"},
+        {"title": "Unsupervised Dense Information Retrieval with Contrastive Learning", "first_author": "Izacard", "year": 2021, "arxiv_id": "2112.09118", "id_checked": "m0-fixture"}
+      ]
+    },
+    {
+      "id": "t04",
+      "keyword": "hallucination detection large language models",
+      "natural_language": "How can hallucinations in language model outputs be detected?",
+      "reversed_keyword": "models language large detection hallucination",
+      "anchors": [
+        {"title": "SelfCheckGPT: Zero-Resource Black-Box Hallucination Detection for Generative Large Language Models", "first_author": "Manakul", "year": 2023, "arxiv_id": "2303.08896", "id_checked": "at-run-time"},
+        {"title": "Survey of Hallucination in Natural Language Generation", "first_author": "Ji", "year": 2022, "arxiv_id": "2202.03629", "id_checked": "web-search-2026-09-30"}
+      ]
+    },
+    {
+      "id": "t05",
+      "keyword": "state space models long sequence modeling",
+      "natural_language": "Can state space models replace attention for long sequences?",
+      "reversed_keyword": "modeling sequence long models space state",
+      "anchors": [
+        {"title": "Efficiently Modeling Long Sequences with Structured State Spaces", "first_author": "Gu", "year": 2021, "arxiv_id": "2111.00396", "id_checked": "at-run-time"},
+        {"title": "Mamba: Linear-Time Sequence Modeling with Selective State Spaces", "first_author": "Gu", "year": 2023, "arxiv_id": "2312.00752", "id_checked": "at-run-time"}
+      ]
+    },
+    {
+      "id": "t06",
+      "keyword": "graph neural networks molecular property prediction",
+      "natural_language": "How are graph neural networks used to predict molecular properties?",
+      "reversed_keyword": "prediction property molecular networks neural graph",
+      "anchors": [
+        {"title": "Neural Message Passing for Quantum Chemistry", "first_author": "Gilmer", "year": 2017, "arxiv_id": "1704.01212", "id_checked": "at-run-time"},
+        {"title": "Strategies for Pre-training Graph Neural Networks", "first_author": "Hu", "year": 2019, "arxiv_id": "1905.12265", "id_checked": "web-search-2026-09-30"}
+      ]
+    },
+    {
+      "id": "t07",
+      "keyword": "knowledge distillation model compression",
+      "natural_language": "How does knowledge distillation compress neural networks?",
+      "reversed_keyword": "compression model distillation knowledge",
+      "anchors": [
+        {"title": "Distilling the Knowledge in a Neural Network", "first_author": "Hinton", "year": 2015, "arxiv_id": "1503.02531", "id_checked": "at-run-time"},
+        {"title": "DistilBERT, a distilled version of BERT: smaller, faster, cheaper and lighter", "first_author": "Sanh", "year": 2019, "arxiv_id": "1910.01108", "id_checked": "at-run-time"}
+      ]
+    },
+    {
+      "id": "t08",
+      "keyword": "denoising diffusion models image generation",
+      "natural_language": "How do diffusion models generate images?",
+      "reversed_keyword": "generation image models diffusion denoising",
+      "anchors": [
+        {"title": "Denoising Diffusion Probabilistic Models", "first_author": "Ho", "year": 2020, "arxiv_id": "2006.11239", "id_checked": "at-run-time"},
+        {"title": "High-Resolution Image Synthesis with Latent Diffusion Models", "first_author": "Rombach", "year": 2021, "arxiv_id": "2112.10752", "id_checked": "at-run-time"}
+      ]
+    },
+    {
+      "id": "t09",
+      "keyword": "contrastive learning sentence embeddings",
+      "natural_language": "How is contrastive learning used to train sentence embeddings?",
+      "reversed_keyword": "embeddings sentence learning contrastive",
+      "anchors": [
+        {"title": "SimCSE: Simple Contrastive Learning of Sentence Embeddings", "first_author": "Gao", "year": 2021, "arxiv_id": "2104.08821", "id_checked": "at-run-time"},
+        {"title": "Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks", "first_author": "Reimers", "year": 2019, "arxiv_id": "1908.10084", "id_checked": "m0-fixture"}
+      ]
+    },
+    {
+      "id": "t10",
+      "keyword": "chain-of-thought prompting reasoning",
+      "natural_language": "Does chain-of-thought prompting improve reasoning in language models?",
+      "reversed_keyword": "reasoning prompting chain-of-thought",
+      "anchors": [
+        {"title": "Chain-of-Thought Prompting Elicits Reasoning in Large Language Models", "first_author": "Wei", "year": 2022, "arxiv_id": "2201.11903", "id_checked": "m0-fixture"},
+        {"title": "Self-Consistency Improves Chain of Thought Reasoning in Language Models", "first_author": "Wang", "year": 2022, "arxiv_id": "2203.11171", "id_checked": "at-run-time"}
+      ]
+    }
+  ],
+  "query_construction": {
+    "normalise": "Unicode NFKC, casefold, collapse whitespace runs to one space, strip. Applied to every phrasing before any source-specific step; mirrors the cache-key normalisation proposed for production. Casefolding also stops a capitalised word being read as an OpenAlex boolean operator.",
+    "openalex": "search = the normalised text with every '?' and '*' replaced by a space and whitespace re-collapsed (DEV-2). OpenAlex reads both as wildcards and refuses them in its default, stemmed search.",
+    "semantic_scholar": "query = the normalised text with every '-' replaced by a space and whitespace re-collapsed. S2's API reference: hyphenated query terms yield no matches.",
+    "arxiv": "terms = the normalised text split on every character that is not a letter or digit; drop arxiv_stopwords and tokens shorter than 2 characters; de-duplicate keeping first occurrence. search_query = 'all:<t1> AND all:<t2> AND ...'.",
+    "arxiv_stopwords": ["a", "an", "the", "and", "or", "but", "of", "to", "in", "on", "at", "by", "for", "from", "with", "over", "into", "via", "as", "is", "are", "was", "were", "be", "been", "being", "do", "does", "did", "can", "could", "should", "would", "will", "may", "might", "how", "what", "which", "who", "whom", "whose", "why", "when", "where", "that", "this", "these", "those", "it", "its", "their", "there"]
+  },
+  "sources": {
+    "openalex": {
+      "auth": "Authorization: Bearer <OPENALEX_API_KEY>. Required: nothing runs without it, because the keyless allowance is for testing only.",
+      "search": {
+        "method": "GET",
+        "url": "https://api.openalex.org/works",
+        "params": {
+          "search": "<query>",
+          "per_page": 50,
+          "select": "id,doi,title,display_name,publication_year,publication_date,ids,type,authorships,primary_location,locations,best_oa_location,open_access,cited_by_count,abstract_inverted_index,relevance_score"
+        }
+      },
+      "anchor_check": {
+        "method": "GET",
+        "url": "https://api.openalex.org/works",
+        "params": {
+          "filter": "doi:<the 20 anchors' arXiv DataCite DOIs, https://doi.org/10.48550/arxiv.<id>, joined with |>",
+          "per_page": 50,
+          "select": "<the search select list without relevance_score>"
+        },
+        "note": "One list request. A miss means 'not found under its arXiv DOI', never 'absent from OpenAlex'."
+      },
+      "single_record": {
+        "method": "GET",
+        "url": "https://api.openalex.org/works/<W-id>",
+        "count": 10,
+        "ids": "sampled with the seed from session-1 keyword results"
+      }
+    },
+    "semantic_scholar": {
+      "auth": "None by default: the shared unauthenticated pool. If S2_API_KEY is set it is sent as x-api-key, and every result records which mode ran.",
+      "search": {
+        "method": "GET",
+        "url": "https://api.semanticscholar.org/graph/v1/paper/search",
+        "params": {
+          "query": "<query>",
+          "limit": 50,
+          "fields": "paperId,externalIds,url,title,abstract,venue,publicationVenue,year,publicationDate,authors,citationCount,isOpenAccess,openAccessPdf,publicationTypes,journal"
+        },
+        "note": "The relevance-ranked endpoint. S2 recommends /paper/search/bulk for most uses, but bulk is not relevance-ranked, and relevance ranking is what discovery needs."
+      },
+      "anchor_check": {
+        "method": "POST",
+        "url": "https://api.semanticscholar.org/graph/v1/paper/batch",
+        "params": {"fields": "<the search fields list>"},
+        "body": {"ids": ["arXiv:<each of the 20 anchor ids>"]}
+      },
+      "single_record": {
+        "method": "GET",
+        "url": "https://api.semanticscholar.org/graph/v1/paper/<paperId>",
+        "params": {"fields": "<the search fields list>"},
+        "count": 10,
+        "ids": "sampled with the seed from session-1 keyword results"
+      }
+    },
+    "arxiv": {
+      "auth": "None.",
+      "search": {
+        "method": "GET",
+        "url": "https://export.arxiv.org/api/query",
+        "params": {
+          "search_query": "<constructed>",
+          "start": 0,
+          "max_results": 50,
+          "sortBy": "relevance",
+          "sortOrder": "descending"
+        }
+      },
+      "anchor_check": {
+        "method": "GET",
+        "url": "https://export.arxiv.org/api/query",
+        "params": {"id_list": "<the 20 anchor ids, comma-separated>", "max_results": 20},
+        "note": "Also verifies every anchor's arXiv id: an id whose returned title does not normalise to the anchor's title is disabled for matching, and reported."
+      },
+      "single_record": {
+        "method": "GET",
+        "url": "https://export.arxiv.org/api/query",
+        "params": {"id_list": "<one id>"},
+        "count": 4,
+        "ids": "sampled with the seed from session-1 keyword results"
+      }
+    }
+  },
+  "passes": [
+    {"id": "P0", "network": false, "what": "Offline checks before any call. The address classifier runs against http_safety.self_test and must classify every entry correctly. The log checker runs against a synthetic log with one planted violation per rule and must flag each. A mutated copy of the checker, with its arXiv spacing rule removed, must fail that same test, which shows the check is load-bearing."},
+    {"id": "P1", "network": true, "what": "Session 1 search: 20 queries (10 topics x keyword and natural_language), in an order shuffled with the seed. A query's three requests start together, once every source's pacing gap has elapsed, with launch order shuffled with the seed."},
+    {"id": "P2", "network": true, "what": "Straight after P1: one anchor check per source, then single-record latency (OpenAlex 10, S2 10, arXiv 4)."},
+    {"id": "P3", "network": true, "what": "PDF probe; see pdf_probe."},
+    {"id": "P4", "network": true, "what": "Download sample; see download_sample."},
+    {"id": "P5", "network": true, "what": "Session 2: the 10 reversed_keyword queries with P1's concurrency and pacing, starting at least 6 hours after P1's last request. Same terms as session 1 in a different order, so no upstream cache can answer them and time of day is what varies."},
+    {"id": "P6", "network": false, "what": "Analysis and the log check. Writes spike/results/19_discovery_analysis.json and the findings."}
+  ],
+  "budget": {
+    "openalex": {"max": {"searches": 40, "lookups": 20}, "planned": {"searches": 30, "lookups": 11}},
+    "semantic_scholar": {"max": {"searches": 40, "lookups": 20}, "planned": {"searches": 30, "lookups": 11}},
+    "arxiv_api": {"max": {"queries": 40, "lookups": 5}, "planned": {"queries": 30, "lookups": 5}},
+    "arxiv_org_pdfs": {"max": {"probe_requests": 120, "downloads": 15}},
+    "other_pdf_hosts": {"max": {"probe_requests_per_host": 25, "downloads": 15}},
+    "pdf_probe_requests_total_max": 300,
+    "download_requests_total_max": 60,
+    "counting": "Every HTTP request counts, including each redirect hop, which counts against the host it is sent to. A download is one work; its requests, hops included, count against download_requests_total_max and obey the same pacing.",
+    "enforcement": "The runner refuses any request that would exceed a maximum and records it as 'not sent (budget)'."
+  },
+  "pacing": {
+    "api.openalex.org": {"min_gap_s": 1.0, "measured_from": "previous request start"},
+    "api.semanticscholar.org": {"min_gap_s": 1.1, "measured_from": "previous request start"},
+    "export.arxiv.org": {"min_gap_s": 3.0, "measured_from": "previous response end", "max_connections": 1, "why": "arXiv API terms: no more than one request every three seconds, one connection at a time."},
+    "arxiv.org": {"min_gap_s": 15.0, "measured_from": "previous request start", "max_connections": 1, "why": "arxiv.org robots.txt: Crawl-delay 15."},
+    "any_other_host": {"min_gap_s": 5.0, "measured_from": "previous request start", "max_connections": 1},
+    "retry_after": "A Retry-After from any host delays that host's next request by at least the stated time. The throttled request itself is not repeated.",
+    "host_stop": "After 5 consecutive 429 or 5xx responses from one host, nothing more is sent to it this session; its remaining planned requests are recorded as 'not sent (host stopped)'."
+  },
+  "timeouts_s": {
+    "api_connect": 5,
+    "api_total": 20,
+    "probe_connect": 5,
+    "probe_total": 15,
+    "download_connect": 5,
+    "download_total": 60,
+    "why_api_total_is_20": "The slow tail must be observed, not cut off. A response slower than 20 s is recorded as a timeout at 20 s."
+  },
+  "http_safety": {
+    "schemes": "https only. An http URL is never requested; its https form (same host, path and query) is tried instead, and the upgrade is recorded.",
+    "ports": "443 only. A URL naming any other port is refused.",
+    "addresses": "The host is resolved before connecting. If any resolved address is not globally routable (Python ipaddress is_global false: loopback, private, link-local including 169.254.169.254, shared 100.64.0.0/10, documentation and benchmarking ranges, multicast, reserved, unspecified), the request is refused and recorded. IPv4-mapped IPv6 addresses are unwrapped and judged as IPv4.",
+    "known_gap": "Resolving and then connecting leaves a DNS-rebinding window. The spike accepts it; the production guard (phase 5, D115) must connect to the address it checked.",
+    "redirects": "Never followed automatically. Each Location is a new hop, checked exactly like a first request. At most 5 hops; a hop that fails a check ends the chain as 'refused'.",
+    "byte_caps": {"probe": 2048, "download": 52428800, "note": "Counted on decoded bytes. PDF hosts are sent Accept-Encoding: identity. 52428800 is MAX_PDF_BYTES (NFR-P8)."},
+    "headers": {"User-Agent": "scholiast-discovery-spike/1 (+https://github.com/AarchaMukesh/Scholiast)", "probe_range": "Range: bytes=0-2047"},
+    "credentials": "API keys are sent only to their own API host. PDF hosts receive only the headers above. No cookies are kept.",
+    "self_test": {
+      "must_refuse": ["127.0.0.1", "10.0.0.1", "172.16.0.1", "192.168.1.1", "169.254.169.254", "100.64.0.1", "0.0.0.0", "192.0.2.1", "198.18.0.1", "224.0.0.1", "255.255.255.255", "::1", "fe80::1", "fc00::1", "::ffff:127.0.0.1", "::ffff:169.254.169.254"],
+      "must_accept": ["1.1.1.1", "8.8.8.8", "2606:4700:4700::1111"]
+    }
+  },
+  "pdf_probe": {
+    "works": "From session-1 keyword results: each source's ranks 1-10 per topic, merged into unique works (definitions.unique_work).",
+    "url_order": [
+      "https://arxiv.org/pdf/<arXiv id>, if the work has one",
+      "OpenAlex best_oa_location.pdf_url",
+      "OpenAlex locations[].pdf_url, in listed order",
+      "S2 openAccessPdf.url",
+      "OpenAlex open_access.oa_url"
+    ],
+    "stop_rule": "Probing a work stops at the first URL whose first bytes are %PDF- ('fetched'). A work with no candidate URL is 'no OA link'.",
+    "recorded_per_attempt": "Which sources supplied the URL; scheme; host; every hop (status, host, scheme, refusal reason); final status; Content-Type; Content-Length; whether the first bytes are %PDF-; duration; the licence each source reports for that location. URLs that only S2 supplied are recorded as host plus the SHA-256 of the URL.",
+    "budget_exhausted": "URLs left unprobed because a cap was reached are recorded as 'not probed (budget)', never dropped."
+  },
+  "download_sample": {
+    "select": "Up to 30 'fetched' works chosen with the seed: up to 15 whose fetched URL is on arxiv.org, the rest from other hosts (all of them if there are fewer).",
+    "checks": "A full GET under http_safety, then scholiast.domain.upload.validate_upload (50 MiB cap and %PDF- magic) and scholiast.infrastructure.parsing.preflight.preflight (encrypted, no pages, no text layer): the production functions, unmodified. Recorded: bytes, then page count or failure class.",
+    "storage": "var/spike/pdf/<sha256>.pdf (gitignored). Never committed."
+  },
+  "questions": {
+    "ASM-1a": {
+      "question": "Is each source fast enough for a 3 s search?",
+      "measure": "Session-1 search latency per source (request start to last body byte) over its 2xx responses, the connection-cold first request included: p50, p90, p95, max, n. Warm-only percentiles, and session 2's, are reported beside, never pooled. Completion curve over all 20 requests: share finished with a 2xx body within 1.0, 1.5, 2.0, 2.5 and 3.0 s, where a failure or timeout never completes; per source, and for all three sources together.",
+      "pass_bar": "p95 <= 2.0 s: fits. 2.0 < p95 <= 2.5 s: tight. p95 > 2.5 s: usable only truncated. Met if fits or tight."
+    },
+    "ASM-1b": {
+      "question": "Is the metadata complete enough for FR-D1?",
+      "measure": "Share of session-1 records per source carrying: title, authors (at least 1), year, venue, abstract, citation_count, doi, arxiv_id, oa_link, full_date.",
+      "pass_bar": "title, authors and year >= 95%; abstract >= 70%; citation_count >= 95% for OpenAlex and S2. arXiv carries no citation counts by design, recorded as a structural gap rather than a failure."
+    },
+    "ASM-1c": {
+      "question": "Are the free limits workable?",
+      "measure": "Per source: status counts, 429 count, Retry-After values, OpenAlex X-RateLimit-* headers (cost per request type), response bytes (p50, p95, max).",
+      "pass_bar": "OpenAlex (keyed): zero 429s. S2 keyless: 429s on <= 10% of its requests ('usable keyless'); S2 keyed: zero 429s. arXiv: zero 429s or 503s at the terms' pace."
+    },
+    "ASM-1d": {
+      "question": "Is the relevance plausible?",
+      "measure": "Share of the 20 anchors in each source's top 10 and top 50, per phrasing, session 1. The P2 anchor checks separate 'not ranked' from 'not found in the source'.",
+      "pass_bar": ">= 50% of anchors in the top 50 for the keyword phrasing. A sanity bar, not a ranking evaluation."
+    },
+    "ASM-2": {
+      "question": "How often can we fetch the PDF?",
+      "measure": "Funnel over P3's unique works. L0: has at least one OA link. L1: at least one link usable over https, as given or upgraded. L2: fetched (first bytes %PDF- within 5 hops under http_safety). L3, on the P4 sample: within 50 MiB and passes validate_upload and preflight. Reported under allowlists A1 (arxiv.org only), A2 (the smallest set of final hosts covering >= 90% of L2 works, chosen greedily by count, ties alphabetical) and A3 (any host that passes http_safety).",
+      "denominator": "Works whose probing finished. Works a cap left unprobed are reported separately and counted as neither success nor failure.",
+      "pass_bar": "L2 under A3 >= 60% of unique works (doc 3's ASM-2 threshold). A1 and A2 are reported beside as evidence for the allowlist decision."
+    }
+  },
+  "verdicts": {
+    "ASM-1": "PASS if at least two sources, one of them OpenAlex or S2, meet ASM-1a, 1b, 1c and 1d. PARTIAL if exactly one source meets all four. FAIL otherwise.",
+    "ASM-2": "PASS if L2 under A3 >= 60% of unique works; FAIL otherwise."
+  },
+  "evidence_without_a_bar": {
+    "allowlist": "Initial and final host counts; http vs https as given; hop-count distribution; Content-Type; Content-Length; refusal reasons.",
+    "dedup": "Per source, the share carrying a DOI and an arXiv id; cross-source records linked by a shared identifier; title-only pairs (identical normalised titles of 3 or more tokens in different unique works); within-source same-title pairs; year spread among linked records (0, 1, 2 or more).",
+    "licence": "For each fetched work, the licence OpenAlex reports for the succeeding location (else best_oa_location) and any licence S2 reports; the share with none reported.",
+    "stability": "Per source, overlap of the top 10 between session-1 keyword and session-2 reversed_keyword results.",
+    "phrasing": "Keyword vs natural_language: result counts (zero-result rate, especially arXiv) and anchor recall."
+  },
+  "definitions": {
+    "normalised_title": "NFKC, casefold, every character that is not a letter or digit becomes a space, collapse whitespace, strip.",
+    "doi": "Lowercase; strip https://doi.org/, http://doi.org/ and doi: prefixes.",
+    "arxiv_id": "Strip arXiv:, https://arxiv.org/abs/, http://arxiv.org/abs/ and https://arxiv.org/pdf/ prefixes, a trailing .pdf and a version suffix v<n>. The DataCite DOI 10.48550/arxiv.<id> maps to <id>.",
+    "arxiv_id_from_records": "S2: externalIds.ArXiv. OpenAlex: a doi of the 10.48550/arxiv form, or any location whose landing_page_url or pdf_url is on arxiv.org. arXiv: the entry id.",
+    "anchor_match": "A record matches an anchor if (a) its arXiv id equals the anchor's and that id passed the P2 arXiv check, or (b) its normalised title equals the anchor's. Near misses (token Jaccard >= 0.8 with an anchor title) are listed but not counted. The rule that matched is recorded for every hit.",
+    "unique_work": "Union-find over records sharing a normalised DOI or arXiv id.",
+    "latency": "time.perf_counter() from immediately before the request is issued to the last body byte read."
+  },
+  "statistics": {
+    "proportions": "Wilson 95% interval.",
+    "percentiles": "Nearest rank, with n printed beside every percentile. No interval: at n=20, p95 is the 19th-ranked value and an interval on it says little.",
+    "seed": "20260930 for every shuffle and sample."
+  },
+  "deviations_pre_registered": {
+    "DEV-1": "If the first OpenAlex search returns HTTP 400 and its body names select or relevance_score, that one request is repeated once with relevance_score removed from select, every later OpenAlex request uses the reduced list, and the deviation is recorded in every results file. This is the only repeat the protocol allows."
+  },
+  "deviations_after_approval": {
+    "DEV-2": {
+      "found": "Session 1, after 15 requests: all five OpenAlex searches sent (all natural_language, by the seeded order) returned HTTP 400, 'Wildcards (* or ?) require exact (no-stem) search', with X-RateLimit-Cost-USD 0. Every natural_language phrasing ends in '?'; no keyword or reversed_keyword phrasing contains '?' or '*'.",
+      "change": "query_construction.openalex: '?' and '*' become spaces. Applies to every OpenAlex search sent after the amendment.",
+      "repeats": "Each P1 OpenAlex search refused with HTTP 400 for a wildcard before the amendment is repeated once, after P1's last query and before P2, under request id <rid>/DEV-2, with the amended query. The repeat stands in for the refused request in the analysis, as DEV-1's would; the refusals stay in the log and are reported. The repeats run alone, not started together with the other two sources, and are marked. No other request is repeated.",
+      "dev1": "DEV-1 applies to the first OpenAlex search that is not refused for a wildcard, since the first search was refused before its select list was judged.",
+      "budget": "OpenAlex searches: 30 planned plus at most 5 repeats, within the maximum of 40.",
+      "s2": "Not a deviation, recorded here for one place: S2 keyless returned 429 on its first five requests, the pacing.host_stop trigger, and stays stopped for session 1 as pre-registered."
+    }
+  },
+  "outputs": [
+    {"what": "this protocol", "path": "spike/m4-protocol.json", "tracked": true},
+    {"what": "scripts: search and lookups; PDF probe and downloads; analysis and log checker", "path": "spike/scripts/17_discovery_search.py, spike/scripts/18_oa_probe.py, spike/scripts/19_discovery_analysis.py", "tracked": true},
+    {"what": "request log: every API request with timings, status, selected headers and byte counts; no bodies, no keys; S2 identifiers hashed", "path": "spike/results/17_discovery_requests.json", "tracked": true},
+    {"what": "probe and download log", "path": "spike/results/18_oa_probe.json", "tracked": true},
+    {"what": "analysis: every number the findings quote", "path": "spike/results/19_discovery_analysis.json", "tracked": true},
+    {"what": "frozen candidate pools: raw OpenAlex and arXiv response bodies for every session-1 and session-2 query, plus a manifest (dates, endpoints, parameters, protocol_sha256, counts, SHA-256 of the archive)", "path": "data/eval/discovery-pools.json.gz, data/eval/discovery-pools.manifest.json", "tracked": true},
+    {"what": "raw S2 response bodies and S2 identifiers", "path": "var/spike/s2/", "tracked": false},
+    {"what": "downloaded PDFs", "path": "var/spike/pdf/", "tracked": false},
+    {"what": "findings, with 'what this does not establish' above the numbers", "path": "SPIKE-FINDINGS-M4.md", "tracked": true},
+    {"what": "keys", "path": "spike/.env", "tracked": false}
+  ],
+  "pools_caveat": "The pools reflect this protocol's query construction. If phase 2 changes it or the page size, the pools are re-recorded through the real adapters before any judging. Judgments attach to papers, not positions, so any already made carry over.",
+  "acceptance": [
+    "The owner approved this protocol before the first live call, and every results file records its protocol_sha256.",
+    "P0's offline checks passed, including the checker mutant being caught.",
+    "The log checker, not a reading by eye, confirms: every source within budget; every pacing gap respected; zero requests to non-global addresses; zero redirects followed automatically.",
+    "Every planned request has a logged outcome: a response, a classified failure, or 'not sent' with its reason.",
+    "An ASM-1 verdict per source against the pass bars, with n beside every number and Wilson intervals on proportions.",
+    "An ASM-2 verdict with the full funnel under A1, A2 and A3.",
+    "The allowlist, dedup, licence, stability and phrasing evidence exists.",
+    "The pools reload with their SHA-256 verified, and git ls-files, git check-ignore -v and a grep show no S2 content, no PDF and no key in any tracked file.",
+    "All five gates green on the tree, with gate 4 printing 'Contracts: 3 kept, 0 broken'.",
+    "The findings put 'what this does not establish' above the numbers, and list the decisions they feed without taking them."
+  ],
+  "does_not_establish": [
+    "Latency is from one home connection, one machine and two time windows: not a production number, and not reproducible.",
+    "At n=20, p95 is the second-worst value.",
+    "Relevance is a known-item check on 20 well-known papers chosen in advance, biased toward highly cited work. It is not a precision measurement; phase 8's judged set is.",
+    "Fetching a PDF's first bytes is not the same as the PDF being ingestible, and the preflight sample is at most 30.",
+    "Licence fields are often missing, and the spike cannot settle what arXiv's terms permit; it only counts.",
+    "Keyless S2 behaviour depends on everyone else's traffic at that moment.",
+    "Sources change: the pools are a snapshot as of their recording date.",
+    "The topics are ML/NLP only (T6)."
+  ]
+}
