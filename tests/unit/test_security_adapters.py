@@ -197,6 +197,19 @@ class TestAccessTokens:
         with pytest.raises(AuthenticationFailed):
             _service().verify_access("not.a.token")
 
+    def test_a_deeply_nested_header_is_refused_not_raised_as_a_recursion_error(self) -> None:
+        # PYSEC-2026-4142 (D121): before PyJWT 2.14, a header nested deeply enough
+        # made `jwt.decode` raise RecursionError. That is not a PyJWTError, so it
+        # escaped the one-failure-shape handler (FR-A5) as a 500, and any client
+        # that can send a bearer token could trigger it without authenticating.
+        depth = 100_000
+        header = base64.urlsafe_b64encode(
+            ('{"alg":"HS256","typ":"JWT","x":' + "[" * depth + "]" * depth + "}").encode()
+        ).rstrip(b"=")
+        payload = base64.urlsafe_b64encode(b'{"sub":"user-1"}').rstrip(b"=")
+        with pytest.raises(AuthenticationFailed):
+            _service().verify_access(f"{header.decode()}.{payload.decode()}.c2lnbmF0dXJl")
+
     def test_a_short_secret_is_refused_at_construction(self) -> None:
         # Fail to boot rather than fail open: a brute-forceable HMAC key makes
         # every token this process issues forgeable.
