@@ -109,6 +109,8 @@ class TestAPartialResult:
                 "results": 2,
                 "total_hits": 1000,
                 "retry_after_seconds": None,
+                "cached": False,
+                "age_seconds": None,
             },
             {
                 "source": "arxiv",
@@ -116,6 +118,8 @@ class TestAPartialResult:
                 "results": 0,
                 "total_hits": None,
                 "retry_after_seconds": None,
+                "cached": False,
+                "age_seconds": None,
             },
         ]
         assert [r["source_id"] for r in body["results"]] == ["openalex-1", "openalex-2"]

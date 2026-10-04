@@ -14,10 +14,10 @@ was a bug rather than the source saying no.
 from __future__ import annotations
 
 import structlog
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 
 from scholiast.api import schemas
-from scholiast.api.deps import DiscoverDep, DiscoveryRateLimit, current_tenant
+from scholiast.api.deps import DiscoverDep, DiscoveryRateLimit, TenantDep
 from scholiast.application.ports.discovery import SourceUnavailable
 from scholiast.application.use_cases.discover_papers import (
     NoSourceAnswered,
@@ -59,6 +59,8 @@ def _source_status(outcome: SourceOutcome) -> schemas.SourceStatusOut:
         results=len(outcome.candidates),
         total_hits=outcome.total_hits,
         retry_after_seconds=outcome.retry_after,
+        cached=outcome.cached,
+        age_seconds=outcome.age_seconds,
     )
 
 
@@ -86,17 +88,15 @@ def _observe(outcomes: tuple[SourceOutcome, ...]) -> None:
             )
 
 
-# Login is its own dependency, not a side effect of the limiter's: the limiter needs
-# the principal too, but a route whose authentication depended on its rate limit
-# would lose both to one edit. FastAPI resolves `current_tenant` once per request.
-@router.post(
-    "/search",
-    response_model=schemas.DiscoveryResults,
-    dependencies=[Depends(current_tenant), DiscoveryRateLimit],
-)
-async def search(body: schemas.DiscoverySearch, discover: DiscoverDep) -> schemas.DiscoveryResults:
+# The user is a parameter, not a side effect of the limiter's: the cache is per user
+# (D127), so the search needs it, and a route whose authentication depended on its
+# rate limit would lose both to one edit. FastAPI resolves it once per request.
+@router.post("/search", response_model=schemas.DiscoveryResults, dependencies=[DiscoveryRateLimit])
+async def search(
+    body: schemas.DiscoverySearch, discover: DiscoverDep, tenant: TenantDep
+) -> schemas.DiscoveryResults:
     try:
-        result = await discover.execute(body.query)
+        result = await discover.execute(body.query, scope=tenant.user_id)
     except NoSourceAnswered as exc:
         _observe(exc.sources)
         raise

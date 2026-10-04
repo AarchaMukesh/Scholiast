@@ -38,7 +38,10 @@ from scholiast.application.ports.ml import Precision
 from scholiast.config.settings import Settings, get_settings
 from scholiast.infrastructure.db.engine import build_engine, build_session_factory
 from scholiast.infrastructure.discovery import tls_context
-from scholiast.infrastructure.discovery.sources import build_discovery_sources
+from scholiast.infrastructure.discovery.sources import (
+    build_discovery_cache,
+    build_discovery_sources,
+)
 from scholiast.infrastructure.llm.chain import build_provider_chain
 from scholiast.infrastructure.ml.embedder import LocalEmbedder
 from scholiast.infrastructure.observability.logging import configure_logging
@@ -116,6 +119,7 @@ async def api_lifespan(app: FastAPI) -> AsyncIterator[None]:
         yield
     finally:
         await index.close()
+        await app.state.discovery_cache.close()
         await engine.dispose()
 
 
@@ -163,6 +167,9 @@ def create_app(
     # outlive a request: a pacer rebuilt per request would pace nothing. Building
     # them opens no connection, so a test app pays nothing for them.
     app.state.discovery_sources = build_discovery_sources(app.state.settings)
+    # The cache's Redis client (D127, D128), for the same reasons: it outlives a
+    # request, and building it connects to nothing.
+    app.state.discovery_cache = build_discovery_cache(app.state.settings)
 
     # FR-O1. Configured here rather than in the lifespan for the same reason the
     # dispatcher is: every lifespan override would otherwise have to remember it,

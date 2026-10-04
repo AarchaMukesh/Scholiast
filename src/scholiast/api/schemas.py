@@ -268,6 +268,11 @@ class SourceStatusOut(BaseModel):
     total_hits: int | None = None
     #: When the source said, or our pacing knows, when it will accept work again.
     retry_after_seconds: float | None = None
+    #: Whether this source's page came from the cache rather than the source (D127).
+    #: Per user, so it reveals nothing about anyone else's searches.
+    cached: bool = False
+    #: How old a cached page is, in seconds; at most a day (D127).
+    age_seconds: float | None = None
 
 
 class DiscoveryResults(BaseModel):

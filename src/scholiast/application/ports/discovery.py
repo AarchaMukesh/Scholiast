@@ -26,6 +26,7 @@ Two things are in the contract rather than left to adapters:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 from typing import Protocol, runtime_checkable
 
@@ -104,4 +105,51 @@ class AcademicSource(Protocol):
         for a query with nothing searchable in it, which is the caller's mistake and
         must not be reported as the source failing.
         """
+        ...
+
+
+# -- the cache (D127) -----------------------------------------------------------
+
+
+@dataclass(frozen=True, slots=True)
+class CacheKey:
+    """What makes two requests to one source the same request, for one user (D127).
+
+    Per user, so one user's searches never affect another's. The adapter version
+    and page size are in it so a change to either misses the old entries rather
+    than serving pages a different request produced.
+    """
+
+    #: The user the entry belongs to.
+    scope: str
+    source: str
+    #: The adapter build that produced the page (NFR-M5).
+    version: str
+    page_size: int
+    #: `normalise_query`'s form: Unicode form, case and whitespace only.
+    query: str
+
+
+@dataclass(frozen=True, slots=True)
+class CachedPage:
+    page: SourcePage
+    #: When the source answered; how old the page is, which the response reports.
+    fetched_at: datetime
+
+
+@runtime_checkable
+class DiscoveryCache(Protocol):
+    """Each source's page, kept for a while so a repeated search asks nobody (FR-D7).
+
+    **A cache may turn a source call into a miss, never into a failure.** An
+    implementation that cannot reach its store returns None and stores nothing,
+    and must not raise; discovery has to work with the cache gone.
+    """
+
+    async def get(self, key: CacheKey) -> CachedPage | None:
+        """The page stored under `key`, or None on a miss or any failure."""
+        ...
+
+    async def put(self, key: CacheKey, page: SourcePage, fetched_at: datetime) -> None:
+        """Store a page a source answered with. Only answers are stored, never failures."""
         ...

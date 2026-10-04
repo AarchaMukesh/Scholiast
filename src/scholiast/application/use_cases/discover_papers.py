@@ -18,6 +18,12 @@ third party's error text is not ours to show.
 raises `NoSourceAnswered` and the API says 503 (D119's rule, lifted to the
 endpoint). An empty result list means the sources searched and found nothing.
 
+**Each source's page is cached per user for a day** (D127). The cache is looked up
+inside the deadline, before the source is asked; a hit answers for that source and
+nothing is sent. Only answers are stored, never failures, so the next search asks
+again any source that failed. The cache is isolated like a source: if it raises,
+the search carries on as a miss.
+
 **The order is the sources' own, interleaved** (D122): each source's first result,
 then each one's second. Duplicates across sources stay until phase 7 merges them,
 and phase 8 replaces the order with a ranking. Nothing here is written anywhere:
@@ -30,10 +36,14 @@ import asyncio
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from enum import StrEnum, unique
 
 from scholiast.application.ports.discovery import (
     AcademicSource,
+    CachedPage,
+    CacheKey,
+    DiscoveryCache,
     SourcePage,
     SourceUnavailable,
 )
@@ -42,6 +52,7 @@ from scholiast.domain.discovery import (
     UnsearchableQuery,
     interleave,
     is_searchable,
+    normalise_query,
 )
 
 #: D122: the sources' share of NFR-P1's 3.0 s.
@@ -65,6 +76,9 @@ class ConfiguredSource:
 
     source: AcademicSource
     page_size: int
+    #: The adapter build behind it (NFR-M5). Part of the cache key, so a page parsed
+    #: by an older build is never served as this one's (D127).
+    version: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,6 +94,10 @@ class SourceOutcome:
     retry_after: float | None = None
     #: From the search's start to this source's outcome.
     seconds: float = 0.0
+    #: Whether the page came from the cache rather than the source (D127).
+    cached: bool = False
+    #: How old a cached page is. None when the source was asked.
+    age_seconds: float | None = None
     #: What went wrong, for the caller's log. Never sent to a client.
     error: BaseException | None = field(default=None, compare=False, repr=False)
 
@@ -112,21 +130,29 @@ class DiscoverPapersUseCase:
         self,
         sources: Sequence[ConfiguredSource],
         *,
+        cache: DiscoveryCache | None = None,
         deadline_seconds: float = DEFAULT_DEADLINE_SECONDS,
         clock: Callable[[], float] = time.perf_counter,
+        now: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         self._sources = tuple(sources)
+        self._cache = cache
         self._deadline = deadline_seconds
         self._clock = clock
+        self._now = now
 
-    async def execute(self, query: str) -> DiscoveryResult:
+    async def execute(self, query: str, *, scope: str) -> DiscoveryResult:
+        """Search every source for `query` on behalf of the user `scope` names."""
         if not is_searchable(query):
             raise UnsearchableQuery("the query has no letter or digit to search for")
         loop = asyncio.get_running_loop()
         deadline = loop.time() + self._deadline
         started = self._clock()
         outcomes = await asyncio.gather(
-            *(self._ask(configured, query, deadline, started) for configured in self._sources)
+            *(
+                self._ask(configured, query, scope, deadline, started)
+                for configured in self._sources
+            )
         )
         unsearchable = [o for o in outcomes if isinstance(o.error, ValueError)]
         if outcomes and len(unsearchable) == len(outcomes):
@@ -141,21 +167,43 @@ class DiscoverPapersUseCase:
         )
 
     async def _ask(
-        self, configured: ConfiguredSource, query: str, deadline: float, started: float
+        self,
+        configured: ConfiguredSource,
+        query: str,
+        scope: str,
+        deadline: float,
+        started: float,
     ) -> SourceOutcome:
+        key = CacheKey(
+            scope=scope,
+            source=configured.source.name,
+            version=configured.version,
+            page_size=configured.page_size,
+            query=normalise_query(query),
+        )
         page: SourcePage | None = None
+        hit: CachedPage | None = None
         status = SourceStatus.OK
         retry_after: float | None = None
         error: BaseException | None = None
         try:
             async with asyncio.timeout_at(deadline):
-                page = await configured.source.search(query, limit=configured.page_size)
+                hit = await self._lookup(key)
+                if hit is not None:
+                    page = hit.page
+                else:
+                    page = await configured.source.search(query, limit=configured.page_size)
         except TimeoutError as exc:
             status, error = SourceStatus.TIMEOUT, exc
         except SourceUnavailable as exc:
             status, retry_after, error = SourceStatus(exc.kind.value), exc.retry_after, exc
         except Exception as exc:
+            # One source's bug must not fail the search (FR-D6).
             status, error = SourceStatus.ERROR, exc
+        if page is not None and hit is None:
+            # After the deadline's block, not inside it: a page that arrived must not
+            # be lost to a slow cache write. The cache bounds its own calls (D127).
+            await self._store(key, page)
         return SourceOutcome(
             configured.source.name,
             status,
@@ -164,4 +212,28 @@ class DiscoverPapersUseCase:
             retry_after=retry_after,
             seconds=self._clock() - started,
             error=error,
+            cached=hit is not None,
+            age_seconds=(
+                max(0.0, (self._now() - hit.fetched_at).total_seconds())
+                if hit is not None
+                else None
+            ),
         )
+
+    async def _lookup(self, key: CacheKey) -> CachedPage | None:
+        if self._cache is None:
+            return None
+        try:
+            return await self._cache.get(key)
+        except Exception:
+            # The port forbids raising; a cache with a bug must still only miss (D127).
+            return None
+
+    async def _store(self, key: CacheKey, page: SourcePage) -> None:
+        if self._cache is None:
+            return
+        try:
+            await self._cache.put(key, page, self._now())
+        except Exception:
+            # A cache that cannot store costs the next search a miss, nothing more.
+            return

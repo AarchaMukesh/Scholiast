@@ -499,7 +499,11 @@ def get_discovery_sources(request: Request) -> list[ConfiguredSource]:
 def discover_use_case(request: Request) -> DiscoverPapersUseCase:
     settings: Settings = request.app.state.settings
     return DiscoverPapersUseCase(
-        get_discovery_sources(request), deadline_seconds=settings.discovery_deadline_seconds
+        get_discovery_sources(request),
+        # Absent means uncached, which is correct, not broken: a cache can only
+        # ever turn a source call into a miss (D127).
+        cache=getattr(request.app.state, "discovery_cache", None),
+        deadline_seconds=settings.discovery_deadline_seconds,
     )
 
 

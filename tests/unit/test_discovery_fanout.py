@@ -37,6 +37,7 @@ FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "discovery"
 OPENALEX_WORKS = "https://api.openalex.org/works"
 ARXIV_QUERY = "https://export.arxiv.org/api/query"
 KEY = "test-key-0123456789"
+USER = "u-1"
 
 
 def candidate(source: str, rank: int) -> PaperCandidate:
@@ -94,7 +95,7 @@ class TestEverySourceAnswering:
     async def test_results_interleave_each_sources_own_order(self) -> None:
         # D122's order until phase 8 ranks: favours no source, claims no relevance.
         result = await use_case(FakeSource("a", results=3), FakeSource("b", results=2)).execute(
-            "graph neural networks"
+            "graph neural networks", scope=USER
         )
 
         assert [c.source_id for c in result.candidates] == ["a-1", "b-1", "a-2", "b-2", "a-3"]
@@ -106,7 +107,7 @@ class TestEverySourceAnswering:
         # The other half of "a failure is not no papers": no papers IS an answer,
         # and must not become a 503 or a partial flag.
         result = await use_case(FakeSource("a", results=0), FakeSource("b", results=0)).execute(
-            "an obscure topic"
+            "an obscure topic", scope=USER
         )
 
         assert result.candidates == ()
@@ -116,7 +117,9 @@ class TestEverySourceAnswering:
         # D125 measured OpenAlex at 25; arXiv stays at 50. One page size for all
         # would undo the measurement for one of them.
         a, b = FakeSource("a"), FakeSource("b")
-        await DiscoverPapersUseCase([ConfiguredSource(a, 25), ConfiguredSource(b, 50)]).execute("x")
+        await DiscoverPapersUseCase([ConfiguredSource(a, 25), ConfiguredSource(b, 50)]).execute(
+            "x", scope=USER
+        )
 
         assert (a.calls, b.calls) == ([25], [50])
 
@@ -126,7 +129,7 @@ class TestEverySourceAnswering:
         a, b = FakeSource("a", delay=0.3), FakeSource("b", delay=0.3)
 
         started = time.perf_counter()
-        await use_case(a, b).execute("x")
+        await use_case(a, b).execute("x", scope=USER)
 
         assert time.perf_counter() - started < 0.5
 
@@ -136,7 +139,7 @@ class TestTheDeadline:
         started = time.perf_counter()
         result = await use_case(
             FakeSource("slow", delay=30.0), FakeSource("fast"), deadline=0.2
-        ).execute("x")
+        ).execute("x", scope=USER)
         elapsed = time.perf_counter() - started
 
         assert elapsed < 0.6, f"the search waited {elapsed:.2f}s for a source past its deadline"
@@ -154,7 +157,7 @@ class TestTheDeadline:
             FakeSource("s2", delay=30.0),
             FakeSource("ok"),
             deadline=0.2,
-        ).execute("x")
+        ).execute("x", scope=USER)
 
         assert time.perf_counter() - started < 0.6
         assert [o.status for o in result.sources] == [
@@ -168,7 +171,7 @@ class TestEachFailureIsItsSourcesAlone:
     @pytest.mark.parametrize("kind", list(SourceFailure))
     async def test_each_failure_kind_becomes_that_sources_status(self, kind: SourceFailure) -> None:
         failing = FakeSource("down", raises=SourceUnavailable("down", kind, "x", retry_after=7.0))
-        result = await use_case(failing, FakeSource("up")).execute("x")
+        result = await use_case(failing, FakeSource("up")).execute("x", scope=USER)
 
         down = status_of(result.sources, "down")
         assert down.status.value == kind.value
@@ -180,7 +183,9 @@ class TestEachFailureIsItsSourcesAlone:
         # Not a `SourceUnavailable`: a bug in one adapter. FR-D6's independence
         # has to cover what nobody anticipated, not only what the port types.
         crash = KeyError("display_name")
-        result = await use_case(FakeSource("buggy", raises=crash), FakeSource("up")).execute("x")
+        result = await use_case(FakeSource("buggy", raises=crash), FakeSource("up")).execute(
+            "x", scope=USER
+        )
 
         buggy = status_of(result.sources, "buggy")
         assert buggy.status is SourceStatus.ERROR
@@ -192,7 +197,7 @@ class TestEachFailureIsItsSourcesAlone:
         with pytest.raises(NoSourceAnswered) as caught:
             await use_case(
                 FakeSource("a", raises=down), FakeSource("b", delay=30.0), deadline=0.1
-            ).execute("x")
+            ).execute("x", scope=USER)
 
         assert [o.status for o in caught.value.sources] == [
             SourceStatus.ERROR,
@@ -201,14 +206,14 @@ class TestEachFailureIsItsSourcesAlone:
 
     async def test_a_deployment_with_no_sources_says_so_rather_than_finding_nothing(self) -> None:
         with pytest.raises(NoSourceAnswered):
-            await use_case().execute("x")
+            await use_case().execute("x", scope=USER)
 
 
 class TestAQueryWithNothingToSearch:
     async def test_punctuation_is_refused_before_any_source_is_asked(self) -> None:
         a = FakeSource("a")
         with pytest.raises(UnsearchableQuery):
-            await use_case(a).execute(" ?!? ... ")
+            await use_case(a).execute(" ?!? ... ", scope=USER)
 
         assert a.calls == []
 
@@ -220,14 +225,14 @@ class TestAQueryWithNothingToSearch:
         refuse = ValueError("nothing searchable")
         with pytest.raises(UnsearchableQuery):
             await use_case(FakeSource("a", raises=refuse), FakeSource("b", raises=refuse)).execute(
-                "the of and"
+                "the of and", scope=USER
             )
 
     async def test_one_source_refusing_the_query_does_not_fail_the_search(self) -> None:
         # arXiv cannot search a query of only its stopwords; OpenAlex can.
         result = await use_case(
             FakeSource("arxiv", raises=ValueError("only stopwords")), FakeSource("openalex")
-        ).execute("what is the")
+        ).execute("what is the", scope=USER)
 
         assert status_of(result.sources, "arxiv").status is SourceStatus.ERROR
         assert result.partial is True
@@ -311,7 +316,7 @@ class TestTheRealAdaptersUnderFaultInjection:
         healthy_openalex()
         healthy_arxiv()
 
-        result = await real_use_case().execute("dense passage retrieval")
+        result = await real_use_case().execute("dense passage retrieval", scope=USER)
 
         assert result.partial is False
         sources = [c.source for c in result.candidates]
@@ -331,7 +336,7 @@ class TestTheRealAdaptersUnderFaultInjection:
         respx.get(OPENALEX_WORKS).mock(**fault)
         healthy_arxiv()
 
-        result = await real_use_case().execute("dense passage retrieval")
+        result = await real_use_case().execute("dense passage retrieval", scope=USER)
 
         openalex = status_of(result.sources, "openalex")
         assert (openalex.status.value, openalex.retry_after) == (status, retry_after)
@@ -350,7 +355,7 @@ class TestTheRealAdaptersUnderFaultInjection:
         healthy_openalex()
         respx.get(ARXIV_QUERY).mock(**fault)
 
-        result = await real_use_case().execute("dense passage retrieval")
+        result = await real_use_case().execute("dense passage retrieval", scope=USER)
 
         arxiv = status_of(result.sources, "arxiv")
         assert (arxiv.status.value, arxiv.retry_after) == (status, retry_after)
@@ -368,7 +373,7 @@ class TestTheRealAdaptersUnderFaultInjection:
         healthy_openalex()
         healthy_arxiv()
 
-        result = await real_use_case().execute("dense passage retrieval")
+        result = await real_use_case().execute("dense passage retrieval", scope=USER)
 
         assert status_of(result.sources, "openalex").status is SourceStatus.ERROR
         assert [c.source for c in result.candidates] == ["arxiv"] * 3
@@ -383,7 +388,7 @@ class TestTheRealAdaptersUnderFaultInjection:
         healthy_arxiv()
 
         started = time.perf_counter()
-        result = await real_use_case(deadline=0.3).execute("dense passage retrieval")
+        result = await real_use_case(deadline=0.3).execute("dense passage retrieval", scope=USER)
 
         assert time.perf_counter() - started < 1.0
         assert status_of(result.sources, "openalex").status is SourceStatus.TIMEOUT
@@ -395,7 +400,7 @@ class TestTheRealAdaptersUnderFaultInjection:
         respx.get(ARXIV_QUERY).mock(side_effect=httpx.ConnectError("refused"))
 
         with pytest.raises(NoSourceAnswered) as caught:
-            await real_use_case().execute("dense passage retrieval")
+            await real_use_case().execute("dense passage retrieval", scope=USER)
 
         assert {o.source: o.status for o in caught.value.sources} == {
             "openalex": SourceStatus.ERROR,

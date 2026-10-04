@@ -286,6 +286,29 @@ class TestTheWiring:
         sources = build_discovery_sources(Settings(openalex_api_key="k"))
         assert [(c.source.name, c.page_size) for c in sources] == [("openalex", 25), ("arxiv", 50)]
 
+    def test_each_source_names_its_adapter_build_for_the_cache_key(self) -> None:
+        # Without it, a page parsed by an older build would be served as this one's
+        # for up to a day after a parser change (D127, NFR-M5).
+        from scholiast.infrastructure.discovery import arxiv, openalex
+
+        sources = build_discovery_sources(Settings(openalex_api_key="k"))
+        assert [c.version for c in sources] == [openalex.ADAPTER_VERSION, arxiv.ADAPTER_VERSION]
+
+    def test_the_app_hands_its_cache_to_every_search(self) -> None:
+        # A cache built and never passed on would leave every search uncached,
+        # which looks exactly like a cache that is merely cold.
+        from starlette.requests import Request
+
+        from scholiast.api import deps
+        from scholiast.api.app import create_app
+        from scholiast.infrastructure.discovery.cache import RedisDiscoveryCache
+
+        app = create_app(Settings())
+        search = deps.discover_use_case(Request({"type": "http", "app": app}))
+
+        assert isinstance(app.state.discovery_cache, RedisDiscoveryCache)
+        assert search._cache is app.state.discovery_cache
+
     def test_each_source_has_its_own_breaker(self) -> None:
         # One shared breaker would let a rate-limited OpenAlex stop the fan-out
         # asking a healthy arXiv.

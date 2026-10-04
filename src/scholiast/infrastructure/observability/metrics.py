@@ -108,6 +108,15 @@ DISCOVERY_SOURCE_OUTCOMES = Counter(
     registry=REGISTRY,
 )
 
+DISCOVERY_CACHE = Counter(
+    "scholiast_discovery_cache_total",
+    "Discovery cache operations by source, operation (get, put) and outcome: hit, "
+    "miss, unreadable, stored, error, bypassed (its breaker open). D108 dropped "
+    "cache hit rate because no cache existed; D127 gives it one.",
+    ("source", "operation", "outcome"),
+    registry=REGISTRY,
+)
+
 DISCOVERY_SOURCE_DURATION = Gauge(
     "scholiast_discovery_source_duration_seconds_last",
     "Time from the most recent search's start to this source's outcome. A gauge, "
@@ -196,6 +205,10 @@ def record_discovery(outcomes: Iterable[tuple[str, str, float]]) -> None:
     for source, status, seconds in outcomes:
         DISCOVERY_SOURCE_OUTCOMES.labels(source=source, status=status).inc()
         DISCOVERY_SOURCE_DURATION.labels(source=source).set(seconds)
+
+
+def record_discovery_cache(source: str, operation: str, outcome: str) -> None:
+    DISCOVERY_CACHE.labels(source=source, operation=operation, outcome=outcome).inc()
 
 
 def refresh_breaker_states(providers: object) -> None:

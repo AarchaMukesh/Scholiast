@@ -144,6 +144,15 @@ class Settings(BaseSettings):
     #: arXiv's API terms: one request every three seconds. The floor is the terms',
     #: so a configuration cannot set a pace arXiv has asked us not to use (D123).
     discovery_arxiv_min_gap_seconds: float = Field(default=3.0, ge=3.0)
+    #: The cache's own Redis (D128): capped and evicting, so it can never crowd out
+    #: the Celery broker on `redis_url`. Down or unreachable, discovery runs uncached.
+    discovery_cache_url: str = "redis://localhost:6380/0"
+    #: D127: a day, so repeat demos are fast and identical while results stay fresh
+    #: enough for a corpus that adds papers daily and a ranking that changed in three.
+    discovery_cache_ttl_seconds: int = Field(default=86_400, ge=1)
+    #: Bounds one Redis call. A healthy local Redis answers in well under a
+    #: millisecond; this only caps what a sick one can cost a search.
+    discovery_cache_timeout_seconds: float = Field(default=0.25, gt=0.0)
 
     # -- generation --------------------------------------------------------
     #: Local carries sustained load; hosted quota is a deliberate spend (D26).

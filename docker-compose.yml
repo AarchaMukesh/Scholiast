@@ -51,14 +51,37 @@ services:
       retries: 5
 
   redis:
-    # Not used by any M1 code path — cache is M4, rate limits and the Celery
-    # broker are M3. Present so the dev stack matches the deployed one from the
-    # start, and so nothing has to be added to compose mid-milestone.
+    # The Celery broker (M3, D95). Not the discovery cache: that has its own Redis,
+    # `redis-cache` below, so a full cache can never stop the broker (D128).
     image: redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
     ports:
       - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  redis-cache:
+    # D128. Discovery's cache, apart from the broker above. Capped and evicting
+    # least-recently-used keys, because every key in it is disposable: a full cache
+    # here costs hits, where a full broker would stop ingestion. No persistence: a
+    # cache that survives a restart is only a slower cold start.
+    image: redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
+    command:
+      - "redis-server"
+      - "--maxmemory"
+      - "256mb"
+      - "--maxmemory-policy"
+      - "allkeys-lru"
+      - "--save"
+      - ""
+      - "--appendonly"
+      - "no"
+    ports:
+      - "${REDIS_CACHE_PORT:-6380}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
