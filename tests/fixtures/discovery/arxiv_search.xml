@@ -1,0 +1,104 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<feed xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/" xmlns:arxiv="http://arxiv.org/schemas/atom" xmlns="http://www.w3.org/2005/Atom">
+  <id>https://arxiv.org/api/VeDwq871UWYhBFkHBkbLXk3rEIA</id>
+  <title>arXiv Query: search_query=all:dense AND all:passage AND all:retrieval AND all:open AND all:domain AND all:question AND all:answering&amp;id_list=&amp;start=0&amp;max_results=50</title>
+  <updated>2026-10-01T05:22:36Z</updated>
+  <link href="https://arxiv.org/api/query?search_query=all:dense+AND+(all:passage+AND+(all:retrieval+AND+(all:open+AND+(all:domain+AND+(all:question+AND+all:answering)))))&amp;start=0&amp;max_results=50&amp;id_list=" type="application/atom+xml"/>
+  <opensearch:itemsPerPage>50</opensearch:itemsPerPage>
+  <opensearch:totalResults>51</opensearch:totalResults>
+  <opensearch:startIndex>0</opensearch:startIndex>
+  <entry>
+    <id>http://arxiv.org/abs/2004.04906v3</id>
+    <title>Dense Passage Retrieval for Open-Domain Question Answering</title>
+    <updated>2020-09-30T21:27:13Z</updated>
+    <link href="https://arxiv.org/abs/2004.04906v3" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2004.04906v3" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Open-domain question answering relies on efficient passage retrieval to select candidate contexts, where traditional sparse vector space models, such as TF-IDF or BM25, are the de facto method. In this work, we show that retrieval can be practically implemented using dense representations alone, where embeddings are learned from a small number of questions and passages by a simple dual-encoder framework. When evaluated on a wide range of open-domain QA datasets, our dense retriever outperforms a strong Lucene-BM25 system largely by 9%-19% absolute in terms of top-20 passage retrieval accuracy, and helps our end-to-end QA system establish new state-of-the-art on multiple open-domain QA benchmarks.</summary>
+    <category term="cs.CL" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2020-04-10T04:53:17Z</published>
+    <arxiv:comment>EMNLP 2020</arxiv:comment>
+    <arxiv:primary_category term="cs.CL"/>
+    <author>
+      <name>Vladimir Karpukhin</name>
+    </author>
+    <author>
+      <name>Barlas Oğuz</name>
+    </author>
+    <author>
+      <name>Sewon Min</name>
+    </author>
+    <author>
+      <name>Patrick Lewis</name>
+    </author>
+    <author>
+      <name>Ledell Wu</name>
+    </author>
+    <author>
+      <name>Sergey Edunov</name>
+    </author>
+    <author>
+      <name>Danqi Chen</name>
+    </author>
+    <author>
+      <name>Wen-tau Yih</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2110.01599v1</id>
+    <title>Encoder Adaptation of Dense Passage Retrieval for Open-Domain Question Answering</title>
+    <updated>2021-10-04T17:51:07Z</updated>
+    <link href="https://arxiv.org/abs/2110.01599v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2110.01599v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>One key feature of dense passage retrievers (DPR) is the use of separate question and passage encoder in a bi-encoder design. Previous work on generalization of DPR mainly focus on testing both encoders in tandem on out-of-distribution (OOD) question-answering (QA) tasks, which is also known as domain adaptation. However, it is still unknown how DPR's individual question/passage encoder affects generalization. Specifically, in this paper, we want to know how an in-distribution (IND) question/passage encoder would generalize if paired with an OOD passage/question encoder from another domain. We refer to this challenge as \textit{encoder adaptation}. To answer this question, we inspect different combinations of DPR's question and passage encoder learned from five benchmark QA datasets on both in-domain and out-of-domain questions. We find that the passage encoder has more influence on the lower bound of generalization while the question encoder seems to affect the upper bound in general. For example, applying an OOD passage encoder usually hurts the retrieval accuracy while an OOD question encoder sometimes even improves the accuracy.</summary>
+    <category term="cs.IR" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.CL" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2021-10-04T17:51:07Z</published>
+    <arxiv:primary_category term="cs.IR"/>
+    <author>
+      <name>Minghan Li</name>
+    </author>
+    <author>
+      <name>Jimmy Lin</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2010.08191v2</id>
+    <title>RocketQA: An Optimized Training Approach to Dense Passage Retrieval for Open-Domain Question Answering</title>
+    <updated>2021-05-12T07:52:32Z</updated>
+    <link href="https://arxiv.org/abs/2010.08191v2" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2010.08191v2" rel="related" type="application/pdf" title="pdf"/>
+    <summary>In open-domain question answering, dense passage retrieval has become a new paradigm to retrieve relevant passages for finding answers. Typically, the dual-encoder architecture is adopted to learn dense representations of questions and passages for semantic matching. However, it is difficult to effectively train a dual-encoder due to the challenges including the discrepancy between training and inference, the existence of unlabeled positives and limited training data. To address these challenges, we propose an optimized training approach, called RocketQA, to improving dense passage retrieval. We make three major technical contributions in RocketQA, namely cross-batch negatives, denoised hard negatives and data augmentation. The experiment results show that RocketQA significantly outperforms previous state-of-the-art models on both MSMARCO and Natural Questions. We also conduct extensive experiments to examine the effectiveness of the three strategies in RocketQA. Besides, we demonstrate that the performance of end-to-end QA can be improved based on our RocketQA retriever.</summary>
+    <category term="cs.CL" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.IR" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2020-10-16T06:54:05Z</published>
+    <arxiv:comment>NAACL 2021</arxiv:comment>
+    <arxiv:primary_category term="cs.CL"/>
+    <author>
+      <name>Yingqi Qu</name>
+    </author>
+    <author>
+      <name>Yuchen Ding</name>
+    </author>
+    <author>
+      <name>Jing Liu</name>
+    </author>
+    <author>
+      <name>Kai Liu</name>
+    </author>
+    <author>
+      <name>Ruiyang Ren</name>
+    </author>
+    <author>
+      <name>Wayne Xin Zhao</name>
+    </author>
+    <author>
+      <name>Daxiang Dong</name>
+    </author>
+    <author>
+      <name>Hua Wu</name>
+    </author>
+    <author>
+      <name>Haifeng Wang</name>
+    </author>
+  </entry>
+</feed>

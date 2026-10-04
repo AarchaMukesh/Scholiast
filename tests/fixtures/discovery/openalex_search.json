@@ -1,0 +1,1750 @@
+{
+ "meta": {
+  "count": 84661,
+  "db_response_time_ms": 148,
+  "page": 1,
+  "per_page": 50,
+  "groups_count": null,
+  "x_query": {
+   "oql": "works where full text has (retrieval-augmented generation long documents)",
+   "oqo": {
+    "get_rows": "works",
+    "filter_rows": [
+     {
+      "column_id": "fulltext.search",
+      "value": "retrieval-augmented generation long documents",
+      "operator": "has"
+     }
+    ]
+   },
+   "url": "/works?filter=fulltext.search:retrieval-augmented generation long documents&per_page=50"
+  },
+  "cost_usd": 0.001
+ },
+ "results": [
+  {
+   "id": "https://openalex.org/W4389984066",
+   "doi": "https://doi.org/10.48550/arxiv.2312.10997",
+   "title": "Retrieval-Augmented Generation for Large Language Models: A Survey",
+   "display_name": "Retrieval-Augmented Generation for Large Language Models: A Survey",
+   "publication_year": 2023,
+   "publication_date": "2023-12-18",
+   "ids": {
+    "openalex": "https://openalex.org/W4389984066",
+    "doi": "https://doi.org/10.48550/arxiv.2312.10997"
+   },
+   "type": "preprint",
+   "authorships": [
+    {
+     "author_position": "first",
+     "author": {
+      "id": "https://openalex.org/A5102001778",
+      "display_name": "Yunfan Gao",
+      "orcid": "https://orcid.org/0000-0002-7932-2752",
+      "observed_orcids": [
+       "https://orcid.org/0000-0002-7932-2752"
+      ]
+     },
+     "institutions": [
+      {
+       "id": "https://openalex.org/I116953780",
+       "display_name": "Tongji University",
+       "ror": "https://ror.org/03rc6as71",
+       "country_code": "CN",
+       "type": "education",
+       "lineage": [
+        "https://openalex.org/I116953780"
+       ]
+      }
+     ],
+     "countries": [
+      "CN"
+     ],
+     "is_corresponding": false,
+     "raw_author_name": "Gao, Yunfan",
+     "raw_affiliation_strings": [
+      "Shanghai Research Institute for Intelligent Autonomous Systems , Tongji University"
+     ],
+     "raw_orcid": null,
+     "affiliations": [
+      {
+       "raw_affiliation_string": "Shanghai Research Institute for Intelligent Autonomous Systems , Tongji University",
+       "institution_ids": [
+        "https://openalex.org/I116953780"
+       ]
+      }
+     ]
+    },
+    {
+     "author_position": "middle",
+     "author": {
+      "id": "https://openalex.org/A5001877137",
+      "display_name": "Yun Xiong",
+      "orcid": "https://orcid.org/0000-0002-8575-5415",
+      "observed_orcids": [
+       "https://orcid.org/0000-0002-8575-5415"
+      ]
+     },
+     "institutions": [
+      {
+       "id": "https://openalex.org/I24943067",
+       "display_name": "Fudan University",
+       "ror": "https://ror.org/013q1eq08",
+       "country_code": "CN",
+       "type": "education",
+       "lineage": [
+        "https://openalex.org/I24943067"
+       ]
+      }
+     ],
+     "countries": [
+      "CN"
+     ],
+     "is_corresponding": false,
+     "raw_author_name": "Xiong, Yun",
+     "raw_affiliation_strings": [
+      "Shanghai Key Laboratory of Data Science , School of Computer Science , Fudan University"
+     ],
+     "raw_orcid": null,
+     "affiliations": [
+      {
+       "raw_affiliation_string": "Shanghai Key Laboratory of Data Science , School of Computer Science , Fudan University",
+       "institution_ids": [
+        "https://openalex.org/I24943067"
+       ]
+      }
+     ]
+    },
+    {
+     "author_position": "middle",
+     "author": {
+      "id": "https://openalex.org/A5101581913",
+      "display_name": "Xinyu Gao",
+      "orcid": "https://orcid.org/0000-0001-7654-3800",
+      "observed_orcids": [
+       "https://orcid.org/0000-0001-7654-3800"
+      ]
+     },
+     "institutions": [
+      {
+       "id": "https://openalex.org/I24943067",
+       "display_name": "Fudan University",
+       "ror": "https://ror.org/013q1eq08",
+       "country_code": "CN",
+       "type": "education",
+       "lineage": [
+        "https://openalex.org/I24943067"
+       ]
+      }
+     ],
+     "countries": [
+      "CN"
+     ],
+     "is_corresponding": false,
+     "raw_author_name": "Gao, Xinyu",
+     "raw_affiliation_strings": [
+      "Shanghai Key Laboratory of Data Science , School of Computer Science , Fudan University"
+     ],
+     "raw_orcid": null,
+     "affiliations": [
+      {
+       "raw_affiliation_string": "Shanghai Key Laboratory of Data Science , School of Computer Science , Fudan University",
+       "institution_ids": [
+        "https://openalex.org/I24943067"
+       ]
+      }
+     ]
+    },
+    {
+     "author_position": "middle",
+     "author": {
+      "id": "https://openalex.org/A5109666673",
+      "display_name": "Kangxiang Jia",
+      "orcid": "https://orcid.org/0009-0001-0054-5049",
+      "observed_orcids": [
+       "https://orcid.org/0009-0001-0054-5049"
+      ]
+     },
+     "institutions": [
+      {
+       "id": "https://openalex.org/I24943067",
+       "display_name": "Fudan University",
+       "ror": "https://ror.org/013q1eq08",
+       "country_code": "CN",
+       "type": "education",
+       "lineage": [
+        "https://openalex.org/I24943067"
+       ]
+      }
+     ],
+     "countries": [
+      "CN"
+     ],
+     "is_corresponding": false,
+     "raw_author_name": "Jia, Kangxiang",
+     "raw_affiliation_strings": [
+      "Shanghai Key Laboratory of Data Science , School of Computer Science , Fudan University"
+     ],
+     "raw_orcid": null,
+     "affiliations": [
+      {
+       "raw_affiliation_string": "Shanghai Key Laboratory of Data Science , School of Computer Science , Fudan University",
+       "institution_ids": [
+        "https://openalex.org/I24943067"
+       ]
+      }
+     ]
+    },
+    {
+     "author_position": "middle",
+     "author": {
+      "id": "https://openalex.org/A5104217086",
+      "display_name": "Jinliu Pan",
+      "orcid": null,
+      "observed_orcids": []
+     },
+     "institutions": [
+      {
+       "id": "https://openalex.org/I24943067",
+       "display_name": "Fudan University",
+       "ror": "https://ror.org/013q1eq08",
+       "country_code": "CN",
+       "type": "education",
+       "lineage": [
+        "https://openalex.org/I24943067"
+       ]
+      }
+     ],
+     "countries": [
+      "CN"
+     ],
+     "is_corresponding": false,
+     "raw_author_name": "Pan, Jinliu",
+     "raw_affiliation_strings": [
+      "Shanghai Key Laboratory of Data Science , School of Computer Science , Fudan University"
+     ],
+     "raw_orcid": null,
+     "affiliations": [
+      {
+       "raw_affiliation_string": "Shanghai Key Laboratory of Data Science , School of Computer Science , Fudan University",
+       "institution_ids": [
+        "https://openalex.org/I24943067"
+       ]
+      }
+     ]
+    },
+    {
+     "author_position": "middle",
+     "author": {
+      "id": "https://openalex.org/A5104217087",
+      "display_name": "Yuxi Bi",
+      "orcid": "https://orcid.org/0009-0003-6921-6934",
+      "observed_orcids": [
+       "https://orcid.org/0009-0003-6921-6934"
+      ]
+     },
+     "institutions": [
+      {
+       "id": "https://openalex.org/I116953780",
+       "display_name": "Tongji University",
+       "ror": "https://ror.org/03rc6as71",
+       "country_code": "CN",
+       "type": "education",
+       "lineage": [
+        "https://openalex.org/I116953780"
+       ]
+      }
+     ],
+     "countries": [
+      "CN"
+     ],
+     "is_corresponding": false,
+     "raw_author_name": "Bi, Yuxi",
+     "raw_affiliation_strings": [
+      "College of Design and Innovation , Tongji University"
+     ],
+     "raw_orcid": null,
+     "affiliations": [
+      {
+       "raw_affiliation_string": "College of Design and Innovation , Tongji University",
+       "institution_ids": [
+        "https://openalex.org/I116953780"
+       ]
+      }
+     ]
+    },
+    {
+     "author_position": "middle",
+     "author": {
+      "id": "https://openalex.org/A5100647639",
+      "display_name": "Yi Qi Dai",
+      "orcid": "https://orcid.org/0000-0003-1219-2436",
+      "observed_orcids": [
+       "https://orcid.org/0000-0003-1219-2436"
+      ]
+     },
+     "institutions": [
+      {
+       "id": "https://openalex.org/I116953780",
+       "display_name": "Tongji University",
+       "ror": "https://ror.org/03rc6as71",
+       "country_code": "CN",
+       "type": "education",
+       "lineage": [
+        "https://openalex.org/I116953780"
+       ]
+      }
+     ],
+     "countries": [
+      "CN"
+     ],
+     "is_corresponding": false,
+     "raw_author_name": "Dai, Yi",
+     "raw_affiliation_strings": [
+      "Shanghai Research Institute for Intelligent Autonomous Systems , Tongji University"
+     ],
+     "raw_orcid": null,
+     "affiliations": [
+      {
+       "raw_affiliation_string": "Shanghai Research Institute for Intelligent Autonomous Systems , Tongji University",
+       "institution_ids": [
+        "https://openalex.org/I116953780"
+       ]
+      }
+     ]
+    },
+    {
+     "author_position": "middle",
+     "author": {
+      "id": "https://openalex.org/A5101598822",
+      "display_name": "Jiawei Sun",
+      "orcid": "https://orcid.org/0000-0003-1332-6758",
+      "observed_orcids": [
+       "https://orcid.org/0000-0003-1332-6758"
+      ]
+     },
+     "institutions": [
+      {
+       "id": "https://openalex.org/I116953780",
+       "display_name": "Tongji University",
+       "ror": "https://ror.org/03rc6as71",
+       "country_code": "CN",
+       "type": "education",
+       "lineage": [
+        "https://openalex.org/I116953780"
+       ]
+      }
+     ],
+     "countries": [
+      "CN"
+     ],
+     "is_corresponding": false,
+     "raw_author_name": "Sun, Jiawei",
+     "raw_affiliation_strings": [
+      "Shanghai Research Institute for Intelligent Autonomous Systems , Tongji University"
+     ],
+     "raw_orcid": null,
+     "affiliations": [
+      {
+       "raw_affiliation_string": "Shanghai Research Institute for Intelligent Autonomous Systems , Tongji University",
+       "institution_ids": [
+        "https://openalex.org/I116953780"
+       ]
+      }
+     ]
+    },
+    {
+     "author_position": "middle",
+     "author": {
+      "id": null,
+      "display_name": "Wang, Meng",
+      "orcid": null,
+      "observed_orcids": []
+     },
+     "institutions": [],
+     "countries": [],
+     "is_corresponding": false,
+     "raw_author_name": "Wang, Meng",
+     "raw_affiliation_strings": [],
+     "raw_orcid": null,
+     "affiliations": []
+    },
+    {
+     "author_position": "last",
+     "author": {
+      "id": null,
+      "display_name": "Wang, Haofen",
+      "orcid": null,
+      "observed_orcids": []
+     },
+     "institutions": [
+      {
+       "id": "https://openalex.org/I116953780",
+       "display_name": "Tongji University",
+       "ror": "https://ror.org/03rc6as71",
+       "country_code": "CN",
+       "type": "education",
+       "lineage": [
+        "https://openalex.org/I116953780"
+       ]
+      }
+     ],
+     "countries": [
+      "CN"
+     ],
+     "is_corresponding": false,
+     "raw_author_name": "Wang, Haofen",
+     "raw_affiliation_strings": [
+      "College of Design and Innovation , Tongji University",
+      "Shanghai Research Institute for Intelligent Autonomous Systems , Tongji University"
+     ],
+     "raw_orcid": null,
+     "affiliations": [
+      {
+       "raw_affiliation_string": "College of Design and Innovation , Tongji University",
+       "institution_ids": [
+        "https://openalex.org/I116953780"
+       ]
+      },
+      {
+       "raw_affiliation_string": "Shanghai Research Institute for Intelligent Autonomous Systems , Tongji University",
+       "institution_ids": [
+        "https://openalex.org/I116953780"
+       ]
+      }
+     ]
+    }
+   ],
+   "primary_location": {
+    "id": "pmh:oai:arXiv.org:2312.10997",
+    "is_oa": true,
+    "landing_page_url": "http://arxiv.org/abs/2312.10997",
+    "pdf_url": "https://arxiv.org/pdf/2312.10997",
+    "source": {
+     "id": "https://openalex.org/S4306400194",
+     "display_name": "arXiv (Cornell University)",
+     "issn_l": "2331-8422",
+     "issn": [
+      "2331-8422"
+     ],
+     "is_oa": true,
+     "is_in_doaj": false,
+     "is_core": false,
+     "listed_in": [],
+     "host_organization": "https://openalex.org/I205783295",
+     "host_organization_name": "Cornell University",
+     "host_organization_lineage": [
+      "https://openalex.org/I205783295"
+     ],
+     "host_organization_lineage_names": [],
+     "type": "repository"
+    },
+    "license": null,
+    "license_id": null,
+    "version": "submittedVersion",
+    "is_accepted": false,
+    "is_published": false,
+    "raw_source_name": null,
+    "raw_type": "text"
+   },
+   "locations": [
+    {
+     "id": "pmh:oai:arXiv.org:2312.10997",
+     "is_oa": true,
+     "landing_page_url": "http://arxiv.org/abs/2312.10997",
+     "pdf_url": "https://arxiv.org/pdf/2312.10997",
+     "source": {
+      "id": "https://openalex.org/S4306400194",
+      "display_name": "arXiv (Cornell University)",
+      "issn_l": "2331-8422",
+      "issn": [
+       "2331-8422"
+      ],
+      "is_oa": true,
+      "is_in_doaj": false,
+      "is_core": false,
+      "listed_in": [],
+      "host_organization": "https://openalex.org/I205783295",
+      "host_organization_name": "Cornell University",
+      "host_organization_lineage": [
+       "https://openalex.org/I205783295"
+      ],
+      "host_organization_lineage_names": [],
+      "type": "repository"
+     },
+     "license": null,
+     "license_id": null,
+     "version": "submittedVersion",
+     "is_accepted": false,
+     "is_published": false,
+     "raw_source_name": null,
+     "raw_type": "text"
+    },
+    {
+     "id": "doi:10.48550/arxiv.2312.10997",
+     "is_oa": true,
+     "landing_page_url": "https://doi.org/10.48550/arxiv.2312.10997",
+     "pdf_url": null,
+     "source": {
+      "id": "https://openalex.org/S4306400194",
+      "display_name": "arXiv (Cornell University)",
+      "issn_l": "2331-8422",
+      "issn": [
+       "2331-8422"
+      ],
+      "is_oa": true,
+      "is_in_doaj": false,
+      "is_core": false,
+      "listed_in": [],
+      "host_organization": "https://openalex.org/I205783295",
+      "host_organization_name": "Cornell University",
+      "host_organization_lineage": [
+       "https://openalex.org/I205783295"
+      ],
+      "host_organization_lineage_names": [],
+      "type": "repository"
+     },
+     "license": null,
+     "license_id": null,
+     "version": null,
+     "is_accepted": false,
+     "is_published": null,
+     "raw_source_name": null,
+     "raw_type": "Preprint"
+    }
+   ],
+   "best_oa_location": {
+    "id": "pmh:oai:arXiv.org:2312.10997",
+    "is_oa": true,
+    "landing_page_url": "http://arxiv.org/abs/2312.10997",
+    "pdf_url": "https://arxiv.org/pdf/2312.10997",
+    "source": {
+     "id": "https://openalex.org/S4306400194",
+     "display_name": "arXiv (Cornell University)",
+     "issn_l": "2331-8422",
+     "issn": [
+      "2331-8422"
+     ],
+     "is_oa": true,
+     "is_in_doaj": false,
+     "is_core": false,
+     "listed_in": [],
+     "host_organization": "https://openalex.org/I205783295",
+     "host_organization_name": "Cornell University",
+     "host_organization_lineage": [
+      "https://openalex.org/I205783295"
+     ],
+     "host_organization_lineage_names": [],
+     "type": "repository"
+    },
+    "license": null,
+    "license_id": null,
+    "version": "submittedVersion",
+    "is_accepted": false,
+    "is_published": false,
+    "raw_source_name": null,
+    "raw_type": "text"
+   },
+   "open_access": {
+    "is_oa": true,
+    "oa_status": "green",
+    "oa_url": "https://arxiv.org/pdf/2312.10997",
+    "any_repository_has_fulltext": true
+   },
+   "cited_by_count": 748,
+   "abstract_inverted_index": {
+    "Large": [
+     0
+    ],
+    "Language": [
+     1
+    ],
+    "Models": [
+     2
+    ],
+    "(LLMs)": [
+     3
+    ],
+    "showcase": [
+     4
+    ],
+    "impressive": [
+     5
+    ],
+    "capabilities": [
+     6
+    ],
+    "but": [
+     7
+    ],
+    "encounter": [
+     8
+    ],
+    "challenges": [
+     9,
+     155
+    ],
+    "like": [
+     10
+    ],
+    "hallucination,": [
+     11
+    ],
+    "outdated": [
+     12
+    ],
+    "knowledge,": [
+     13
+    ],
+    "and": [
+     14,
+     38,
+     47,
+     53,
+     93,
+     112,
+     146,
+     158,
+     165
+    ],
+    "non-transparent,": [
+     15
+    ],
+    "untraceable": [
+     16
+    ],
+    "reasoning": [
+     17
+    ],
+    "processes.": [
+     18
+    ],
+    "Retrieval-Augmented": [
+     19
+    ],
+    "Generation": [
+     20
+    ],
+    "(RAG)": [
+     21
+    ],
+    "has": [
+     22
+    ],
+    "emerged": [
+     23
+    ],
+    "as": [
+     24
+    ],
+    "a": [
+     25,
+     77,
+     130
+    ],
+    "promising": [
+     26
+    ],
+    "solution": [
+     27
+    ],
+    "by": [
+     28
+    ],
+    "incorporating": [
+     29
+    ],
+    "knowledge": [
+     30,
+     51,
+     63
+    ],
+    "from": [
+     31
+    ],
+    "external": [
+     32,
+     70
+    ],
+    "databases.": [
+     33,
+     71
+    ],
+    "This": [
+     34,
+     72
+    ],
+    "enhances": [
+     35
+    ],
+    "the": [
+     36,
+     41,
+     65,
+     81,
+     87,
+     90,
+     94,
+     100,
+     108,
+     110,
+     113,
+     119,
+     134,
+     149,
+     154
+    ],
+    "accuracy": [
+     37
+    ],
+    "credibility": [
+     39
+    ],
+    "of": [
+     40,
+     55,
+     69,
+     80,
+     83,
+     103,
+     125,
+     133
+    ],
+    "generation,": [
+     42
+    ],
+    "particularly": [
+     43
+    ],
+    "for": [
+     44,
+     49,
+     163
+    ],
+    "knowledge-intensive": [
+     45
+    ],
+    "tasks,": [
+     46
+    ],
+    "allows": [
+     48
+    ],
+    "continuous": [
+     50
+    ],
+    "updates": [
+     52
+    ],
+    "integration": [
+     54
+    ],
+    "domain-specific": [
+     56
+    ],
+    "information.": [
+     57
+    ],
+    "RAG": [
+     58,
+     84,
+     104,
+     137
+    ],
+    "synergistically": [
+     59
+    ],
+    "merges": [
+     60
+    ],
+    "LLMs'": [
+     61
+    ],
+    "intrinsic": [
+     62
+    ],
+    "with": [
+     64
+    ],
+    "vast,": [
+     66
+    ],
+    "dynamic": [
+     67
+    ],
+    "repositories": [
+     68
+    ],
+    "comprehensive": [
+     73
+    ],
+    "review": [
+     74
+    ],
+    "paper": [
+     75,
+     117,
+     141
+    ],
+    "offers": [
+     76
+    ],
+    "detailed": [
+     78
+    ],
+    "examination": [
+     79
+    ],
+    "progression": [
+     82
+    ],
+    "paradigms,": [
+     85
+    ],
+    "encompassing": [
+     86
+    ],
+    "Naive": [
+     88
+    ],
+    "RAG,": [
+     89,
+     92
+    ],
+    "Advanced": [
+     91
+    ],
+    "Modular": [
+     95
+    ],
+    "RAG.": [
+     96
+    ],
+    "It": [
+     97
+    ],
+    "meticulously": [
+     98
+    ],
+    "scrutinizes": [
+     99
+    ],
+    "tripartite": [
+     101
+    ],
+    "foundation": [
+     102
+    ],
+    "frameworks,": [
+     105
+    ],
+    "which": [
+     106
+    ],
+    "includes": [
+     107
+    ],
+    "retrieval,": [
+     109
+    ],
+    "generation": [
+     111
+    ],
+    "augmentation": [
+     114
+    ],
+    "techniques.": [
+     115
+    ],
+    "The": [
+     116
+    ],
+    "highlights": [
+     118
+    ],
+    "state-of-the-art": [
+     120
+    ],
+    "technologies": [
+     121
+    ],
+    "embedded": [
+     122
+    ],
+    "in": [
+     123,
+     136
+    ],
+    "each": [
+     124
+    ],
+    "these": [
+     126
+    ],
+    "critical": [
+     127
+    ],
+    "components,": [
+     128
+    ],
+    "providing": [
+     129
+    ],
+    "profound": [
+     131
+    ],
+    "understanding": [
+     132
+    ],
+    "advancements": [
+     135
+    ],
+    "systems.": [
+     138
+    ],
+    "Furthermore,": [
+     139
+    ],
+    "this": [
+     140,
+     151
+    ],
+    "introduces": [
+     142
+    ],
+    "up-to-date": [
+     143
+    ],
+    "evaluation": [
+     144
+    ],
+    "framework": [
+     145
+    ],
+    "benchmark.": [
+     147
+    ],
+    "At": [
+     148
+    ],
+    "end,": [
+     150
+    ],
+    "article": [
+     152
+    ],
+    "delineates": [
+     153
+    ],
+    "currently": [
+     156
+    ],
+    "faced": [
+     157
+    ],
+    "points": [
+     159
+    ],
+    "out": [
+     160
+    ],
+    "prospective": [
+     161
+    ],
+    "avenues": [
+     162
+    ],
+    "research": [
+     164
+    ],
+    "development.": [
+     166
+    ]
+   },
+   "relevance_score": 695.781
+  },
+  {
+   "id": "https://openalex.org/W3015883388",
+   "doi": "https://doi.org/10.18653/v1/2020.emnlp-main.550",
+   "title": "Dense Passage Retrieval for Open-Domain Question Answering",
+   "display_name": "Dense Passage Retrieval for Open-Domain Question Answering",
+   "publication_year": 2020,
+   "publication_date": "2020-01-01",
+   "ids": {
+    "openalex": "https://openalex.org/W3015883388",
+    "doi": "https://doi.org/10.18653/v1/2020.emnlp-main.550",
+    "mag": "3015883388"
+   },
+   "type": "conference-paper",
+   "authorships": [
+    {
+     "author_position": "first",
+     "author": {
+      "id": "https://openalex.org/A5032508066",
+      "display_name": "Vladimir Karpukhin",
+      "orcid": null,
+      "observed_orcids": []
+     },
+     "institutions": [
+      {
+       "id": "https://openalex.org/I2252078561",
+       "display_name": "Meta (Israel)",
+       "ror": "https://ror.org/02388em19",
+       "country_code": "IL",
+       "type": "company",
+       "lineage": [
+        "https://openalex.org/I2252078561",
+        "https://openalex.org/I4210114444"
+       ]
+      }
+     ],
+     "countries": [
+      "IL"
+     ],
+     "is_corresponding": false,
+     "raw_author_name": "Vladimir Karpukhin",
+     "raw_affiliation_strings": [
+      "Meta (Israel), Tel Aviv, Israel"
+     ],
+     "raw_orcid": null,
+     "affiliations": [
+      {
+       "raw_affiliation_string": "Meta (Israel), Tel Aviv, Israel",
+       "institution_ids": [
+        "https://openalex.org/I2252078561"
+       ]
+      }
+     ]
+    },
+    {
+     "author_position": "middle",
+     "author": {
+      "id": "https://openalex.org/A5071728146",
+      "display_name": "Barlas Oğuz",
+      "orcid": null,
+      "observed_orcids": []
+     },
+     "institutions": [
+      {
+       "id": "https://openalex.org/I2252078561",
+       "display_name": "Meta (Israel)",
+       "ror": "https://ror.org/02388em19",
+       "country_code": "IL",
+       "type": "company",
+       "lineage": [
+        "https://openalex.org/I2252078561",
+        "https://openalex.org/I4210114444"
+       ]
+      }
+     ],
+     "countries": [
+      "IL"
+     ],
+     "is_corresponding": false,
+     "raw_author_name": "Barlas Oguz",
+     "raw_affiliation_strings": [
+      "Meta (Israel), Tel Aviv, Israel"
+     ],
+     "raw_orcid": null,
+     "affiliations": [
+      {
+       "raw_affiliation_string": "Meta (Israel), Tel Aviv, Israel",
+       "institution_ids": [
+        "https://openalex.org/I2252078561"
+       ]
+      }
+     ]
+    },
+    {
+     "author_position": "middle",
+     "author": {
+      "id": "https://openalex.org/A5039158419",
+      "display_name": "Sewon Min",
+      "orcid": null,
+      "observed_orcids": []
+     },
+     "institutions": [
+      {
+       "id": "https://openalex.org/I201448701",
+       "display_name": "University of Washington",
+       "ror": "https://ror.org/00cvxb145",
+       "country_code": "US",
+       "type": "education",
+       "lineage": [
+        "https://openalex.org/I201448701"
+       ]
+      }
+     ],
+     "countries": [
+      "US"
+     ],
+     "is_corresponding": false,
+     "raw_author_name": "Sewon Min",
+     "raw_affiliation_strings": [
+      "University of Washington",
+      "University of Washington, Seattle, United States"
+     ],
+     "raw_orcid": null,
+     "affiliations": [
+      {
+       "raw_affiliation_string": "University of Washington",
+       "institution_ids": [
+        "https://openalex.org/I201448701"
+       ]
+      },
+      {
+       "raw_affiliation_string": "University of Washington, Seattle, United States",
+       "institution_ids": [
+        "https://openalex.org/I201448701"
+       ]
+      }
+     ]
+    },
+    {
+     "author_position": "middle",
+     "author": {
+      "id": "https://openalex.org/A5063377058",
+      "display_name": "Patrick Lewis",
+      "orcid": "https://orcid.org/0000-0002-2192-9543",
+      "observed_orcids": [
+       "https://orcid.org/0000-0002-2192-9543"
+      ]
+     },
+     "institutions": [
+      {
+       "id": "https://openalex.org/I2252078561",
+       "display_name": "Meta (Israel)",
+       "ror": "https://ror.org/02388em19",
+       "country_code": "IL",
+       "type": "company",
+       "lineage": [
+        "https://openalex.org/I2252078561",
+        "https://openalex.org/I4210114444"
+       ]
+      }
+     ],
+     "countries": [
+      "IL"
+     ],
+     "is_corresponding": false,
+     "raw_author_name": "Patrick Lewis",
+     "raw_affiliation_strings": [
+      "Meta (Israel), Tel Aviv, Israel"
+     ],
+     "raw_orcid": null,
+     "affiliations": [
+      {
+       "raw_affiliation_string": "Meta (Israel), Tel Aviv, Israel",
+       "institution_ids": [
+        "https://openalex.org/I2252078561"
+       ]
+      }
+     ]
+    },
+    {
+     "author_position": "middle",
+     "author": {
+      "id": "https://openalex.org/A5082046914",
+      "display_name": "Ledell Wu",
+      "orcid": "https://orcid.org/0000-0002-3576-8920",
+      "observed_orcids": [
+       "https://orcid.org/0000-0002-3576-8920"
+      ]
+     },
+     "institutions": [],
+     "countries": [],
+     "is_corresponding": false,
+     "raw_author_name": "Ledell Wu",
+     "raw_affiliation_strings": [],
+     "raw_orcid": null,
+     "affiliations": []
+    },
+    {
+     "author_position": "middle",
+     "author": {
+      "id": "https://openalex.org/A5016113002",
+      "display_name": "Sergey Edunov",
+      "orcid": null,
+      "observed_orcids": []
+     },
+     "institutions": [
+      {
+       "id": "https://openalex.org/I2252078561",
+       "display_name": "Meta (Israel)",
+       "ror": "https://ror.org/02388em19",
+       "country_code": "IL",
+       "type": "company",
+       "lineage": [
+        "https://openalex.org/I2252078561",
+        "https://openalex.org/I4210114444"
+       ]
+      }
+     ],
+     "countries": [
+      "IL"
+     ],
+     "is_corresponding": false,
+     "raw_author_name": "Sergey Edunov",
+     "raw_affiliation_strings": [
+      "Meta (Israel), Tel Aviv, Israel"
+     ],
+     "raw_orcid": null,
+     "affiliations": [
+      {
+       "raw_affiliation_string": "Meta (Israel), Tel Aviv, Israel",
+       "institution_ids": [
+        "https://openalex.org/I2252078561"
+       ]
+      }
+     ]
+    },
+    {
+     "author_position": "middle",
+     "author": {
+      "id": "https://openalex.org/A5051064208",
+      "display_name": "Danqi Chen",
+      "orcid": "https://orcid.org/0000-0002-6226-6838",
+      "observed_orcids": [
+       "https://orcid.org/0000-0002-6226-6838"
+      ]
+     },
+     "institutions": [
+      {
+       "id": "https://openalex.org/I20089843",
+       "display_name": "Princeton University",
+       "ror": "https://ror.org/00hx57361",
+       "country_code": "US",
+       "type": "education",
+       "lineage": [
+        "https://openalex.org/I20089843"
+       ]
+      }
+     ],
+     "countries": [
+      "US"
+     ],
+     "is_corresponding": false,
+     "raw_author_name": "Danqi Chen",
+     "raw_affiliation_strings": [
+      "Princeton University",
+      "Princeton University, Princeton, United States"
+     ],
+     "raw_orcid": null,
+     "affiliations": [
+      {
+       "raw_affiliation_string": "Princeton University",
+       "institution_ids": [
+        "https://openalex.org/I20089843"
+       ]
+      },
+      {
+       "raw_affiliation_string": "Princeton University, Princeton, United States",
+       "institution_ids": [
+        "https://openalex.org/I20089843"
+       ]
+      }
+     ]
+    },
+    {
+     "author_position": "last",
+     "author": {
+      "id": "https://openalex.org/A5066873932",
+      "display_name": "Wen-tau Yih",
+      "orcid": null,
+      "observed_orcids": []
+     },
+     "institutions": [
+      {
+       "id": "https://openalex.org/I2252078561",
+       "display_name": "Meta (Israel)",
+       "ror": "https://ror.org/02388em19",
+       "country_code": "IL",
+       "type": "company",
+       "lineage": [
+        "https://openalex.org/I2252078561",
+        "https://openalex.org/I4210114444"
+       ]
+      }
+     ],
+     "countries": [
+      "IL"
+     ],
+     "is_corresponding": false,
+     "raw_author_name": "Wen-tau Yih",
+     "raw_affiliation_strings": [
+      "Meta (Israel), Tel Aviv, Israel"
+     ],
+     "raw_orcid": null,
+     "affiliations": [
+      {
+       "raw_affiliation_string": "Meta (Israel), Tel Aviv, Israel",
+       "institution_ids": [
+        "https://openalex.org/I2252078561"
+       ]
+      }
+     ]
+    }
+   ],
+   "primary_location": {
+    "id": "doi:10.18653/v1/2020.emnlp-main.550",
+    "is_oa": true,
+    "landing_page_url": "https://doi.org/10.18653/v1/2020.emnlp-main.550",
+    "pdf_url": "https://www.aclweb.org/anthology/2020.emnlp-main.550.pdf",
+    "source": null,
+    "license": "cc-by",
+    "license_id": "https://openalex.org/licenses/cc-by",
+    "version": "publishedVersion",
+    "is_accepted": true,
+    "is_published": true,
+    "raw_source_name": "Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing (EMNLP)",
+    "raw_type": "proceedings-article"
+   },
+   "locations": [
+    {
+     "id": "doi:10.18653/v1/2020.emnlp-main.550",
+     "is_oa": true,
+     "landing_page_url": "https://doi.org/10.18653/v1/2020.emnlp-main.550",
+     "pdf_url": "https://www.aclweb.org/anthology/2020.emnlp-main.550.pdf",
+     "source": null,
+     "license": "cc-by",
+     "license_id": "https://openalex.org/licenses/cc-by",
+     "version": "publishedVersion",
+     "is_accepted": true,
+     "is_published": true,
+     "raw_source_name": "Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing (EMNLP)",
+     "raw_type": "proceedings-article"
+    },
+    {
+     "id": "pmh:oai:arXiv.org:2004.04906",
+     "is_oa": true,
+     "landing_page_url": "http://arxiv.org/abs/2004.04906",
+     "pdf_url": "https://arxiv.org/pdf/2004.04906",
+     "source": {
+      "id": "https://openalex.org/S4306400194",
+      "display_name": "arXiv (Cornell University)",
+      "issn_l": "2331-8422",
+      "issn": [
+       "2331-8422"
+      ],
+      "is_oa": true,
+      "is_in_doaj": false,
+      "is_core": false,
+      "listed_in": [],
+      "host_organization": "https://openalex.org/I205783295",
+      "host_organization_name": "Cornell University",
+      "host_organization_lineage": [
+       "https://openalex.org/I205783295"
+      ],
+      "host_organization_lineage_names": [],
+      "type": "repository"
+     },
+     "license": null,
+     "license_id": null,
+     "version": "submittedVersion",
+     "is_accepted": false,
+     "is_published": false,
+     "raw_source_name": null,
+     "raw_type": "text"
+    },
+    {
+     "id": "mag:3015883388",
+     "is_oa": true,
+     "landing_page_url": "https://arxiv.org/pdf/2004.04906.pdf",
+     "pdf_url": null,
+     "source": {
+      "id": "https://openalex.org/S4306400194",
+      "display_name": "arXiv (Cornell University)",
+      "issn_l": "2331-8422",
+      "issn": [
+       "2331-8422"
+      ],
+      "is_oa": true,
+      "is_in_doaj": false,
+      "is_core": false,
+      "listed_in": [],
+      "host_organization": "https://openalex.org/I205783295",
+      "host_organization_name": "Cornell University",
+      "host_organization_lineage": [
+       "https://openalex.org/I205783295"
+      ],
+      "host_organization_lineage_names": [],
+      "type": "repository"
+     },
+     "license": null,
+     "license_id": null,
+     "version": "submittedVersion",
+     "is_accepted": false,
+     "is_published": false,
+     "raw_source_name": "arXiv (Cornell University)",
+     "raw_type": null
+    },
+    {
+     "id": "doi:10.48550/arxiv.2004.04906",
+     "is_oa": true,
+     "landing_page_url": "https://doi.org/10.48550/arxiv.2004.04906",
+     "pdf_url": null,
+     "source": {
+      "id": "https://openalex.org/S4306400194",
+      "display_name": "arXiv (Cornell University)",
+      "issn_l": "2331-8422",
+      "issn": [
+       "2331-8422"
+      ],
+      "is_oa": true,
+      "is_in_doaj": false,
+      "is_core": false,
+      "listed_in": [],
+      "host_organization": "https://openalex.org/I205783295",
+      "host_organization_name": "Cornell University",
+      "host_organization_lineage": [
+       "https://openalex.org/I205783295"
+      ],
+      "host_organization_lineage_names": [],
+      "type": "repository"
+     },
+     "license": null,
+     "license_id": null,
+     "version": null,
+     "is_accepted": false,
+     "is_published": null,
+     "raw_source_name": null,
+     "raw_type": "Preprint"
+    },
+    {
+     "id": "doi:10.57702/8z5gg7c3",
+     "is_oa": true,
+     "landing_page_url": "https://doi.org/10.57702/8z5gg7c3",
+     "pdf_url": null,
+     "source": {
+      "id": "https://openalex.org/S7407053387",
+      "display_name": "TIB Data Manager",
+      "issn_l": null,
+      "issn": null,
+      "is_oa": false,
+      "is_in_doaj": false,
+      "is_core": false,
+      "listed_in": [],
+      "host_organization": "https://openalex.org/I2802635041",
+      "host_organization_name": "Technische Informationsbibliothek (TIB)",
+      "host_organization_lineage": [
+       "https://openalex.org/I2802635041"
+      ],
+      "host_organization_lineage_names": [],
+      "type": "repository"
+     },
+     "license": null,
+     "license_id": null,
+     "version": null,
+     "is_accepted": false,
+     "is_published": null,
+     "raw_source_name": null,
+     "raw_type": "Dataset"
+    }
+   ],
+   "best_oa_location": {
+    "id": "doi:10.18653/v1/2020.emnlp-main.550",
+    "is_oa": true,
+    "landing_page_url": "https://doi.org/10.18653/v1/2020.emnlp-main.550",
+    "pdf_url": "https://www.aclweb.org/anthology/2020.emnlp-main.550.pdf",
+    "source": null,
+    "license": "cc-by",
+    "license_id": "https://openalex.org/licenses/cc-by",
+    "version": "publishedVersion",
+    "is_accepted": true,
+    "is_published": true,
+    "raw_source_name": "Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing (EMNLP)",
+    "raw_type": "proceedings-article"
+   },
+   "open_access": {
+    "is_oa": true,
+    "oa_status": "gold",
+    "oa_url": "https://www.aclweb.org/anthology/2020.emnlp-main.550.pdf",
+    "any_repository_has_fulltext": true
+   },
+   "cited_by_count": 3364,
+   "abstract_inverted_index": {
+    "Vladimir": [
+     0
+    ],
+    "Karpukhin,": [
+     1
+    ],
+    "Barlas": [
+     2
+    ],
+    "Oguz,": [
+     3
+    ],
+    "Sewon": [
+     4
+    ],
+    "Min,": [
+     5
+    ],
+    "Patrick": [
+     6
+    ],
+    "Lewis,": [
+     7
+    ],
+    "Ledell": [
+     8
+    ],
+    "Wu,": [
+     9
+    ],
+    "Sergey": [
+     10
+    ],
+    "Edunov,": [
+     11
+    ],
+    "Danqi": [
+     12
+    ],
+    "Chen,": [
+     13
+    ],
+    "Wen-tau": [
+     14
+    ],
+    "Yih.": [
+     15
+    ],
+    "Proceedings": [
+     16
+    ],
+    "of": [
+     17
+    ],
+    "the": [
+     18
+    ],
+    "2020": [
+     19
+    ],
+    "Conference": [
+     20
+    ],
+    "on": [
+     21
+    ],
+    "Empirical": [
+     22
+    ],
+    "Methods": [
+     23
+    ],
+    "in": [
+     24
+    ],
+    "Natural": [
+     25
+    ],
+    "Language": [
+     26
+    ],
+    "Processing": [
+     27
+    ],
+    "(EMNLP).": [
+     28
+    ],
+    "2020.": [
+     29
+    ]
+   },
+   "relevance_score": 620.0676
+  },
+  {
+   "id": "https://openalex.org/W4410705984",
+   "doi": "https://doi.org/10.2139/ssrn.5267341",
+   "title": "Corrective Retrieval Augmented Generation",
+   "display_name": "Corrective Retrieval Augmented Generation",
+   "publication_year": 2025,
+   "publication_date": "2025-01-01",
+   "ids": {
+    "openalex": "https://openalex.org/W4410705984",
+    "doi": "https://doi.org/10.2139/ssrn.5267341"
+   },
+   "type": "preprint",
+   "authorships": [
+    {
+     "author_position": "first",
+     "author": {
+      "id": "https://openalex.org/A5111122150",
+      "display_name": "Shi-Qi Yan",
+      "orcid": null,
+      "observed_orcids": []
+     },
+     "institutions": [],
+     "countries": [],
+     "is_corresponding": true,
+     "raw_author_name": "Shi-Qi Yan",
+     "raw_affiliation_strings": [],
+     "raw_orcid": null,
+     "affiliations": []
+    },
+    {
+     "author_position": "middle",
+     "author": {
+      "id": "https://openalex.org/A5005572782",
+      "display_name": "Jia-Chen Gu",
+      "orcid": "https://orcid.org/0000-0002-8801-1438",
+      "observed_orcids": [
+       "https://orcid.org/0000-0002-8801-1438"
+      ]
+     },
+     "institutions": [],
+     "countries": [],
+     "is_corresponding": false,
+     "raw_author_name": "Jia-Chen Gu",
+     "raw_affiliation_strings": [],
+     "raw_orcid": null,
+     "affiliations": []
+    },
+    {
+     "author_position": "middle",
+     "author": {
+      "id": "https://openalex.org/A5100808578",
+      "display_name": "Yun Zhu",
+      "orcid": null,
+      "observed_orcids": []
+     },
+     "institutions": [],
+     "countries": [],
+     "is_corresponding": false,
+     "raw_author_name": "Yun Zhu",
+     "raw_affiliation_strings": [],
+     "raw_orcid": null,
+     "affiliations": []
+    },
+    {
+     "author_position": "last",
+     "author": {
+      "id": "https://openalex.org/A5059767940",
+      "display_name": "Zhen-Hua Ling",
+      "orcid": "https://orcid.org/0000-0001-7853-5273",
+      "observed_orcids": [
+       "https://orcid.org/0000-0001-7853-5273"
+      ]
+     },
+     "institutions": [],
+     "countries": [],
+     "is_corresponding": false,
+     "raw_author_name": "Zhen-Hua Ling",
+     "raw_affiliation_strings": [],
+     "raw_orcid": null,
+     "affiliations": []
+    }
+   ],
+   "primary_location": {
+    "id": "doi:10.2139/ssrn.5267341",
+    "is_oa": true,
+    "landing_page_url": "https://doi.org/10.2139/ssrn.5267341",
+    "pdf_url": null,
+    "source": {
+     "id": "https://openalex.org/S4210172589",
+     "display_name": "SSRN Electronic Journal",
+     "issn_l": "1556-5068",
+     "issn": [
+      "1556-5068"
+     ],
+     "is_oa": true,
+     "is_in_doaj": false,
+     "is_core": false,
+     "listed_in": [],
+     "host_organization": "https://openalex.org/I1318003438",
+     "host_organization_name": "RELX Group (Netherlands)",
+     "host_organization_lineage": [
+      "https://openalex.org/I1318003438"
+     ],
+     "host_organization_lineage_names": [],
+     "type": "repository"
+    },
+    "license": null,
+    "license_id": null,
+    "version": "acceptedVersion",
+    "is_accepted": true,
+    "is_published": false,
+    "raw_source_name": null,
+    "raw_type": "posted-content"
+   },
+   "locations": [
+    {
+     "id": "doi:10.2139/ssrn.5267341",
+     "is_oa": true,
+     "landing_page_url": "https://doi.org/10.2139/ssrn.5267341",
+     "pdf_url": null,
+     "source": {
+      "id": "https://openalex.org/S4210172589",
+      "display_name": "SSRN Electronic Journal",
+      "issn_l": "1556-5068",
+      "issn": [
+       "1556-5068"
+      ],
+      "is_oa": true,
+      "is_in_doaj": false,
+      "is_core": false,
+      "listed_in": [],
+      "host_organization": "https://openalex.org/I1318003438",
+      "host_organization_name": "RELX Group (Netherlands)",
+      "host_organization_lineage": [
+       "https://openalex.org/I1318003438"
+      ],
+      "host_organization_lineage_names": [],
+      "type": "repository"
+     },
+     "license": null,
+     "license_id": null,
+     "version": "acceptedVersion",
+     "is_accepted": true,
+     "is_published": false,
+     "raw_source_name": null,
+     "raw_type": "posted-content"
+    }
+   ],
+   "best_oa_location": {
+    "id": "doi:10.2139/ssrn.5267341",
+    "is_oa": true,
+    "landing_page_url": "https://doi.org/10.2139/ssrn.5267341",
+    "pdf_url": null,
+    "source": {
+     "id": "https://openalex.org/S4210172589",
+     "display_name": "SSRN Electronic Journal",
+     "issn_l": "1556-5068",
+     "issn": [
+      "1556-5068"
+     ],
+     "is_oa": true,
+     "is_in_doaj": false,
+     "is_core": false,
+     "listed_in": [],
+     "host_organization": "https://openalex.org/I1318003438",
+     "host_organization_name": "RELX Group (Netherlands)",
+     "host_organization_lineage": [
+      "https://openalex.org/I1318003438"
+     ],
+     "host_organization_lineage_names": [],
+     "type": "repository"
+    },
+    "license": null,
+    "license_id": null,
+    "version": "acceptedVersion",
+    "is_accepted": true,
+    "is_published": false,
+    "raw_source_name": null,
+    "raw_type": "posted-content"
+   },
+   "open_access": {
+    "is_oa": true,
+    "oa_status": "green",
+    "oa_url": "https://doi.org/10.2139/ssrn.5267341",
+    "any_repository_has_fulltext": true
+   },
+   "cited_by_count": 117,
+   "abstract_inverted_index": null,
+   "relevance_score": 463.8153
+  }
+ ]
+}

@@ -1,0 +1,205 @@
+"""What an academic source returns, and the normalisation every discovery phase shares (D119).
+
+A `PaperCandidate` is one search result from one source, before deduplication and
+ranking. It is not a `Paper`: nothing has been fetched or parsed, and the only
+identity it has is the identifiers the source reported, which may be wrong,
+partial or absent. Phase 7 merges candidates that describe the same work, and phase
+6 turns a chosen one into a `Paper`.
+
+The normalisation functions live here rather than in an adapter because three
+phases depend on them agreeing exactly: the adapters (phase 2), the cache key
+(phase 4, `normalise_query`) and deduplication (phase 7, DOI, arXiv id and title).
+Written once per adapter they would drift, and a DOI that normalises differently
+in two places is two works.
+"""
+
+from __future__ import annotations
+
+import re
+import unicodedata
+from dataclasses import dataclass
+from datetime import date
+from enum import StrEnum
+from urllib.parse import urlsplit
+
+from scholiast.domain.errors import InvariantViolation
+
+_WHITESPACE = re.compile(r"\s+")
+_DOI_PREFIXES = (
+    "https://doi.org/",
+    "http://doi.org/",
+    "https://dx.doi.org/",
+    "http://dx.doi.org/",
+    "doi:",
+)
+#: arXiv's DataCite DOIs are another spelling of an arXiv id, not a publisher DOI.
+ARXIV_DOI_PREFIX = "10.48550/arxiv."
+_ARXIV_NEW = re.compile(r"^(\d{4}\.\d{4,5})(v\d+)?$")
+_ARXIV_OLD = re.compile(r"^([a-z\-]+(?:\.[a-z]{2})?/\d{7})(v\d+)?$", re.IGNORECASE)
+_ARXIV_HOSTS = frozenset({"arxiv.org", "www.arxiv.org", "export.arxiv.org"})
+
+
+def normalise_query(text: str) -> str:
+    """Unicode NFKC, casefold, whitespace collapsed: the form a query is cached under.
+
+    Deliberately nothing more. Stemming or stopword removal here would make two
+    queries the user typed differently share a cache entry and a result list, which
+    is a relevance decision, not a normalisation one.
+    """
+    return _WHITESPACE.sub(" ", unicodedata.normalize("NFKC", text).casefold()).strip()
+
+
+def _letters_and_digits(text: str) -> str:
+    """Every character that is not a letter or digit (in any script) becomes a space."""
+    return "".join(ch if ch.isalnum() else " " for ch in text)
+
+
+def normalise_title(text: str | None) -> str:
+    """The title form deduplication compares: punctuation and case erased."""
+    if not text:
+        return ""
+    folded = unicodedata.normalize("NFKC", text).casefold()
+    return _WHITESPACE.sub(" ", _letters_and_digits(folded)).strip()
+
+
+def normalise_doi(value: str | None) -> str | None:
+    """A DOI lowercased and stripped of resolver prefixes, or None if it is not one.
+
+    DOIs are case-insensitive by specification, so case carries no identity. Every
+    DOI starts with the `10.` directory indicator; anything else a source puts in its
+    DOI field is not a DOI and must not become an identity a work can be merged on.
+    """
+    if not value:
+        return None
+    doi = value.strip().lower()
+    for prefix in _DOI_PREFIXES:
+        if doi.startswith(prefix):
+            doi = doi[len(prefix) :]
+            break
+    return doi if doi.startswith("10.") and "/" in doi else None
+
+
+def normalise_arxiv_id(value: str | None) -> str | None:
+    """An arXiv id with no prefix, `.pdf` or version (`2106.09685`), or None.
+
+    The version is dropped because identity is the work, not the revision: v1 and v3
+    are the same paper for discovery. The versioned form is still kept where it
+    matters, in the PDF link the source supplied (see `OpenAccessLink`).
+    """
+    if not value:
+        return None
+    text = value.strip()
+    lowered = text.lower()
+    if lowered.startswith(ARXIV_DOI_PREFIX):
+        text = text[len(ARXIV_DOI_PREFIX) :]
+    elif lowered.startswith("arxiv:"):
+        text = text[len("arxiv:") :]
+    elif lowered.startswith(("http://", "https://")):
+        return arxiv_id_from_url(text)
+    if text.lower().endswith(".pdf"):
+        text = text[:-4]
+    match = _ARXIV_NEW.match(text.strip("/")) or _ARXIV_OLD.match(text.strip("/"))
+    return match.group(1) if match else None
+
+
+def arxiv_id_from_url(url: str | None) -> str | None:
+    """The arXiv id in an arxiv.org `/abs/` or `/pdf/` URL, or None for any other URL."""
+    if not url:
+        return None
+    parts = urlsplit(url.strip())
+    if (parts.hostname or "").lower() not in _ARXIV_HOSTS:
+        return None
+    for marker in ("/abs/", "/pdf/"):
+        if parts.path.startswith(marker):
+            return normalise_arxiv_id(parts.path[len(marker) :])
+    return None
+
+
+class LinkKind(StrEnum):
+    """What a source claims an open-access URL points at.
+
+    The claim is the source's, and the spike found it wrong in both directions: 4 of
+    6 HTML pages it fetched came from URLs a source called a PDF. Phase 5's fetcher
+    decides by the bytes it receives, never by this field; the field records what
+    was claimed, so a wrong claim can be counted.
+    """
+
+    PDF = "pdf"
+    LANDING = "landing"
+
+
+@dataclass(frozen=True, slots=True)
+class OpenAccessLink:
+    """An open-access URL as a source supplied it, with the licence it reported.
+
+    The URL is kept exactly as given. For arXiv that means the versioned link from
+    the API (`.../pdf/2507.20128v2`), never one rebuilt from the bare id: the spike's
+    one arXiv 404 was a rebuilt link to a submission the API itself marked as a
+    superseded duplicate.
+    """
+
+    url: str
+    kind: LinkKind
+    licence: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.url.strip():
+            raise InvariantViolation("an open-access link must have a URL")
+
+
+@dataclass(frozen=True, slots=True)
+class PaperCandidate:
+    """One search result from one source (FR-D1), before deduplication and ranking.
+
+    Absent is not zero. A source that reports no citation count gives None, and so
+    does an unknown year, venue or abstract; arXiv reports no citation counts at all.
+    Defaulting any of them to zero or the empty string would read as a measured
+    value and silently penalise the paper in ranking (the rule
+    `Paper.citation_impact_per_year` states for the same reason).
+    """
+
+    #: The source's name, as `AcademicSource.name` reports it.
+    source: str
+    #: The source's own id for the record (an OpenAlex W-id, a versioned arXiv id).
+    source_id: str
+    #: 1-based position in the source's own ranking.
+    rank: int
+    title: str
+    authors: tuple[str, ...] = ()
+    year: int | None = None
+    published: date | None = None
+    venue: str | None = None
+    abstract: str | None = None
+    citation_count: int | None = None
+    #: Normalised (`normalise_doi`). May be an arXiv DataCite DOI.
+    doi: str | None = None
+    #: Unversioned (`normalise_arxiv_id`).
+    arxiv_id: str | None = None
+    oa_links: tuple[OpenAccessLink, ...] = ()
+    #: The source's own relevance score, if it gives one. Not comparable across
+    #: sources (OpenAlex's carries citation weighting, D116), so ranking must not
+    #: mix it with another source's.
+    source_score: float | None = None
+    #: Which adapter build produced this (NFR-M5), so a change in candidates can be
+    #: traced to a change in parsing rather than in the source.
+    adapter_version: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.source.strip() or not self.source_id.strip():
+            raise InvariantViolation("a candidate must name its source and the source's id for it")
+        if not self.title.strip():
+            raise InvariantViolation("a candidate title cannot be blank")
+        if self.rank < 1:
+            raise InvariantViolation(f"source rank is 1-based, got {self.rank}")
+        if self.citation_count is not None and self.citation_count < 0:
+            raise InvariantViolation(
+                f"citation count cannot be negative, got {self.citation_count}"
+            )
+        if self.doi is not None and normalise_doi(self.doi) != self.doi:
+            raise InvariantViolation(f"candidate DOI must be normalised, got {self.doi!r}")
+        if self.arxiv_id is not None and normalise_arxiv_id(self.arxiv_id) != self.arxiv_id:
+            raise InvariantViolation(
+                f"candidate arXiv id must be normalised and unversioned, got {self.arxiv_id!r}"
+            )
+        if not self.adapter_version.strip():
+            raise InvariantViolation("a candidate must record the adapter version that produced it")

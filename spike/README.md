@@ -43,7 +43,7 @@ whose parse behaviour is already characterised.
 `.env` holds live API keys and is gitignored. **Rotate them** — they were pasted into a
 chat transcript.
 
-## M4 discovery spike (D116, D117)
+## M4 discovery spike (D116, D117, D120)
 
 Pre-registered: `m4-protocol.json` is hash-locked, and every script refuses to run if its
 canonical hash differs from the approved one. Findings in
@@ -58,6 +58,7 @@ above the numbers.
 | `18_oa_probe.py download` | P4 | 30/30 passed `validate_upload` and `preflight` |
 | `17_discovery_search.py session2 --wait` | P5 | 6 h 49 min later: top-10 overlap 0.97 (OpenAlex), 0.99 (arXiv); S2 keyless 429ed 5/5 again |
 | `19_discovery_analysis.py check / analyse / finalize / leakcheck` | P6 | **ASM-1 FAIL**; tracked outputs written S2-free |
+| `17_discovery_search.py addendum-a1`, then `19_discovery_analysis.py finalize-a1` | A1 (D120) | arXiv joined with OR vs a same-day AND: 4 vs 6 of 20 anchors in the top 50, so **AND stays**; its own pools file, the spike's left unchanged |
 
 `m4_common.py`, `m4_http.py`, `m4_parse.py` and `m4_works.py` are shared by the three.
 They are throwaway too: phase 2 writes the real adapters, and phase 5 the D115 guard.

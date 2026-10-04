@@ -29,8 +29,6 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
-from email.utils import parsedate_to_datetime
 
 import httpx
 
@@ -39,6 +37,7 @@ from scholiast.application.ports.llm import (
     GenerationUnavailable,
     TokenUsage,
 )
+from scholiast.infrastructure.retry_after import retry_after_seconds
 
 PROVIDER_NAME = "groq"
 DEFAULT_BASE_URL = "https://api.groq.com/openai/v1"
@@ -108,7 +107,7 @@ class GroqProvider:
                     raise GenerationUnavailable(
                         PROVIDER_NAME,
                         _describe(response.status_code, response),
-                        retry_after=_retry_after(response),
+                        retry_after=retry_after_seconds(response),
                     )
                 async for line in response.aiter_lines():
                     chunk = _parse_sse(line)
@@ -124,47 +123,13 @@ def _describe(status: int, response: httpx.Response) -> str:
     """A failure message that says what to do about it.
 
     Still formats `Retry-After` for a human reader, but it is no longer the only
-    place the value goes — `_retry_after` returns it as a number the breaker can
+    place the value goes — `retry_after_seconds` returns it as a number the breaker can
     act on (D103). The string is for logs; the float is for behaviour.
     """
     if status == 429:
         retry_after = response.headers.get("retry-after", "unknown")
         return f"rate limited, retry-after={retry_after}"
     return f"HTTP {status}: {response.text[:200]}"
-
-
-def _retry_after(response: httpx.Response) -> float | None:
-    """`Retry-After` as seconds, or None when the header is absent or unusable.
-
-    **Both legal forms are accepted** (RFC 9110 §10.2.3): Groq sends a number,
-    but the spec also allows an HTTP-date, and a deployment behind a proxy that
-    rewrites it would otherwise have the header silently ignored — a breaker
-    falling back to its guessed cooldown while the server had stated the answer.
-
-    None rather than zero for an unparseable value, because the two mean
-    opposite things to the breaker: None is "nothing was said, use the
-    cooldown", zero is "the server says come back now".
-
-    Not clamped at the top. A daily quota legitimately answers with hours, and
-    honouring that is the point (D103) — the window is in-process anyway (D104),
-    so a restart clears it.
-    """
-    raw = response.headers.get("retry-after")
-    if raw is None:
-        return None
-    try:
-        return max(0.0, float(raw.strip()))
-    except ValueError:
-        pass
-    try:
-        when = parsedate_to_datetime(raw)
-    except (TypeError, ValueError):
-        return None
-    if when.tzinfo is None:
-        # RFC 9110 dates are GMT; a naive one from a sloppy proxy is read as
-        # UTC rather than as local time, which would be wrong by the offset.
-        when = when.replace(tzinfo=UTC)
-    return max(0.0, (when - datetime.now(UTC)).total_seconds())
 
 
 def _parse_sse(line: str) -> GenerationChunk | None:

@@ -48,9 +48,11 @@ POOLS_PATH = ROOT / "data" / "eval" / "discovery-pools.json.gz"
 POOLS_MANIFEST_PATH = ROOT / "data" / "eval" / "discovery-pools.manifest.json"
 
 #: The canonical hash the owner approved: D116 on 2026-09-30, amended by DEV-2 on
-#: 2026-10-01 (D117). A protocol that hashes to anything else is not the approved
-#: protocol, and nothing runs. The first 15 requests ran under the original.
-APPROVED_PROTOCOL_SHA256 = "6f46de9af888c2998f9c3faf61d8c902692e8e688db012aef307a098df820884"
+#: 2026-10-01 (D117), with addendum A1 added on 2026-10-02 (D120). A protocol that
+#: hashes to anything else is not the approved protocol, and nothing runs. Each
+#: run line in the log records the hash it ran under: the first 15 requests ran
+#: under the original, the rest of the spike under DEV-2's, and A1 under this one.
+APPROVED_PROTOCOL_SHA256 = "b23f235ea5314c6a3a2db73f48fbce80060c549c840577e166926021a850dd79"
 ORIGINAL_PROTOCOL_SHA256 = "6a2809025626b29b96119cd4d06639fd3341cd325c74c121e82ba5e9e8677a34"
 
 #: Implementation reading of "at most 5 hops": at most 5 redirects are followed, so
@@ -146,7 +148,10 @@ def s2_query(text: str) -> str:
     return re.sub(r"\s+", " ", norm_query(text).replace("-", " ")).strip()
 
 
-def arxiv_query(text: str, stopwords: Iterable[str]) -> str:
+def arxiv_query(text: str, stopwords: Iterable[str], join: str = "AND") -> str:
+    """query_construction.arxiv; `join` is AND for D116's passes, AND or OR for A1 (D120)."""
+    if join not in ("AND", "OR"):
+        raise ValueError(f"unknown arXiv join {join!r}")
     stop = set(stopwords)
     seen: set[str] = set()
     terms: list[str] = []
@@ -155,7 +160,7 @@ def arxiv_query(text: str, stopwords: Iterable[str]) -> str:
             continue
         seen.add(token)
         terms.append(token)
-    return " AND ".join(f"all:{t}" for t in terms)
+    return f" {join} ".join(f"all:{t}" for t in terms)
 
 
 def _letters_and_digits(text: str) -> str:
@@ -481,6 +486,8 @@ class Budget:
             ("api", "semantic_scholar", "lookup"): b["semantic_scholar"]["max"]["lookups"],
             ("api", "arxiv_api", "search"): b["arxiv_api"]["max"]["queries"],
             ("api", "arxiv_api", "lookup"): b["arxiv_api"]["max"]["lookups"],
+            # Addendum A1's own budget (D120), kept apart so it cannot spend P1-P5's.
+            ("api", "arxiv_api", "a1"): protocol["addenda"]["A1"]["budget"]["max"]["queries"],
         }
         self._arxiv_probe = b["arxiv_org_pdfs"]["max"]["probe_requests"]
         self._other_probe = b["other_pdf_hosts"]["max"]["probe_requests_per_host"]

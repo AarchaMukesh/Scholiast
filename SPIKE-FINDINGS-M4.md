@@ -3,9 +3,11 @@
 **Run:** 2026-10-01, one home connection, one Windows 11 machine. Session 1 05:15–05:23 UTC ·
 PDF probe 05:24–05:54 · download sample 05:54–06:03 · session 2 12:12–12:13, 6 h 49 min after
 session 1's last request (the protocol requires at least 6 h).
-**Protocol:** `spike/m4-protocol.json`, approved at canonical SHA-256 `6a280902…` (D116) and
-amended to `6f46de9a…` by DEV-2 after the first 15 requests (D117). Every results file names
-the hash it ran under.
+**Protocol:** `spike/m4-protocol.json`, approved at canonical SHA-256 `6a280902…` (D116),
+amended to `6f46de9a…` by DEV-2 after the first 15 requests (D117), and given addendum A1 as
+`b23f235e…` before A1's first request on 2026-10-02 (D120). Every run line records the hash it
+ran under. The spike's frozen pools and `18_oa_probe.json` carry `6f46de9a…`; the results files
+regenerated after A1, and A1's pools, carry `b23f235e…`.
 
 Purpose (D116): measure ASM-1 (each academic source is fast, complete and permissive enough
 for a 3 s discovery search) and ASM-2 (how often a discovered paper has a fetchable
@@ -314,10 +316,10 @@ Each of these is decided in the phase that implements it, with these numbers (D1
 
 | Decision | What the spike says |
 |---|---|
-| Which sources to build | OpenAlex met three of four bars, and its fourth looks like a page-size question. arXiv also met three, and its fourth is mostly our AND query construction. S2 needs a key decision: keyless was 10/10 × 429 across two windows, and a keyed pass would be its own addendum |
+| Which sources to build | OpenAlex met three of four bars, and its fourth looks like a page-size question. arXiv also met three; its fourth is mostly our AND query construction, and OR is worse (section 7), so the fix is not a different join. S2 needs a key decision: keyless was 10/10 × 429 across two windows, and a keyed pass would be its own addendum |
 | OpenAlex query handling | Strip or escape `?` and `*`; the default stemmed search refuses them |
 | Page size and `select` vs NFR-P1's 3 s | Transfer dominates OpenAlex latency; measure a smaller page through the real adapter before fixing a timeout |
-| arXiv query construction | AND-of-every-word excludes canonical papers; phase 2 should test OR or a subset of words against the anchors |
+| arXiv query construction | AND-of-every-word excludes canonical papers, and OR was measured and is worse (section 7, D120): AND stays. What remains untested is a construction between the two, such as AND over the rarest few words; that needs its own measurement |
 | Allowlist (D115) | A1 66%, A2 76% (74% when enforced on every hop), A3 84% of works. Any allowlist must cover redirect hosts, not only the hosts serving the PDF |
 | Dedup | Title (and probably year) matching on top of identifiers |
 | Licence | Mostly unreported; 26 cc-by of 151 fetched |
@@ -332,14 +334,87 @@ Each of these is decided in the phase that implements it, with these numbers (D1
 |---|---|---|
 | 1 | Protocol approved before the first call; every results file records its hash | ✅ D116 approval before any call. The DEV-2 amendment was approved after 15 requests (D117), and the run logs record both hashes |
 | 2 | P0 passed, including the checker mutant | ✅ before the first live call. 11/11 mutants caught |
-| 3 | The log checker confirms budgets, pacing, address refusals and no automatic redirects | ✅ 354 requests, 0 violations |
-| 4 | Every planned request has a logged outcome | ✅ 0 planned requests missing, 0 sent without an outcome |
+| 3 | The log checker confirms budgets, pacing, address refusals and no automatic redirects | ✅ for D116's run: 354 requests, 0 violations. With A1's 40 the log holds 394, and the checker reports one 3 s gap it cannot verify, after the request cut off by hand (section 7) |
+| 4 | Every planned request has a logged outcome | ✅ for D116's run: 0 planned requests missing, 0 sent without an outcome. A1 has one sent with no outcome, the same request (section 7) |
 | 5 | ASM-1 verdict per source, with n and Wilson intervals | ✅ FAIL, above |
 | 6 | ASM-2 verdict with the funnel under A1, A2 and A3 | ✅ PASS, above |
 | 7 | Allowlist, dedup, licence, stability and phrasing evidence exists | ✅ section 3 |
 | 8 | Pools reload with SHA-256 verified; no S2 content, PDF or key in any tracked file | ✅ `finalize` reloaded 81 entries with the hash verified. `leakcheck` is clean across 17 files, and a grep of the working tree outside `var/` and `spike/.env` finds no key value. **The S2 checks were vacuous:** S2 returned no data, so there were no S2 ids or URLs to leak |
 | 9 | All five gates green, gate 4 printing "Contracts: 3 kept, 0 broken" | ✅ run on the final tree after session 2: format, ruff and mypy clean; `Contracts: 3 kept, 0 broken.`; `1218 passed`. The spike changes nothing under `src/` or `tests/` |
 | 10 | "Does not establish" above the numbers; decisions listed, not taken | ✅ |
+
+---
+
+## 7. Addendum A1: arXiv's query construction (D120)
+
+Run on 2026-10-02 after the spike, under a protocol addendum approved before its first
+request: the 20 session-1 queries against arXiv only, each joined with OR and, as a
+same-day control, with AND. **Pre-registered rule:** adopt OR only if, for the keyword
+phrasing, its top-50 anchor recall is at least 50% and strictly higher than the same-day
+AND's. Its responses are in `data/eval/discovery-pools-arxiv-a1.json.gz`; the spike's own
+pools are unchanged.
+
+**What A1 does not establish.**
+
+- **Anchor recall is blind to precision.** It counts 20 famous papers found, not how many
+  off-topic papers came with them. Phase 8's judged set measures that.
+- **One alternative was tested.** A1 says OR is worse than AND, not that AND is the best
+  construction available.
+- **ASM-1 is not recomputed.** A construction chosen after the verdict cannot pass the bar
+  retroactively, so ASM-1 stays FAIL.
+- **arXiv was degraded for part of the run**, and 8 of the 40 requests failed, all before
+  the final resume. Under the no-repeats rule they stay failures. The latency numbers mix
+  that morning with a healthy window.
+
+**Result: AND stays.**
+
+| Keyword phrasing, n = 20 anchors | Same-day AND | OR |
+|---|---|---|
+| Queries answered | 9 of 10 | 9 of 10 |
+| Anchors in the top 10 | 2 | 1 |
+| **Anchors in the top 50** | **6 (30%)** [14.5%, 51.9%] | **4 (20%)** [8.1%, 41.6%] |
+| Found only under this construction | 2 (LoRA, Mamba) | 0 |
+| Matches arXiv reported per query | 271 – 2,307 | 228,612 – 1,956,075 |
+
+OR met neither condition. Under OR, every anchor both constructions found ranked lower
+(6 → 25, 12 → 21, 3 → 6, 25 → 34), and LoRA and Mamba dropped out of the top 50. The
+match counts suggest why: OR over common words matches up to two million papers, and
+arXiv's relevance ranking, which has no popularity signal, buries the canonical ones among
+them.
+
+**The natural-language phrasing is not a like-for-like comparison.** Each construction
+answered only 7 of its 10 queries, and the failed sets differ (AND lost t08, t09 and t10; OR
+lost t02, t08 and t10). Each put 2 of 20 anchors in its top 50. On the 6 topics both answered,
+AND found 2 and OR 1, and DPR fell from rank 1 to 7 under OR. AND's losses include t09 and
+t10, which held 3 of the spike's 5 natural-language anchors in its top 50.
+
+**The same-day control reproduced the spike's anchor ranks exactly.** On every topic that
+answered both days, from identical request URLs, AND ranked each anchor where the spike's AND
+did (15, 6, 29, 12, 3, 25). arXiv's index had moved slightly between the days: its reported
+totals rose by 1–6 on six of the nine topics, and four of the nine top-50 lists differ at one
+to four positions, in t07 by one replaced paper. No anchor moved, so the comparison is not
+confounded by the drift.
+
+**The lost query cannot have changed the result.** t03's keyword query failed under both
+constructions (a timeout under AND, a 429 under OR). Even crediting both of its anchors to
+OR and neither to AND gives 6 against 6, which is not strictly greater.
+
+**Incidents.** arXiv was degraded on the morning of 2026-10-02: 13–20 s latencies,
+timeouts, and 429s at the 3 s pace, while its status page showed no incident. A1 was paused
+twice and resumed at 06:26 UTC.
+
+- **The first pause was by hand.** Killing the process cut `A1/t08-natural_language/OR` off
+  mid-flight. It is logged as sent with no outcome, the one acceptance-4 exception in the
+  whole spike. With no end time, the log checker also cannot verify the 3 s gap after it,
+  the one acceptance-3 exception. Both were caused by the person running it.
+- **The second pause was by a timeout watcher.** It let one more request through because
+  the stop file was checked before the pacing wait instead of after it; that was corrected.
+- **The final resume ran under a watcher fixed beforehand.** It paused on any timeout, 429,
+  5xx, or success over 10 s, and judged only status and latency. A request the decision
+  does not use answered in 1.3 s first. All 27 requests after the resume were healthy,
+  slowest 8.1 s.
+- **Nothing was repeated.** Over the whole run, OR's p50 latency was 2.1 s against AND's
+  1.1 s.
 
 ---
 
@@ -355,6 +430,8 @@ Each of these is decided in the phase that implements it, with these numbers (D1
 .venv\Scripts\python.exe spike\scripts\19_discovery_analysis.py analyse
 .venv\Scripts\python.exe spike\scripts\19_discovery_analysis.py finalize
 .venv\Scripts\python.exe spike\scripts\19_discovery_analysis.py leakcheck
+.venv\Scripts\python.exe spike\scripts\17_discovery_search.py addendum-a1   # A1 (D120)
+.venv\Scripts\python.exe spike\scripts\19_discovery_analysis.py finalize-a1
 ```
 
 The live passes need `OPENALEX_API_KEY` in `spike/.env`, and none of them repeats a request

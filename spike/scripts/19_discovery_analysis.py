@@ -4,6 +4,7 @@
     .venv\\Scripts\\python.exe spike\\scripts\\19_discovery_analysis.py check      # the real logs
     .venv\\Scripts\\python.exe spike\\scripts\\19_discovery_analysis.py analyse
     .venv\\Scripts\\python.exe spike\\scripts\\19_discovery_analysis.py finalize
+    .venv\\Scripts\\python.exe spike\\scripts\\19_discovery_analysis.py finalize-a1
     .venv\\Scripts\\python.exe spike\\scripts\\19_discovery_analysis.py leakcheck
 
 `selftest` is P0: the address classifier against the protocol's table, URL checks,
@@ -81,6 +82,8 @@ OUT_REQUESTS = RESULTS_DIR / "17_discovery_requests.json"
 OUT_PROBE = RESULTS_DIR / "18_oa_probe.json"
 OUT_ANALYSIS = RESULTS_DIR / "19_discovery_analysis.json"
 FINDINGS = ROOT / "SPIKE-FINDINGS-M4.md"
+POOLS_A1_PATH = ROOT / "data" / "eval" / "discovery-pools-arxiv-a1.json.gz"
+POOLS_A1_MANIFEST_PATH = ROOT / "data" / "eval" / "discovery-pools-arxiv-a1.manifest.json"
 CURVE_S = (1.0, 1.5, 2.0, 2.5, 3.0)
 
 
@@ -577,9 +580,11 @@ def selftest() -> int:
         failures.append("openalex_query keeps a wildcard character (DEV-2)")
     if openalex_query("a*b ? c") != "a b c":
         failures.append("openalex_query does not replace '*' and '?' with spaces (DEV-2)")
+    if arxiv_query(t10["natural_language"], stop, "OR") != expected_q.replace(" AND ", " OR "):
+        failures.append("arxiv_query's OR join differs from the AND construction in more than the join (A1)")
     if norm_title("SimCSE: Simple Contrastive") != "simcse simple contrastive":
         failures.append("norm_title")
-    results["normalisation_cases"] = len(norm_cases) + 6
+    results["normalisation_cases"] = len(norm_cases) + 7
 
     budget = Budget(protocol)
     keys = [("api", "openalex", "search")]
@@ -592,6 +597,14 @@ def selftest() -> int:
         failures.append("budget.take did not refuse the 41st OpenAlex search")
     except RuntimeError:
         pass
+    a1_budget = Budget(protocol)
+    a1_keys = [("api", "arxiv_api", "a1")]
+    for _ in range(protocol["addenda"]["A1"]["budget"]["max"]["queries"]):
+        a1_budget.take(a1_keys)
+    if a1_budget.can(a1_keys):
+        failures.append("budget allows a 41st A1 request (D120)")
+    if not a1_budget.can([("api", "arxiv_api", "search")]):
+        failures.append("A1's budget spends the P1-P5 arXiv budget (D120)")
     replayed = Budget(protocol)
     replayed.replay([{"event": "sending", "budget_keys": [["probe_host", "arxiv.org"], ["probe_total"]]}] * 120)
     if replayed.can([("probe_host", "arxiv.org"), ("probe_total",)]):
@@ -816,10 +829,14 @@ def completeness(bodies: list[dict[str, Any]]) -> dict[str, Any]:
     return out
 
 
+#: The passes ASM-1 is measured on. A1 came after the verdict and does not change it (D120).
+ASM1_PASSES = ("P1", "P2", "P5")
+
+
 def limits(outcomes: list[dict[str, Any]]) -> dict[str, Any]:
     out = {}
     for source in SOURCES:
-        rows = [o for o in outcomes if o.get("source") == source]
+        rows = [o for o in outcomes if o.get("source") == source and o.get("pass") in ASM1_PASSES]
         statuses = Counter(str(o.get("status")) for o in rows)
         throttled = sum(1 for o in rows if o.get("status") == 429)
         busy = sum(1 for o in rows if o.get("status") == 503)
@@ -849,6 +866,31 @@ def limits(outcomes: list[dict[str, Any]]) -> dict[str, Any]:
 def _jaccard(a: str, b: str) -> float:
     x, y = set(a.split()), set(b.split())
     return len(x & y) / len(x | y) if x | y else 0.0
+
+
+def _anchor_rank(recs: list[Rec], anchor: dict[str, Any], id_ok: bool) -> tuple[int | None, str | None, list[int]]:
+    """definitions.anchor_match: (rank, rule, near-miss ranks) for one anchor in one result list."""
+    want = norm_title(anchor["title"])
+    near: list[int] = []
+    for rec in recs:
+        if id_ok and rec.arxiv_id == anchor["arxiv_id"]:
+            return rec.rank, "arxiv_id", []
+        if rec.ntitle and rec.ntitle == want:
+            return rec.rank, "title", []
+        if rec.ntitle and _jaccard(rec.ntitle, want) >= 0.8:
+            near.append(rec.rank)
+    return None, None, near
+
+
+def _verified_anchor_ids(protocol: dict[str, Any], bodies: list[dict[str, Any]]) -> dict[str, bool]:
+    """P2's arXiv check: an anchor id counts only if arXiv returned the anchor's title for it."""
+    returned = {}
+    for entry in bodies:
+        if entry.get("rid") == "P2/anchor/arxiv" and entry.get("status") == 200:
+            for rec in parse("arxiv", entry["body"]).records:
+                returned[rec.arxiv_id] = rec.title
+    return {a["arxiv_id"]: norm_title(returned.get(a["arxiv_id"])) == norm_title(a["title"])
+            for t in protocol["topics"] for a in t["anchors"]}
 
 
 def anchors(protocol: dict[str, Any], bodies: list[dict[str, Any]]) -> dict[str, Any]:
@@ -893,19 +935,8 @@ def anchors(protocol: dict[str, Any], bodies: list[dict[str, Any]]) -> dict[str,
             rows = []
             for topic, anchor in anchor_list:
                 recs = by_query.get((source, topic, phrasing))
-                rank = rule = None
-                near = []
-                if recs is not None:
-                    want = norm_title(anchor["title"])
-                    for rec in recs:
-                        if verified[anchor["arxiv_id"]] and rec.arxiv_id == anchor["arxiv_id"]:
-                            rank, rule = rec.rank, "arxiv_id"
-                            break
-                        if rec.ntitle and rec.ntitle == want:
-                            rank, rule = rec.rank, "title"
-                            break
-                        if rec.ntitle and _jaccard(rec.ntitle, want) >= 0.8:
-                            near.append(rec.rank)
+                rank, rule, near = (_anchor_rank(recs, anchor, verified[anchor["arxiv_id"]])
+                                    if recs is not None else (None, None, []))
                 if rank is not None and rank <= 10:
                     hits10 += 1
                 if rank is not None and rank <= 50:
@@ -1160,6 +1191,66 @@ def singles(outcomes: list[dict[str, Any]]) -> dict[str, Any]:
     return out
 
 
+def addendum_a1(protocol: dict[str, Any], bodies: list[dict[str, Any]],
+                outcomes: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """A1 (D120): anchor recall under AND and OR, the same day, and the pre-registered decision."""
+    a1 = [e for e in bodies if e.get("pass") == "A1"]
+    if not a1:
+        return None
+    anchor_list = [(t["id"], a) for t in protocol["topics"] for a in t["anchors"]]
+    verified = _verified_anchor_ids(protocol, bodies)
+    out: dict[str, Any] = {}
+    found: dict[tuple[str, str], set[str]] = {}
+    for join in ("AND", "OR"):
+        row: dict[str, Any] = {}
+        for phrasing in ("keyword", "natural_language"):
+            ok = {e["topic"]: parse("arxiv", e["body"]) for e in a1
+                  if e.get("construction") == join and e.get("phrasing") == phrasing and e.get("status") == 200}
+            hits10 = hits50 = 0
+            rows = []
+            found[(join, phrasing)] = set()
+            for topic, anchor in anchor_list:
+                parsed = ok.get(topic)
+                rank, rule, near = (_anchor_rank(parsed.records, anchor, verified[anchor["arxiv_id"]])
+                                    if parsed is not None else (None, None, []))
+                hits10 += rank is not None and rank <= 10
+                if rank is not None and rank <= 50:
+                    hits50 += 1
+                    found[(join, phrasing)].add(anchor["arxiv_id"])
+                rows.append({"topic": topic, "anchor": anchor["title"], "rank": rank, "rule": rule,
+                             "near_miss_ranks": near, "query_failed": parsed is None})
+            counts = [len(p.records) for p in ok.values()]
+            row[phrasing] = {
+                "queries_ok": len(ok),
+                "top10": wilson(hits10, len(anchor_list)),
+                "top50": wilson(hits50, len(anchor_list)),
+                "zero_result": wilson(sum(1 for c in counts if c == 0), len(counts)),
+                "mean_returned": round(sum(counts) / len(counts), 1) if counts else None,
+                "reported_totals": [ok[t].total for t in sorted(ok)],
+                "anchors": rows,
+            }
+        rows_out = [o for o in outcomes if o.get("pass") == "A1" and o.get("construction") == join]
+        row["outcomes"] = dict(Counter(o["outcome"] for o in rows_out))
+        row["latency_s"] = _pct([o["latency_s"] for o in rows_out if o["outcome"] == "ok"])
+        out[join] = row
+    or50 = out["OR"]["keyword"]["top50"]["k"]
+    and50 = out["AND"]["keyword"]["top50"]["k"]
+    n = len(anchor_list)
+    adopt_or = 2 * or50 >= n and or50 > and50
+    out["paired_keyword_top50"] = {
+        "only_or": sorted(found[("OR", "keyword")] - found[("AND", "keyword")]),
+        "only_and": sorted(found[("AND", "keyword")] - found[("OR", "keyword")]),
+        "both": len(found[("OR", "keyword")] & found[("AND", "keyword")]),
+    }
+    out["decision"] = {
+        "rule": protocol["addenda"]["A1"]["decision_rule"],
+        "or_top50": or50, "and_top50": and50, "n": n,
+        "adopt": "OR" if adopt_or else "AND",
+        "or_beats_and_below_bar": (not adopt_or) and or50 > and50,
+    }
+    return out
+
+
 def planned_coverage(protocol: dict[str, Any], api: list[dict[str, Any]]) -> dict[str, Any]:
     decided_rids = decided(api)
     missing = []
@@ -1173,6 +1264,12 @@ def planned_coverage(protocol: dict[str, Any], api: list[dict[str, Any]]) -> dic
     for s in SOURCES:
         if f"P2/anchor/{s}" not in decided_rids:
             missing.append(f"P2/anchor/{s}")
+    if any(r.get("pass") == "A1" for r in api):  # A1 is planned only once its run has started
+        for t in protocol["topics"]:
+            for ph in ("keyword", "natural_language"):
+                for join in ("AND", "OR"):
+                    if f"A1/{t['id']}-{ph}/{join}" not in decided_rids:
+                        missing.append(f"A1/{t['id']}-{ph}/{join}")
     return {"missing": missing, "complete": not missing}
 
 
@@ -1234,6 +1331,7 @@ def analyse() -> int:
                  "anchors": anc, "single_record": singles(outcomes),
                  "openalex_bodies_with_relevance_score": relevance_present},
         "asm2": asm2(protocol, run),
+        "addendum_a1": addendum_a1(protocol, bodies, outcomes),
         "evidence": {"allowlist": allowlist_evidence(run), "licence": licence_evidence(run),
                      "dedup": dedup_evidence(), "stability": stability(bodies), "phrasing": phrasing(bodies)},
     }
@@ -1274,25 +1372,7 @@ def finalize() -> int:
     s2_ids = _s2_ids(run["bodies"])
 
     # 17: the API request log.
-    api_rows = []
-    outcomes = {r["rid"]: r for r in run["api"] if r.get("event") == "outcome"}
-    for r in run["api"]:
-        if r.get("event") == "sending":
-            row = {**r, **{k: v for k, v in outcomes.get(r["rid"], {}).items() if k != "event"}}
-            row["event"] = "request"
-        elif r.get("event") in ("outcome",):
-            continue
-        else:
-            row = dict(r)
-        if "url" in row:
-            row["url"] = _sanitise_url(row["url"], False, s2_ids)
-        for k in ("t_start", "t_end"):
-            if isinstance(row.get(k), float):
-                row[f"{k}_iso"] = iso(row[k])
-        api_rows.append(row)
-    requests_doc = {"protocol_sha256": digest, "s2_mode": "keyless",
-                    "note": "S2 paper ids are replaced by s2h: hashes (D116: S2 data stays local).",
-                    "records": api_rows}
+    requests_doc = _requests_doc(run, digest, s2_ids)
 
     # 18: probe and download logs, S2-only identifiers and URLs hashed.
     works = {w.key: w for w in build_works(p1_keyword_records())}
@@ -1305,8 +1385,14 @@ def finalize() -> int:
         print("wrote", path.relative_to(ROOT))
 
     # The frozen pools: OpenAlex and arXiv bodies only (both CC0). S2 stays local.
-    entries = sorted((e for e in run["bodies"] if e.get("source") in ("openalex", "arxiv")),
-                     key=lambda e: e["rid"])
+    # Frozen means frozen: once written they are verified against the log, never
+    # rewritten, because the protocol hash stamped inside would change their bytes.
+    entries = sorted((e for e in run["bodies"] if e.get("source") in ("openalex", "arxiv")
+                      and e.get("pass") in ASM1_PASSES), key=lambda e: e["rid"])
+    if POOLS_PATH.exists():
+        _verify_frozen_pools(entries)
+        print(f"{POOLS_PATH.relative_to(ROOT)} exists and matches the log; not rewritten")
+        return 0
     payload = json.dumps({"protocol_sha256": digest, "entries": entries}, ensure_ascii=False,
                          sort_keys=True).encode("utf-8")
     secrets.assert_absent(payload.decode("utf-8"), where=str(POOLS_PATH))
@@ -1434,6 +1520,97 @@ def leaked_urls(text: str, needles: set[str], *, quoted: bool) -> list[str]:
     return sorted(u for u in needles if (json.dumps(u, ensure_ascii=False) if quoted else u) in text)
 
 
+def _requests_doc(run: dict[str, list[dict[str, Any]]], digest: str, s2_ids: set[str]) -> dict[str, Any]:
+    """17_discovery_requests.json: every API request, joined to its outcome, S2 ids hashed."""
+    api_rows = []
+    outcomes = {r["rid"]: r for r in run["api"] if r.get("event") == "outcome"}
+    for r in run["api"]:
+        if r.get("event") == "sending":
+            row = {**r, **{k: v for k, v in outcomes.get(r["rid"], {}).items() if k != "event"}}
+            row["event"] = "request"
+        elif r.get("event") in ("outcome",):
+            continue
+        else:
+            row = dict(r)
+        if "url" in row:
+            row["url"] = _sanitise_url(row["url"], False, s2_ids)
+        for k in ("t_start", "t_end"):
+            if isinstance(row.get(k), float):
+                row[f"{k}_iso"] = iso(row[k])
+        api_rows.append(row)
+    return {"protocol_sha256": digest, "s2_mode": "keyless",
+            "note": "S2 paper ids are replaced by s2h: hashes (D116: S2 data stays local). Each run "
+                    "line records the protocol hash that run used.",
+            "records": api_rows}
+
+
+def _verify_frozen_pools(entries: list[dict[str, Any]]) -> None:
+    """The committed pools still hash to their manifest and hold exactly these entries."""
+    manifest = json.loads(POOLS_MANIFEST_PATH.read_text(encoding="utf-8"))
+    blob = POOLS_PATH.read_bytes()
+    if hashlib.sha256(blob).hexdigest() != manifest["sha256"]:
+        raise SystemExit(f"{POOLS_PATH.name} no longer matches its manifest's SHA-256")
+    frozen = sorted(e["rid"] for e in json.loads(gzip.decompress(blob))["entries"])
+    if frozen != sorted(e["rid"] for e in entries):
+        raise SystemExit(f"{POOLS_PATH.name} and the run log disagree about which responses it holds")
+
+
+def finalize_a1() -> int:
+    """A1's tracked outputs (D120): its own pools, and the request log with A1 in it.
+
+    The spike's pools and probe log are not touched: the pools are verified against the
+    log instead, so A1 cannot alter what D116's run recorded.
+    """
+    protocol, digest = load_protocol()
+    env = load_env()
+    secrets = Secrets([env.get("OPENALEX_API_KEY", ""), env.get("S2_API_KEY", "")])
+    run = load_run()
+    s2_ids = _s2_ids(run["bodies"])
+    _verify_frozen_pools([e for e in run["bodies"] if e.get("source") in ("openalex", "arxiv")
+                          and e.get("pass") in ASM1_PASSES])
+    print(f"{POOLS_PATH.relative_to(ROOT)} verified against the log; not rewritten")
+
+    text = json.dumps(_requests_doc(run, digest, s2_ids), indent=1, ensure_ascii=False, default=str)
+    secrets.assert_absent(text, where=str(OUT_REQUESTS))
+    OUT_REQUESTS.write_text(text + "\n", encoding="utf-8")
+    print("wrote", OUT_REQUESTS.relative_to(ROOT))
+
+    entries = sorted((e for e in run["bodies"] if e.get("pass") == "A1"), key=lambda e: e["rid"])
+    if not entries or any(e.get("source") != "arxiv" for e in entries):
+        raise SystemExit("A1 holds no responses, or holds a response not from arXiv")
+    payload = json.dumps({"protocol_sha256": digest, "entries": entries}, ensure_ascii=False,
+                         sort_keys=True).encode("utf-8")
+    secrets.assert_absent(payload.decode("utf-8"), where=str(POOLS_A1_PATH))
+    with POOLS_A1_PATH.open("wb") as raw, gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0) as gz:
+        gz.write(payload)
+    blob = POOLS_A1_PATH.read_bytes()
+    manifest = {
+        "dataset": "scholiast-m4-discovery-pools-arxiv-a1",
+        "decision": "D120",
+        "protocol_sha256": digest,
+        "file": POOLS_A1_PATH.name,
+        "sha256": hashlib.sha256(blob).hexdigest(),
+        "bytes": len(blob),
+        "entries": len(entries),
+        "by_construction_and_phrasing": dict(Counter(f"{e['construction']}/{e['phrasing']}" for e in entries)),
+        "recorded_from": min(e["received_at"] for e in entries),
+        "recorded_to": max(e["received_at"] for e in entries),
+        "licence": "arXiv metadata CC0",
+        "request": protocol["sources"]["arxiv"]["search"],
+        "query_construction": protocol["query_construction"]["arxiv"],
+        "addendum": protocol["addenda"]["A1"],
+        "caveat": protocol["pools_caveat"],
+    }
+    POOLS_A1_MANIFEST_PATH.write_text(json.dumps(manifest, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    reloaded = json.loads(gzip.decompress(POOLS_A1_PATH.read_bytes()))
+    assert hashlib.sha256(POOLS_A1_PATH.read_bytes()).hexdigest() == manifest["sha256"]
+    assert len(reloaded["entries"]) == len(entries)
+    bad = [e["rid"] for e in reloaded["entries"] if e["status"] == 200 and parse("arxiv", e["body"]).error]
+    print(f"wrote {POOLS_A1_PATH.relative_to(ROOT)} ({len(blob)} bytes, {len(entries)} entries); "
+          f"reload verified; unparseable 200s: {bad or 'none'}")
+    return 0
+
+
 def _rid_public(rid: str, key_public: Any) -> str:
     parts = rid.split("/")
     if len(parts) >= 3 and parts[0] in ("P3", "P4"):
@@ -1453,10 +1630,12 @@ def leakcheck() -> int:
     s2_urls = s2_only_urls(run)
     tracked_outputs = [OUT_REQUESTS, OUT_PROBE, OUT_ANALYSIS, RESULTS_DIR / "19_selftest.json",
                        POOLS_MANIFEST_PATH, FINDINGS, ROOT / "spike" / "m4-protocol.json",
-                       ROOT / "spike" / ".env.example", ROOT / "spike" / "README.md"]
+                       ROOT / "spike" / ".env.example", ROOT / "spike" / "README.md",
+                       POOLS_A1_MANIFEST_PATH]
     texts = {str(p.relative_to(ROOT)): p.read_text(encoding="utf-8") for p in tracked_outputs if p.exists()}
-    if POOLS_PATH.exists():
-        texts[str(POOLS_PATH.relative_to(ROOT))] = gzip.decompress(POOLS_PATH.read_bytes()).decode("utf-8")
+    for pools in (POOLS_PATH, POOLS_A1_PATH):
+        if pools.exists():
+            texts[str(pools.relative_to(ROOT))] = gzip.decompress(pools.read_bytes()).decode("utf-8")
     for p in sorted((ROOT / "spike" / "scripts").glob("m4_*.py")) + sorted((ROOT / "spike" / "scripts").glob("1[789]_*.py")):
         texts[str(p.relative_to(ROOT))] = p.read_text(encoding="utf-8")
     problems = []
@@ -1506,10 +1685,11 @@ def leakcheck() -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["selftest", "check", "analyse", "finalize", "leakcheck"])
+    parser.add_argument("command", choices=["selftest", "check", "analyse", "finalize", "finalize-a1",
+                                            "leakcheck"])
     command = parser.parse_args().command
     return {"selftest": selftest, "check": check, "analyse": analyse, "finalize": finalize,
-            "leakcheck": leakcheck}[command]()
+            "finalize-a1": finalize_a1, "leakcheck": leakcheck}[command]()
 
 
 if __name__ == "__main__":

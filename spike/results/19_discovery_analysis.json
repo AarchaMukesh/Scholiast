@@ -1,11 +1,12 @@
 {
- "protocol_sha256": "6f46de9af888c2998f9c3faf61d8c902692e8e688db012aef307a098df820884",
+ "protocol_sha256": "b23f235ea5314c6a3a2db73f48fbce80060c549c840577e166926021a850dd79",
  "protocol_original_sha256": "6a2809025626b29b96119cd4d06639fd3341cd325c74c121e82ba5e9e8677a34",
  "protocol_hashes_in_run_logs": [
   "6a2809025626b29b96119cd4d06639fd3341cd325c74c121e82ba5e9e8677a34",
-  "6f46de9af888c2998f9c3faf61d8c902692e8e688db012aef307a098df820884"
+  "6f46de9af888c2998f9c3faf61d8c902692e8e688db012aef307a098df820884",
+  "b23f235ea5314c6a3a2db73f48fbce80060c549c840577e166926021a850dd79"
  ],
- "generated_at": "2026-10-01T12:13:33.206+00:00",
+ "generated_at": "2026-10-02T06:29:09.035+00:00",
  "s2_mode": "keyless",
  "deviations": {
   "events": [
@@ -109,9 +110,13 @@
   "complete": true
  },
  "log_check": {
-  "sent_requests": 354,
-  "violations": [],
-  "sent_without_outcome": []
+  "sent_requests": 394,
+  "violations": [
+   "pacing: export.arxiv.org A1/t08-natural_language/OR has no end time; gap unverifiable"
+  ],
+  "sent_without_outcome": [
+   "A1/t08-natural_language/OR"
+  ]
  },
  "asm1": {
   "verdict": "FAIL",
@@ -2472,6 +2477,840 @@
    }
   },
   "verdict": "PASS"
+ },
+ "addendum_a1": {
+  "AND": {
+   "keyword": {
+    "queries_ok": 9,
+    "top10": {
+     "k": 2,
+     "n": 20,
+     "rate": 0.1,
+     "lo": 0.0279,
+     "hi": 0.301
+    },
+    "top50": {
+     "k": 6,
+     "n": 20,
+     "rate": 0.3,
+     "lo": 0.1455,
+     "hi": 0.519
+    },
+    "zero_result": {
+     "k": 0,
+     "n": 9,
+     "rate": 0.0,
+     "lo": 0.0,
+     "hi": 0.2991
+    },
+    "mean_returned": 50.0,
+    "reported_totals": [
+     320,
+     952,
+     1075,
+     962,
+     380,
+     1033,
+     2307,
+     271,
+     1895
+    ],
+    "anchors": [
+     {
+      "topic": "t01",
+      "anchor": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t01",
+      "anchor": "Lost in the Middle: How Language Models Use Long Contexts",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t02",
+      "anchor": "LoRA: Low-Rank Adaptation of Large Language Models",
+      "rank": 15,
+      "rule": "arxiv_id",
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t02",
+      "anchor": "QLoRA: Efficient Finetuning of Quantized LLMs",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t03",
+      "anchor": "Dense Passage Retrieval for Open-Domain Question Answering",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": true
+     },
+     {
+      "topic": "t03",
+      "anchor": "Unsupervised Dense Information Retrieval with Contrastive Learning",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": true
+     },
+     {
+      "topic": "t04",
+      "anchor": "SelfCheckGPT: Zero-Resource Black-Box Hallucination Detection for Generative Large Language Models",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t04",
+      "anchor": "Survey of Hallucination in Natural Language Generation",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t05",
+      "anchor": "Efficiently Modeling Long Sequences with Structured State Spaces",
+      "rank": 6,
+      "rule": "arxiv_id",
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t05",
+      "anchor": "Mamba: Linear-Time Sequence Modeling with Selective State Spaces",
+      "rank": 29,
+      "rule": "arxiv_id",
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t06",
+      "anchor": "Neural Message Passing for Quantum Chemistry",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t06",
+      "anchor": "Strategies for Pre-training Graph Neural Networks",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t07",
+      "anchor": "Distilling the Knowledge in a Neural Network",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t07",
+      "anchor": "DistilBERT, a distilled version of BERT: smaller, faster, cheaper and lighter",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t08",
+      "anchor": "Denoising Diffusion Probabilistic Models",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t08",
+      "anchor": "High-Resolution Image Synthesis with Latent Diffusion Models",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t09",
+      "anchor": "SimCSE: Simple Contrastive Learning of Sentence Embeddings",
+      "rank": 12,
+      "rule": "arxiv_id",
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t09",
+      "anchor": "Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t10",
+      "anchor": "Chain-of-Thought Prompting Elicits Reasoning in Large Language Models",
+      "rank": 3,
+      "rule": "arxiv_id",
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t10",
+      "anchor": "Self-Consistency Improves Chain of Thought Reasoning in Language Models",
+      "rank": 25,
+      "rule": "arxiv_id",
+      "near_miss_ranks": [],
+      "query_failed": false
+     }
+    ]
+   },
+   "natural_language": {
+    "queries_ok": 7,
+    "top10": {
+     "k": 1,
+     "n": 20,
+     "rate": 0.05,
+     "lo": 0.0089,
+     "hi": 0.2361
+    },
+    "top50": {
+     "k": 2,
+     "n": 20,
+     "rate": 0.1,
+     "lo": 0.0279,
+     "hi": 0.301
+    },
+    "zero_result": {
+     "k": 0,
+     "n": 7,
+     "rate": 0.0,
+     "lo": 0.0,
+     "hi": 0.3543
+    },
+    "mean_returned": 35.7,
+    "reported_totals": [
+     81,
+     3,
+     18,
+     388,
+     29,
+     218,
+     272
+    ],
+    "anchors": [
+     {
+      "topic": "t01",
+      "anchor": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t01",
+      "anchor": "Lost in the Middle: How Language Models Use Long Contexts",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t02",
+      "anchor": "LoRA: Low-Rank Adaptation of Large Language Models",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t02",
+      "anchor": "QLoRA: Efficient Finetuning of Quantized LLMs",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t03",
+      "anchor": "Dense Passage Retrieval for Open-Domain Question Answering",
+      "rank": 1,
+      "rule": "arxiv_id",
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t03",
+      "anchor": "Unsupervised Dense Information Retrieval with Contrastive Learning",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t04",
+      "anchor": "SelfCheckGPT: Zero-Resource Black-Box Hallucination Detection for Generative Large Language Models",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t04",
+      "anchor": "Survey of Hallucination in Natural Language Generation",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t05",
+      "anchor": "Efficiently Modeling Long Sequences with Structured State Spaces",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t05",
+      "anchor": "Mamba: Linear-Time Sequence Modeling with Selective State Spaces",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t06",
+      "anchor": "Neural Message Passing for Quantum Chemistry",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t06",
+      "anchor": "Strategies for Pre-training Graph Neural Networks",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t07",
+      "anchor": "Distilling the Knowledge in a Neural Network",
+      "rank": 21,
+      "rule": "arxiv_id",
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t07",
+      "anchor": "DistilBERT, a distilled version of BERT: smaller, faster, cheaper and lighter",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t08",
+      "anchor": "Denoising Diffusion Probabilistic Models",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": true
+     },
+     {
+      "topic": "t08",
+      "anchor": "High-Resolution Image Synthesis with Latent Diffusion Models",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": true
+     },
+     {
+      "topic": "t09",
+      "anchor": "SimCSE: Simple Contrastive Learning of Sentence Embeddings",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": true
+     },
+     {
+      "topic": "t09",
+      "anchor": "Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": true
+     },
+     {
+      "topic": "t10",
+      "anchor": "Chain-of-Thought Prompting Elicits Reasoning in Large Language Models",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": true
+     },
+     {
+      "topic": "t10",
+      "anchor": "Self-Consistency Improves Chain of Thought Reasoning in Language Models",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": true
+     }
+    ]
+   },
+   "outcomes": {
+    "ok": 16,
+    "timeout": 3,
+    "throttled": 1
+   },
+   "latency_s": {
+    "n": 16,
+    "p50": 1.0548,
+    "p90": 3.061,
+    "p95": 13.7245,
+    "max": 13.7245
+   }
+  },
+  "OR": {
+   "keyword": {
+    "queries_ok": 9,
+    "top10": {
+     "k": 1,
+     "n": 20,
+     "rate": 0.05,
+     "lo": 0.0089,
+     "hi": 0.2361
+    },
+    "top50": {
+     "k": 4,
+     "n": 20,
+     "rate": 0.2,
+     "lo": 0.0807,
+     "hi": 0.416
+    },
+    "zero_result": {
+     "k": 0,
+     "n": 9,
+     "rate": 0.0,
+     "lo": 0.0,
+     "hi": 0.2991
+    },
+    "mean_returned": 50.0,
+    "reported_totals": [
+     1166844,
+     1803287,
+     1656836,
+     1956075,
+     1139940,
+     1321875,
+     1887292,
+     666168,
+     228612
+    ],
+    "anchors": [
+     {
+      "topic": "t01",
+      "anchor": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t01",
+      "anchor": "Lost in the Middle: How Language Models Use Long Contexts",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t02",
+      "anchor": "LoRA: Low-Rank Adaptation of Large Language Models",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t02",
+      "anchor": "QLoRA: Efficient Finetuning of Quantized LLMs",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t03",
+      "anchor": "Dense Passage Retrieval for Open-Domain Question Answering",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": true
+     },
+     {
+      "topic": "t03",
+      "anchor": "Unsupervised Dense Information Retrieval with Contrastive Learning",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": true
+     },
+     {
+      "topic": "t04",
+      "anchor": "SelfCheckGPT: Zero-Resource Black-Box Hallucination Detection for Generative Large Language Models",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t04",
+      "anchor": "Survey of Hallucination in Natural Language Generation",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t05",
+      "anchor": "Efficiently Modeling Long Sequences with Structured State Spaces",
+      "rank": 25,
+      "rule": "arxiv_id",
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t05",
+      "anchor": "Mamba: Linear-Time Sequence Modeling with Selective State Spaces",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t06",
+      "anchor": "Neural Message Passing for Quantum Chemistry",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t06",
+      "anchor": "Strategies for Pre-training Graph Neural Networks",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t07",
+      "anchor": "Distilling the Knowledge in a Neural Network",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t07",
+      "anchor": "DistilBERT, a distilled version of BERT: smaller, faster, cheaper and lighter",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t08",
+      "anchor": "Denoising Diffusion Probabilistic Models",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t08",
+      "anchor": "High-Resolution Image Synthesis with Latent Diffusion Models",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t09",
+      "anchor": "SimCSE: Simple Contrastive Learning of Sentence Embeddings",
+      "rank": 21,
+      "rule": "arxiv_id",
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t09",
+      "anchor": "Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t10",
+      "anchor": "Chain-of-Thought Prompting Elicits Reasoning in Large Language Models",
+      "rank": 6,
+      "rule": "arxiv_id",
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t10",
+      "anchor": "Self-Consistency Improves Chain of Thought Reasoning in Language Models",
+      "rank": 34,
+      "rule": "arxiv_id",
+      "near_miss_ranks": [],
+      "query_failed": false
+     }
+    ]
+   },
+   "natural_language": {
+    "queries_ok": 7,
+    "top10": {
+     "k": 1,
+     "n": 20,
+     "rate": 0.05,
+     "lo": 0.0089,
+     "hi": 0.2361
+    },
+    "top50": {
+     "k": 2,
+     "n": 20,
+     "rate": 0.1,
+     "lo": 0.0279,
+     "hi": 0.301
+    },
+    "zero_result": {
+     "k": 0,
+     "n": 7,
+     "rate": 0.0,
+     "lo": 0.0,
+     "hi": 0.3543
+    },
+    "mean_returned": 50.0,
+    "reported_totals": [
+     1460948,
+     1454373,
+     1464075,
+     1992094,
+     2020111,
+     547038,
+     1785527
+    ],
+    "anchors": [
+     {
+      "topic": "t01",
+      "anchor": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t01",
+      "anchor": "Lost in the Middle: How Language Models Use Long Contexts",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t02",
+      "anchor": "LoRA: Low-Rank Adaptation of Large Language Models",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": true
+     },
+     {
+      "topic": "t02",
+      "anchor": "QLoRA: Efficient Finetuning of Quantized LLMs",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": true
+     },
+     {
+      "topic": "t03",
+      "anchor": "Dense Passage Retrieval for Open-Domain Question Answering",
+      "rank": 7,
+      "rule": "arxiv_id",
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t03",
+      "anchor": "Unsupervised Dense Information Retrieval with Contrastive Learning",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t04",
+      "anchor": "SelfCheckGPT: Zero-Resource Black-Box Hallucination Detection for Generative Large Language Models",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t04",
+      "anchor": "Survey of Hallucination in Natural Language Generation",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t05",
+      "anchor": "Efficiently Modeling Long Sequences with Structured State Spaces",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t05",
+      "anchor": "Mamba: Linear-Time Sequence Modeling with Selective State Spaces",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t06",
+      "anchor": "Neural Message Passing for Quantum Chemistry",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t06",
+      "anchor": "Strategies for Pre-training Graph Neural Networks",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t07",
+      "anchor": "Distilling the Knowledge in a Neural Network",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t07",
+      "anchor": "DistilBERT, a distilled version of BERT: smaller, faster, cheaper and lighter",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t08",
+      "anchor": "Denoising Diffusion Probabilistic Models",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": true
+     },
+     {
+      "topic": "t08",
+      "anchor": "High-Resolution Image Synthesis with Latent Diffusion Models",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": true
+     },
+     {
+      "topic": "t09",
+      "anchor": "SimCSE: Simple Contrastive Learning of Sentence Embeddings",
+      "rank": 18,
+      "rule": "arxiv_id",
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t09",
+      "anchor": "Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": false
+     },
+     {
+      "topic": "t10",
+      "anchor": "Chain-of-Thought Prompting Elicits Reasoning in Large Language Models",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": true
+     },
+     {
+      "topic": "t10",
+      "anchor": "Self-Consistency Improves Chain of Thought Reasoning in Language Models",
+      "rank": null,
+      "rule": null,
+      "near_miss_ranks": [],
+      "query_failed": true
+     }
+    ]
+   },
+   "outcomes": {
+    "ok": 16,
+    "timeout": 1,
+    "throttled": 2
+   },
+   "latency_s": {
+    "n": 16,
+    "p50": 2.0963,
+    "p90": 15.4755,
+    "p95": 17.5681,
+    "max": 17.5681
+   }
+  },
+  "paired_keyword_top50": {
+   "only_or": [],
+   "only_and": [
+    "2106.09685",
+    "2312.00752"
+   ],
+   "both": 4
+  },
+  "decision": {
+   "rule": "Adopt OR iff, for the keyword phrasing, OR's top-50 anchor recall is >= 50% and strictly greater than the same-day AND's. Otherwise AND stays. If OR beats AND but is below 50%, AND stays and the gap is reported to the owner.",
+   "or_top50": 4,
+   "and_top50": 6,
+   "n": 20,
+   "adopt": "AND",
+   "or_beats_and_below_bar": false
+  }
  },
  "evidence": {
   "allowlist": {

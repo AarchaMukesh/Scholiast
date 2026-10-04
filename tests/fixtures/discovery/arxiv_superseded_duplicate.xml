@@ -1,0 +1,40 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<feed xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/" xmlns:arxiv="http://arxiv.org/schemas/atom" xmlns="http://www.w3.org/2005/Atom">
+  <id>https://arxiv.org/api/8JFpvQCLipfcOlwgqJ5+Hf8KBiw</id>
+  <title>arXiv Query: search_query=all:state AND all:space AND all:models AND all:long AND all:sequence AND all:modeling&amp;id_list=&amp;start=0&amp;max_results=50</title>
+  <updated>2026-10-01T05:22:44Z</updated>
+  <link href="https://arxiv.org/api/query?search_query=all:state+AND+(all:space+AND+(all:models+AND+(all:long+AND+(all:sequence+AND+all:modeling))))&amp;start=0&amp;max_results=50&amp;id_list=" type="application/atom+xml"/>
+  <opensearch:itemsPerPage>50</opensearch:itemsPerPage>
+  <opensearch:totalResults>961</opensearch:totalResults>
+  <opensearch:startIndex>0</opensearch:startIndex>
+  <entry>
+    <id>http://arxiv.org/abs/2507.20128v2</id>
+    <title>Diffusion-based Symbolic Music Generation with Structured State Space Models</title>
+    <updated>2026-03-03T04:52:08Z</updated>
+    <link href="https://arxiv.org/abs/2507.20128v2" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2507.20128v2" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Recent advancements in diffusion models have significantly improved symbolic music generation. However, most approaches rely on transformer-based architectures with self-attention mechanisms, which are constrained by quadratic computational complexity, limiting scalability for long sequences. To address this, we propose Symbolic Music Diffusion with Mamba (SMDIM), a novel diffusion-based architecture integrating Structured State Space Models (SSMs) for efficient global context modeling and the Mamba-FeedForward-Attention Block (MFA) for precise local detail preservation. The MFA Block combines the linear complexity of Mamba layers, the non-linear refinement of FeedForward layers, and the fine-grained precision of self-attention mechanisms, achieving a balance between scalability and musical expressiveness. SMDIM achieves near-linear complexity, making it highly efficient for long-sequence tasks. Evaluated on diverse datasets, including FolkDB, a collection of traditional Chinese folk music that represents an underexplored domain in symbolic music generation, SMDIM outperforms state-of-the-art models in both generation quality and computational efficiency. Beyond symbolic music, SMDIM's architectural design demonstrates adaptability to a broad range of long-sequence generation tasks, offering a scalable and efficient solution for coherent sequence modeling.</summary>
+    <category term="cs.SD" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2025-07-27T04:53:45Z</published>
+    <arxiv:comment>This is a duplicate submission. The updated and correct version of this paper is available at arXiv:2603.00576, Efficient Long-Sequence Diffusion Modeling for Symbolic Music Generation. Please disregard this version</arxiv:comment>
+    <arxiv:primary_category term="cs.SD"/>
+    <author>
+      <name>Shenghua Yuan</name>
+    </author>
+    <author>
+      <name>Xing Tang</name>
+    </author>
+    <author>
+      <name>Jiatao Chen</name>
+    </author>
+    <author>
+      <name>Tianming Xie</name>
+    </author>
+    <author>
+      <name>Jing Wang</name>
+    </author>
+    <author>
+      <name>Bing Shi</name>
+    </author>
+  </entry>
+</feed>

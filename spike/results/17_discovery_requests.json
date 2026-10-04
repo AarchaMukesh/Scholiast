@@ -1,7 +1,7 @@
 {
- "protocol_sha256": "6f46de9af888c2998f9c3faf61d8c902692e8e688db012aef307a098df820884",
+ "protocol_sha256": "b23f235ea5314c6a3a2db73f48fbce80060c549c840577e166926021a850dd79",
  "s2_mode": "keyless",
- "note": "S2 paper ids are replaced by s2h: hashes (D116: S2 data stays local).",
+ "note": "S2 paper ids are replaced by s2h: hashes (D116: S2 data stays local). Each run line records the protocol hash that run used.",
  "records": [
   {
    "event": "run",
@@ -4103,6 +4103,1590 @@
    "stopped_hosts": {
     "api.semanticscholar.org": "5 consecutive 429/5xx"
    }
+  },
+  {
+   "event": "run",
+   "command": "addendum-a1",
+   "protocol_sha256": "b23f235ea5314c6a3a2db73f48fbce80060c549c840577e166926021a850dd79",
+   "s2_mode": "keyless",
+   "at": "2026-10-02T03:33:03.132+00:00"
+  },
+  {
+   "event": "preflight",
+   "host": "api.openalex.org",
+   "addresses": [
+    "104.20.26.229",
+    "172.66.159.136",
+    "2606:4700:83b4:dec5:4bfe:50c:c3a9:3c5f"
+   ],
+   "allowed": true,
+   "at": "2026-10-02T03:33:04.183+00:00"
+  },
+  {
+   "event": "preflight",
+   "host": "api.semanticscholar.org",
+   "addresses": [
+    "18.67.161.114",
+    "18.67.161.31",
+    "18.67.161.35",
+    "18.67.161.44"
+   ],
+   "allowed": true,
+   "at": "2026-10-02T03:33:05.287+00:00"
+  },
+  {
+   "event": "preflight",
+   "host": "export.arxiv.org",
+   "addresses": [
+    "151.101.211.42"
+   ],
+   "allowed": true,
+   "at": "2026-10-02T03:33:05.316+00:00"
+  },
+  {
+   "pass": "A1",
+   "session": 3,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t05-keyword",
+   "topic": "t05",
+   "phrasing": "keyword",
+   "construction": "OR",
+   "event": "request",
+   "rid": "A1/t05-keyword/OR",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Astate+OR+all%3Aspace+OR+all%3Amodels+OR+all%3Along+OR+all%3Asequence+OR+all%3Amodeling&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1790911986.005689,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a1"
+    ]
+   ],
+   "t_end": 1790912001.483344,
+   "latency_s": 15.4755,
+   "headers_s": 15.4123,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 136763,
+   "headers": {
+    "content-length": "136763",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-02T03:33:06.005+00:00",
+   "t_end_iso": "2026-10-02T03:33:21.483+00:00"
+  },
+  {
+   "pass": "A1",
+   "session": 3,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t05-keyword",
+   "topic": "t05",
+   "phrasing": "keyword",
+   "construction": "AND",
+   "event": "request",
+   "rid": "A1/t05-keyword/AND",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Astate+AND+all%3Aspace+AND+all%3Amodels+AND+all%3Along+AND+all%3Asequence+AND+all%3Amodeling&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1790912004.6369672,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a1"
+    ]
+   ],
+   "t_end": 1790912018.3635793,
+   "latency_s": 13.7245,
+   "headers_s": 13.7114,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 118005,
+   "headers": {
+    "content-length": "118005",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-02T03:33:24.636+00:00",
+   "t_end_iso": "2026-10-02T03:33:38.363+00:00"
+  },
+  {
+   "pass": "A1",
+   "session": 3,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t01-keyword",
+   "topic": "t01",
+   "phrasing": "keyword",
+   "construction": "OR",
+   "event": "request",
+   "rid": "A1/t01-keyword/OR",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Aretrieval+OR+all%3Aaugmented+OR+all%3Ageneration+OR+all%3Along+OR+all%3Adocuments&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1790912021.5176806,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a1"
+    ]
+   ],
+   "t_end": 1790912039.0872066,
+   "latency_s": 17.5681,
+   "headers_s": 17.559,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 122493,
+   "headers": {
+    "content-length": "122493",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-02T03:33:41.517+00:00",
+   "t_end_iso": "2026-10-02T03:33:59.087+00:00"
+  },
+  {
+   "pass": "A1",
+   "session": 3,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t01-keyword",
+   "topic": "t01",
+   "phrasing": "keyword",
+   "construction": "AND",
+   "event": "request",
+   "rid": "A1/t01-keyword/AND",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Aretrieval+AND+all%3Aaugmented+AND+all%3Ageneration+AND+all%3Along+AND+all%3Adocuments&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1790912042.2499363,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a1"
+    ]
+   ],
+   "t_end": 1790912045.3113863,
+   "latency_s": 3.061,
+   "headers_s": 3.0548,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 118342,
+   "headers": {
+    "content-length": "118342",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-02T03:34:02.249+00:00",
+   "t_end_iso": "2026-10-02T03:34:05.311+00:00"
+  },
+  {
+   "pass": "A1",
+   "session": 3,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t02-natural_language",
+   "topic": "t02",
+   "phrasing": "natural_language",
+   "construction": "AND",
+   "event": "request",
+   "rid": "A1/t02-natural_language/AND",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Alarge+AND+all%3Alanguage+AND+all%3Amodels+AND+all%3Afine+AND+all%3Atuned+AND+all%3Acheaply+AND+all%3Alow+AND+all%3Arank+AND+all%3Aadapters&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1790912048.4673178,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a1"
+    ]
+   ],
+   "t_end": 1790912051.1158333,
+   "latency_s": 2.6479,
+   "headers_s": 2.6475,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 8137,
+   "headers": {
+    "content-length": "8137",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-02T03:34:08.467+00:00",
+   "t_end_iso": "2026-10-02T03:34:11.115+00:00"
+  },
+  {
+   "pass": "A1",
+   "session": 3,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t02-natural_language",
+   "topic": "t02",
+   "phrasing": "natural_language",
+   "construction": "OR",
+   "event": "request",
+   "rid": "A1/t02-natural_language/OR",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Alarge+OR+all%3Alanguage+OR+all%3Amodels+OR+all%3Afine+OR+all%3Atuned+OR+all%3Acheaply+OR+all%3Alow+OR+all%3Arank+OR+all%3Aadapters&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1790912054.2671406,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a1"
+    ]
+   ],
+   "t_end": 1790912074.2771163,
+   "latency_s": 20.0077,
+   "headers_s": null,
+   "status": null,
+   "outcome": "timeout",
+   "error": "no complete response within 20.0s",
+   "bytes": null,
+   "headers": {},
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-02T03:34:14.267+00:00",
+   "t_end_iso": "2026-10-02T03:34:34.277+00:00"
+  },
+  {
+   "pass": "A1",
+   "session": 3,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t08-natural_language",
+   "topic": "t08",
+   "phrasing": "natural_language",
+   "construction": "AND",
+   "event": "request",
+   "rid": "A1/t08-natural_language/AND",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Adiffusion+AND+all%3Amodels+AND+all%3Agenerate+AND+all%3Aimages&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1790912077.4342265,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a1"
+    ]
+   ],
+   "t_end": 1790912097.4537537,
+   "latency_s": 20.0178,
+   "headers_s": null,
+   "status": null,
+   "outcome": "timeout",
+   "error": "no complete response within 20.0s",
+   "bytes": null,
+   "headers": {},
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-02T03:34:37.434+00:00",
+   "t_end_iso": "2026-10-02T03:34:57.453+00:00"
+  },
+  {
+   "pass": "A1",
+   "session": 3,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t08-natural_language",
+   "topic": "t08",
+   "phrasing": "natural_language",
+   "construction": "OR",
+   "event": "request",
+   "rid": "A1/t08-natural_language/OR",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Adiffusion+OR+all%3Amodels+OR+all%3Agenerate+OR+all%3Aimages&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1790912100.610663,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a1"
+    ]
+   ],
+   "t_start_iso": "2026-10-02T03:35:00.610+00:00"
+  },
+  {
+   "event": "run",
+   "command": "addendum-a1",
+   "protocol_sha256": "b23f235ea5314c6a3a2db73f48fbce80060c549c840577e166926021a850dd79",
+   "s2_mode": "keyless",
+   "at": "2026-10-02T03:47:58.364+00:00"
+  },
+  {
+   "event": "preflight",
+   "host": "api.openalex.org",
+   "addresses": [
+    "104.20.26.229",
+    "172.66.159.136",
+    "2606:4700:83b4:dec5:4bfe:59f:c3a9:3c5f"
+   ],
+   "allowed": true,
+   "at": "2026-10-02T03:47:58.380+00:00"
+  },
+  {
+   "event": "preflight",
+   "host": "api.semanticscholar.org",
+   "addresses": [
+    "18.67.161.114",
+    "18.67.161.31",
+    "18.67.161.35",
+    "18.67.161.44"
+   ],
+   "allowed": true,
+   "at": "2026-10-02T03:47:58.399+00:00"
+  },
+  {
+   "event": "preflight",
+   "host": "export.arxiv.org",
+   "addresses": [
+    "151.101.211.42"
+   ],
+   "allowed": true,
+   "at": "2026-10-02T03:47:58.514+00:00"
+  },
+  {
+   "pass": "A1",
+   "session": 3,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t10-natural_language",
+   "topic": "t10",
+   "phrasing": "natural_language",
+   "construction": "OR",
+   "event": "request",
+   "rid": "A1/t10-natural_language/OR",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Achain+OR+all%3Athought+OR+all%3Aprompting+OR+all%3Aimprove+OR+all%3Areasoning+OR+all%3Alanguage+OR+all%3Amodels&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1790912881.365842,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a1"
+    ]
+   ],
+   "t_end": 1790912897.127447,
+   "latency_s": 15.76,
+   "headers_s": 15.7597,
+   "status": 429,
+   "outcome": "throttled",
+   "error": null,
+   "bytes": 14,
+   "headers": {
+    "content-length": "14",
+    "content-type": "text/html"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-02T03:48:01.365+00:00",
+   "t_end_iso": "2026-10-02T03:48:17.127+00:00"
+  },
+  {
+   "pass": "A1",
+   "session": 3,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t10-natural_language",
+   "topic": "t10",
+   "phrasing": "natural_language",
+   "construction": "AND",
+   "event": "request",
+   "rid": "A1/t10-natural_language/AND",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Achain+AND+all%3Athought+AND+all%3Aprompting+AND+all%3Aimprove+AND+all%3Areasoning+AND+all%3Alanguage+AND+all%3Amodels&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1790912900.2879562,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a1"
+    ]
+   ],
+   "t_end": 1790912900.5924423,
+   "latency_s": 0.3037,
+   "headers_s": 0.3035,
+   "status": 429,
+   "outcome": "throttled",
+   "error": null,
+   "bytes": 14,
+   "headers": {
+    "content-length": "14",
+    "content-type": "text/html"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-02T03:48:20.287+00:00",
+   "t_end_iso": "2026-10-02T03:48:20.592+00:00"
+  },
+  {
+   "pass": "A1",
+   "session": 3,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t03-keyword",
+   "topic": "t03",
+   "phrasing": "keyword",
+   "construction": "OR",
+   "event": "request",
+   "rid": "A1/t03-keyword/OR",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Adense+OR+all%3Apassage+OR+all%3Aretrieval+OR+all%3Aopen+OR+all%3Adomain+OR+all%3Aquestion+OR+all%3Aanswering&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1790912903.745617,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a1"
+    ]
+   ],
+   "t_end": 1790912904.0892878,
+   "latency_s": 0.3432,
+   "headers_s": 0.343,
+   "status": 429,
+   "outcome": "throttled",
+   "error": null,
+   "bytes": 14,
+   "headers": {
+    "content-length": "14",
+    "content-type": "text/html"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-02T03:48:23.745+00:00",
+   "t_end_iso": "2026-10-02T03:48:24.089+00:00"
+  },
+  {
+   "pass": "A1",
+   "session": 3,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t03-keyword",
+   "topic": "t03",
+   "phrasing": "keyword",
+   "construction": "AND",
+   "event": "request",
+   "rid": "A1/t03-keyword/AND",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Adense+AND+all%3Apassage+AND+all%3Aretrieval+AND+all%3Aopen+AND+all%3Adomain+AND+all%3Aquestion+AND+all%3Aanswering&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1790912907.2526693,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a1"
+    ]
+   ],
+   "t_end": 1790912927.2582302,
+   "latency_s": 20.0054,
+   "headers_s": null,
+   "status": null,
+   "outcome": "timeout",
+   "error": "no complete response within 20.0s",
+   "bytes": null,
+   "headers": {},
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-02T03:48:27.252+00:00",
+   "t_end_iso": "2026-10-02T03:48:47.258+00:00"
+  },
+  {
+   "pass": "A1",
+   "session": 3,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t09-natural_language",
+   "topic": "t09",
+   "phrasing": "natural_language",
+   "construction": "AND",
+   "event": "request",
+   "rid": "A1/t09-natural_language/AND",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Acontrastive+AND+all%3Alearning+AND+all%3Aused+AND+all%3Atrain+AND+all%3Asentence+AND+all%3Aembeddings&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1790912930.417266,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a1"
+    ]
+   ],
+   "t_end": 1790912950.4285903,
+   "latency_s": 20.0111,
+   "headers_s": null,
+   "status": null,
+   "outcome": "timeout",
+   "error": "no complete response within 20.0s",
+   "bytes": null,
+   "headers": {},
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-02T03:48:50.417+00:00",
+   "t_end_iso": "2026-10-02T03:49:10.428+00:00"
+  },
+  {
+   "event": "run_end",
+   "command": "addendum-a1",
+   "at": "2026-10-02T03:49:10.429+00:00",
+   "stopped_hosts": {}
+  },
+  {
+   "event": "run",
+   "command": "addendum-a1",
+   "protocol_sha256": "b23f235ea5314c6a3a2db73f48fbce80060c549c840577e166926021a850dd79",
+   "s2_mode": "keyless",
+   "at": "2026-10-02T06:26:32.963+00:00"
+  },
+  {
+   "event": "preflight",
+   "host": "api.openalex.org",
+   "addresses": [
+    "104.20.26.229",
+    "172.66.159.136",
+    "2606:4700:83b4:dec5:4bfe:4b1:c3a9:3c5f"
+   ],
+   "allowed": true,
+   "at": "2026-10-02T06:26:32.987+00:00"
+  },
+  {
+   "event": "preflight",
+   "host": "api.semanticscholar.org",
+   "addresses": [
+    "18.67.161.114",
+    "18.67.161.31",
+    "18.67.161.35",
+    "18.67.161.44"
+   ],
+   "allowed": true,
+   "at": "2026-10-02T06:26:33.051+00:00"
+  },
+  {
+   "event": "preflight",
+   "host": "export.arxiv.org",
+   "addresses": [
+    "151.101.211.42"
+   ],
+   "allowed": true,
+   "at": "2026-10-02T06:26:33.063+00:00"
+  },
+  {
+   "pass": "A1",
+   "session": 3,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t09-natural_language",
+   "topic": "t09",
+   "phrasing": "natural_language",
+   "construction": "OR",
+   "event": "request",
+   "rid": "A1/t09-natural_language/OR",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Acontrastive+OR+all%3Alearning+OR+all%3Aused+OR+all%3Atrain+OR+all%3Asentence+OR+all%3Aembeddings&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1790922395.9600391,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a1"
+    ]
+   ],
+   "t_end": 1790922397.238987,
+   "latency_s": 1.2787,
+   "headers_s": 1.2278,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 111425,
+   "headers": {
+    "content-length": "111425",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-02T06:26:35.960+00:00",
+   "t_end_iso": "2026-10-02T06:26:37.238+00:00"
+  },
+  {
+   "pass": "A1",
+   "session": 3,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t02-keyword",
+   "topic": "t02",
+   "phrasing": "keyword",
+   "construction": "AND",
+   "event": "request",
+   "rid": "A1/t02-keyword/AND",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Alow+AND+all%3Arank+AND+all%3Aadaptation+AND+all%3Afine+AND+all%3Atuning+AND+all%3Alarge+AND+all%3Alanguage+AND+all%3Amodels&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1790922400.392371,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a1"
+    ]
+   ],
+   "t_end": 1790922401.3492029,
+   "latency_s": 0.9559,
+   "headers_s": 0.9474,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 114126,
+   "headers": {
+    "content-length": "114126",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-02T06:26:40.392+00:00",
+   "t_end_iso": "2026-10-02T06:26:41.349+00:00"
+  },
+  {
+   "pass": "A1",
+   "session": 3,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t02-keyword",
+   "topic": "t02",
+   "phrasing": "keyword",
+   "construction": "OR",
+   "event": "request",
+   "rid": "A1/t02-keyword/OR",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Alow+OR+all%3Arank+OR+all%3Aadaptation+OR+all%3Afine+OR+all%3Atuning+OR+all%3Alarge+OR+all%3Alanguage+OR+all%3Amodels&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1790922404.5055866,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a1"
+    ]
+   ],
+   "t_end": 1790922406.1610587,
+   "latency_s": 1.6542,
+   "headers_s": 1.6433,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 114914,
+   "headers": {
+    "content-length": "114914",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-02T06:26:44.505+00:00",
+   "t_end_iso": "2026-10-02T06:26:46.161+00:00"
+  },
+  {
+   "pass": "A1",
+   "session": 3,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t10-keyword",
+   "topic": "t10",
+   "phrasing": "keyword",
+   "construction": "OR",
+   "event": "request",
+   "rid": "A1/t10-keyword/OR",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Achain+OR+all%3Athought+OR+all%3Aprompting+OR+all%3Areasoning&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1790922409.3135443,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a1"
+    ]
+   ],
+   "t_end": 1790922410.1583593,
+   "latency_s": 0.8445,
+   "headers_s": 0.8356,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 116471,
+   "headers": {
+    "content-length": "116471",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-02T06:26:49.313+00:00",
+   "t_end_iso": "2026-10-02T06:26:50.158+00:00"
+  },
+  {
+   "pass": "A1",
+   "session": 3,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t10-keyword",
+   "topic": "t10",
+   "phrasing": "keyword",
+   "construction": "AND",
+   "event": "request",
+   "rid": "A1/t10-keyword/AND",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Achain+AND+all%3Athought+AND+all%3Aprompting+AND+all%3Areasoning&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1790922413.319505,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a1"
+    ]
+   ],
+   "t_end": 1790922414.1879694,
+   "latency_s": 0.8668,
+   "headers_s": 0.8588,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 115771,
+   "headers": {
+    "content-length": "115771",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-02T06:26:53.319+00:00",
+   "t_end_iso": "2026-10-02T06:26:54.187+00:00"
+  },
+  {
+   "pass": "A1",
+   "session": 3,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t04-keyword",
+   "topic": "t04",
+   "phrasing": "keyword",
+   "construction": "OR",
+   "event": "request",
+   "rid": "A1/t04-keyword/OR",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Ahallucination+OR+all%3Adetection+OR+all%3Alarge+OR+all%3Alanguage+OR+all%3Amodels&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1790922417.3484933,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a1"
+    ]
+   ],
+   "t_end": 1790922418.8045087,
+   "latency_s": 1.4546,
+   "headers_s": 1.4385,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 119776,
+   "headers": {
+    "content-length": "119776",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-02T06:26:57.348+00:00",
+   "t_end_iso": "2026-10-02T06:26:58.804+00:00"
+  },
+  {
+   "pass": "A1",
+   "session": 3,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t04-keyword",
+   "topic": "t04",
+   "phrasing": "keyword",
+   "construction": "AND",
+   "event": "request",
+   "rid": "A1/t04-keyword/AND",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Ahallucination+AND+all%3Adetection+AND+all%3Alarge+AND+all%3Alanguage+AND+all%3Amodels&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1790922421.9633994,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a1"
+    ]
+   ],
+   "t_end": 1790922422.8206503,
+   "latency_s": 0.8572,
+   "headers_s": 0.8483,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 119953,
+   "headers": {
+    "content-length": "119953",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-02T06:27:01.963+00:00",
+   "t_end_iso": "2026-10-02T06:27:02.820+00:00"
+  },
+  {
+   "pass": "A1",
+   "session": 3,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t03-natural_language",
+   "topic": "t03",
+   "phrasing": "natural_language",
+   "construction": "OR",
+   "event": "request",
+   "rid": "A1/t03-natural_language/OR",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Adense+OR+all%3Aretrieval+OR+all%3Amethods+OR+all%3Awork+OR+all%3Aopen+OR+all%3Adomain+OR+all%3Aquestion+OR+all%3Aanswering&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1790922425.9843602,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a1"
+    ]
+   ],
+   "t_end": 1790922427.879146,
+   "latency_s": 1.8938,
+   "headers_s": 1.8828,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 108309,
+   "headers": {
+    "content-length": "108309",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-02T06:27:05.984+00:00",
+   "t_end_iso": "2026-10-02T06:27:07.879+00:00"
+  },
+  {
+   "pass": "A1",
+   "session": 3,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t03-natural_language",
+   "topic": "t03",
+   "phrasing": "natural_language",
+   "construction": "AND",
+   "event": "request",
+   "rid": "A1/t03-natural_language/AND",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Adense+AND+all%3Aretrieval+AND+all%3Amethods+AND+all%3Awork+AND+all%3Aopen+AND+all%3Adomain+AND+all%3Aquestion+AND+all%3Aanswering&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1790922431.0398974,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a1"
+    ]
+   ],
+   "t_end": 1790922431.6612332,
+   "latency_s": 0.6213,
+   "headers_s": 0.6167,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 40434,
+   "headers": {
+    "content-length": "40434",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-02T06:27:11.039+00:00",
+   "t_end_iso": "2026-10-02T06:27:11.661+00:00"
+  },
+  {
+   "pass": "A1",
+   "session": 3,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t09-keyword",
+   "topic": "t09",
+   "phrasing": "keyword",
+   "construction": "OR",
+   "event": "request",
+   "rid": "A1/t09-keyword/OR",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Acontrastive+OR+all%3Alearning+OR+all%3Asentence+OR+all%3Aembeddings&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1790922434.8114367,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a1"
+    ]
+   ],
+   "t_end": 1790922442.9085555,
+   "latency_s": 8.0964,
+   "headers_s": 8.0815,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 111511,
+   "headers": {
+    "content-length": "111511",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-02T06:27:14.811+00:00",
+   "t_end_iso": "2026-10-02T06:27:22.908+00:00"
+  },
+  {
+   "pass": "A1",
+   "session": 3,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t09-keyword",
+   "topic": "t09",
+   "phrasing": "keyword",
+   "construction": "AND",
+   "event": "request",
+   "rid": "A1/t09-keyword/AND",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Acontrastive+AND+all%3Alearning+AND+all%3Asentence+AND+all%3Aembeddings&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1790922446.0666957,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a1"
+    ]
+   ],
+   "t_end": 1790922447.1216366,
+   "latency_s": 1.0548,
+   "headers_s": 1.0374,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 108382,
+   "headers": {
+    "content-length": "108382",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-02T06:27:26.066+00:00",
+   "t_end_iso": "2026-10-02T06:27:27.121+00:00"
+  },
+  {
+   "pass": "A1",
+   "session": 3,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t05-natural_language",
+   "topic": "t05",
+   "phrasing": "natural_language",
+   "construction": "OR",
+   "event": "request",
+   "rid": "A1/t05-natural_language/OR",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Astate+OR+all%3Aspace+OR+all%3Amodels+OR+all%3Areplace+OR+all%3Aattention+OR+all%3Along+OR+all%3Asequences&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1790922450.2720907,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a1"
+    ]
+   ],
+   "t_end": 1790922453.5514684,
+   "latency_s": 3.2784,
+   "headers_s": 3.2589,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 133504,
+   "headers": {
+    "content-length": "133504",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-02T06:27:30.272+00:00",
+   "t_end_iso": "2026-10-02T06:27:33.551+00:00"
+  },
+  {
+   "pass": "A1",
+   "session": 3,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t05-natural_language",
+   "topic": "t05",
+   "phrasing": "natural_language",
+   "construction": "AND",
+   "event": "request",
+   "rid": "A1/t05-natural_language/AND",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Astate+AND+all%3Aspace+AND+all%3Amodels+AND+all%3Areplace+AND+all%3Aattention+AND+all%3Along+AND+all%3Asequences&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1790922456.7074149,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a1"
+    ]
+   ],
+   "t_end": 1790922457.5155027,
+   "latency_s": 0.8081,
+   "headers_s": 0.8017,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 69125,
+   "headers": {
+    "content-length": "69125",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-02T06:27:36.707+00:00",
+   "t_end_iso": "2026-10-02T06:27:37.515+00:00"
+  },
+  {
+   "pass": "A1",
+   "session": 3,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t06-natural_language",
+   "topic": "t06",
+   "phrasing": "natural_language",
+   "construction": "OR",
+   "event": "request",
+   "rid": "A1/t06-natural_language/OR",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Agraph+OR+all%3Aneural+OR+all%3Anetworks+OR+all%3Aused+OR+all%3Apredict+OR+all%3Amolecular+OR+all%3Aproperties&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1790922460.6756296,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a1"
+    ]
+   ],
+   "t_end": 1790922462.773115,
+   "latency_s": 2.0963,
+   "headers_s": 2.0856,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 122834,
+   "headers": {
+    "content-length": "122834",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-02T06:27:40.675+00:00",
+   "t_end_iso": "2026-10-02T06:27:42.773+00:00"
+  },
+  {
+   "pass": "A1",
+   "session": 3,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t06-natural_language",
+   "topic": "t06",
+   "phrasing": "natural_language",
+   "construction": "AND",
+   "event": "request",
+   "rid": "A1/t06-natural_language/AND",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Agraph+AND+all%3Aneural+AND+all%3Anetworks+AND+all%3Aused+AND+all%3Apredict+AND+all%3Amolecular+AND+all%3Aproperties&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1790922465.9356003,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a1"
+    ]
+   ],
+   "t_end": 1790922467.0113769,
+   "latency_s": 1.0752,
+   "headers_s": 1.0562,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 116378,
+   "headers": {
+    "content-length": "116378",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-02T06:27:45.935+00:00",
+   "t_end_iso": "2026-10-02T06:27:47.011+00:00"
+  },
+  {
+   "pass": "A1",
+   "session": 3,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t01-natural_language",
+   "topic": "t01",
+   "phrasing": "natural_language",
+   "construction": "AND",
+   "event": "request",
+   "rid": "A1/t01-natural_language/AND",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Aretrieval+AND+all%3Aaugmented+AND+all%3Ageneration+AND+all%3Awork+AND+all%3Along+AND+all%3Adocuments&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1790922470.1666908,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a1"
+    ]
+   ],
+   "t_end": 1790922471.023861,
+   "latency_s": 0.8568,
+   "headers_s": 0.842,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 123313,
+   "headers": {
+    "content-length": "123313",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-02T06:27:50.166+00:00",
+   "t_end_iso": "2026-10-02T06:27:51.023+00:00"
+  },
+  {
+   "pass": "A1",
+   "session": 3,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t01-natural_language",
+   "topic": "t01",
+   "phrasing": "natural_language",
+   "construction": "OR",
+   "event": "request",
+   "rid": "A1/t01-natural_language/OR",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Aretrieval+OR+all%3Aaugmented+OR+all%3Ageneration+OR+all%3Awork+OR+all%3Along+OR+all%3Adocuments&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1790922474.1797507,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a1"
+    ]
+   ],
+   "t_end": 1790922477.9999232,
+   "latency_s": 3.8203,
+   "headers_s": 3.5968,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 122837,
+   "headers": {
+    "content-length": "122837",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-02T06:27:54.179+00:00",
+   "t_end_iso": "2026-10-02T06:27:57.999+00:00"
+  },
+  {
+   "pass": "A1",
+   "session": 3,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t06-keyword",
+   "topic": "t06",
+   "phrasing": "keyword",
+   "construction": "AND",
+   "event": "request",
+   "rid": "A1/t06-keyword/AND",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Agraph+AND+all%3Aneural+AND+all%3Anetworks+AND+all%3Amolecular+AND+all%3Aproperty+AND+all%3Aprediction&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1790922481.1611123,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a1"
+    ]
+   ],
+   "t_end": 1790922482.5447419,
+   "latency_s": 1.3832,
+   "headers_s": 1.1494,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 116943,
+   "headers": {
+    "content-length": "116943",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-02T06:28:01.161+00:00",
+   "t_end_iso": "2026-10-02T06:28:02.544+00:00"
+  },
+  {
+   "pass": "A1",
+   "session": 3,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t06-keyword",
+   "topic": "t06",
+   "phrasing": "keyword",
+   "construction": "OR",
+   "event": "request",
+   "rid": "A1/t06-keyword/OR",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Agraph+OR+all%3Aneural+OR+all%3Anetworks+OR+all%3Amolecular+OR+all%3Aproperty+OR+all%3Aprediction&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1790922485.7056723,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a1"
+    ]
+   ],
+   "t_end": 1790922488.5171728,
+   "latency_s": 2.8114,
+   "headers_s": 1.904,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 122750,
+   "headers": {
+    "content-length": "122750",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-02T06:28:05.705+00:00",
+   "t_end_iso": "2026-10-02T06:28:08.517+00:00"
+  },
+  {
+   "pass": "A1",
+   "session": 3,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t04-natural_language",
+   "topic": "t04",
+   "phrasing": "natural_language",
+   "construction": "OR",
+   "event": "request",
+   "rid": "A1/t04-natural_language/OR",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Ahallucinations+OR+all%3Alanguage+OR+all%3Amodel+OR+all%3Aoutputs+OR+all%3Adetected&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1790922491.6824737,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a1"
+    ]
+   ],
+   "t_end": 1790922494.8827438,
+   "latency_s": 3.1988,
+   "headers_s": 3.0586,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 120693,
+   "headers": {
+    "content-length": "120693",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-02T06:28:11.682+00:00",
+   "t_end_iso": "2026-10-02T06:28:14.882+00:00"
+  },
+  {
+   "pass": "A1",
+   "session": 3,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t04-natural_language",
+   "topic": "t04",
+   "phrasing": "natural_language",
+   "construction": "AND",
+   "event": "request",
+   "rid": "A1/t04-natural_language/AND",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Ahallucinations+AND+all%3Alanguage+AND+all%3Amodel+AND+all%3Aoutputs+AND+all%3Adetected&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1790922498.0357518,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a1"
+    ]
+   ],
+   "t_end": 1790922499.5066571,
+   "latency_s": 1.4708,
+   "headers_s": 1.4346,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 117780,
+   "headers": {
+    "content-length": "117780",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-02T06:28:18.035+00:00",
+   "t_end_iso": "2026-10-02T06:28:19.506+00:00"
+  },
+  {
+   "pass": "A1",
+   "session": 3,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t07-natural_language",
+   "topic": "t07",
+   "phrasing": "natural_language",
+   "construction": "OR",
+   "event": "request",
+   "rid": "A1/t07-natural_language/OR",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Aknowledge+OR+all%3Adistillation+OR+all%3Acompress+OR+all%3Aneural+OR+all%3Anetworks&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1790922502.6674926,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a1"
+    ]
+   ],
+   "t_end": 1790922504.3562708,
+   "latency_s": 1.6884,
+   "headers_s": 1.6404,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 128092,
+   "headers": {
+    "content-length": "128092",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-02T06:28:22.667+00:00",
+   "t_end_iso": "2026-10-02T06:28:24.356+00:00"
+  },
+  {
+   "pass": "A1",
+   "session": 3,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t07-natural_language",
+   "topic": "t07",
+   "phrasing": "natural_language",
+   "construction": "AND",
+   "event": "request",
+   "rid": "A1/t07-natural_language/AND",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Aknowledge+AND+all%3Adistillation+AND+all%3Acompress+AND+all%3Aneural+AND+all%3Anetworks&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1790922507.5106149,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a1"
+    ]
+   ],
+   "t_end": 1790922508.6546345,
+   "latency_s": 1.1439,
+   "headers_s": 1.0994,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 119459,
+   "headers": {
+    "content-length": "119459",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-02T06:28:27.510+00:00",
+   "t_end_iso": "2026-10-02T06:28:28.654+00:00"
+  },
+  {
+   "pass": "A1",
+   "session": 3,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t08-keyword",
+   "topic": "t08",
+   "phrasing": "keyword",
+   "construction": "OR",
+   "event": "request",
+   "rid": "A1/t08-keyword/OR",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Adenoising+OR+all%3Adiffusion+OR+all%3Amodels+OR+all%3Aimage+OR+all%3Ageneration&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1790922511.8194237,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a1"
+    ]
+   ],
+   "t_end": 1790922513.5413847,
+   "latency_s": 1.7213,
+   "headers_s": 1.68,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 124153,
+   "headers": {
+    "content-length": "124153",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-02T06:28:31.819+00:00",
+   "t_end_iso": "2026-10-02T06:28:33.541+00:00"
+  },
+  {
+   "pass": "A1",
+   "session": 3,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t08-keyword",
+   "topic": "t08",
+   "phrasing": "keyword",
+   "construction": "AND",
+   "event": "request",
+   "rid": "A1/t08-keyword/AND",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Adenoising+AND+all%3Adiffusion+AND+all%3Amodels+AND+all%3Aimage+AND+all%3Ageneration&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1790922516.7060406,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a1"
+    ]
+   ],
+   "t_end": 1790922517.9083009,
+   "latency_s": 1.2017,
+   "headers_s": 1.1644,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 122014,
+   "headers": {
+    "content-length": "122014",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-02T06:28:36.706+00:00",
+   "t_end_iso": "2026-10-02T06:28:37.908+00:00"
+  },
+  {
+   "pass": "A1",
+   "session": 3,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t07-keyword",
+   "topic": "t07",
+   "phrasing": "keyword",
+   "construction": "OR",
+   "event": "request",
+   "rid": "A1/t07-keyword/OR",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Aknowledge+OR+all%3Adistillation+OR+all%3Amodel+OR+all%3Acompression&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1790922521.0639117,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a1"
+    ]
+   ],
+   "t_end": 1790922524.1809392,
+   "latency_s": 3.1169,
+   "headers_s": 3.0745,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 120772,
+   "headers": {
+    "content-length": "120772",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-02T06:28:41.063+00:00",
+   "t_end_iso": "2026-10-02T06:28:44.180+00:00"
+  },
+  {
+   "pass": "A1",
+   "session": 3,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t07-keyword",
+   "topic": "t07",
+   "phrasing": "keyword",
+   "construction": "AND",
+   "event": "request",
+   "rid": "A1/t07-keyword/AND",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Aknowledge+AND+all%3Adistillation+AND+all%3Amodel+AND+all%3Acompression&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1790922527.3417373,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a1"
+    ]
+   ],
+   "t_end": 1790922528.2696443,
+   "latency_s": 0.9275,
+   "headers_s": 0.9022,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 116584,
+   "headers": {
+    "content-length": "116584",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-02T06:28:47.341+00:00",
+   "t_end_iso": "2026-10-02T06:28:48.269+00:00"
+  },
+  {
+   "event": "run_end",
+   "command": "addendum-a1",
+   "at": "2026-10-02T06:28:48.271+00:00",
+   "stopped_hosts": {}
   }
  ]
 }
