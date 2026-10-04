@@ -154,6 +154,17 @@ class Settings(BaseSettings):
     #: millisecond; this only caps what a sick one can cost a search.
     discovery_cache_timeout_seconds: float = Field(default=0.25, gt=0.0)
 
+    # -- fetching OA PDFs (M4 phase 5, D115, D129, D130) --------------------
+    #: D130: the measured minimum. www.aclweb.org is here only because ACL papers
+    #: reach aclanthology.org through it; every redirect hop is checked against
+    #: this list, so a host that only redirects must be on it too.
+    fetch_allowed_hosts: list[str] = ["arxiv.org", "aclanthology.org", "www.aclweb.org"]
+    #: arXiv's robots.txt Crawl-delay, as the spike kept it. The floor is arXiv's.
+    fetch_arxiv_min_gap_seconds: float = Field(default=15.0, ge=15.0)
+    fetch_min_gap_seconds: float = Field(default=5.0, ge=0.0)
+    #: One hop's connect, headers and body. The spike's download ceiling.
+    fetch_total_timeout_seconds: float = Field(default=60.0, gt=0.0)
+
     # -- generation --------------------------------------------------------
     #: Local carries sustained load; hosted quota is a deliberate spend (D26).
     generation_provider: str = "ollama"
