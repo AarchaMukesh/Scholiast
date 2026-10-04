@@ -747,4 +747,10 @@ class TestTheTableIsComplete:
         # The two routes with no owner to be a non-owner of — a listing and a
         # create — are covered by `TestListingsAndCreates` instead.
         covered |= {("GET", "/v1/workspaces"), ("POST", "/v1/workspaces")}
+        # Discovery reads no tenant's data: it asks external sources and writes
+        # nothing (§5.4.1), so there is no owner to be a non-owner of. It still
+        # requires a user, for the rate-limit key (D113, D122). Phase 4's shared
+        # cache is where one tenant's search could become visible to another, and
+        # that exposure is tested there, not assumed away here.
+        covered |= {("POST", "/v1/discovery/search")}
         assert routed - covered == set(), f"uncovered routes: {routed - covered}"

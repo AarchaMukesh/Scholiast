@@ -102,6 +102,11 @@ class Settings(BaseSettings):
     #: Uploads, keyed by user. Bounded because each one costs a GROBID parse and
     #: an embedding pass, not because the HTTP request is expensive.
     rate_limit_upload_per_minute: int = 30
+    #: Discovery searches, keyed by user (D122). Each costs an OpenAlex search
+    #: from an allowance of about 1,000 a day shared by EVERY user, and an arXiv
+    #: request at arXiv's pace; one user at this limit would spend the OpenAlex
+    #: allowance in under two hours. A guess, with no traffic yet to fit it to.
+    rate_limit_discovery_per_minute: int = 10
     #: When set, `/metrics` and `/health/ready` require it as a bearer token
     #: (D114). Empty leaves them open, which is the development default;
     #: `/health/live` is never gated, because an orchestrator's restart decision
@@ -124,6 +129,21 @@ class Settings(BaseSettings):
     #: A 429's `Retry-After` overrides this, because the provider has stated the
     #: answer and this number can only guess at it (D103).
     breaker_cooldown_seconds: float = 30.0
+
+    # -- discovery (M4 phase 3, D122-D125) -----------------------------------
+    #: OpenAlex requires a key beyond a test allowance (D116). Without one,
+    #: OpenAlex is absent rather than broken, as a provider with no credential is.
+    openalex_api_key: str | None = None
+    #: The sources' share of NFR-P1's 3.0 s; the rest is for dedup, ranking and the
+    #: response (D122). Every source is cut off at the same moment.
+    discovery_deadline_seconds: float = Field(default=2.0, gt=0.0)
+    #: Measured, not chosen: at 25 results addendum A2 found p95 1.58 s against the
+    #: 2.0 s deadline, with the same anchors as 50 (D125).
+    discovery_openalex_page_size: int = Field(default=25, ge=1, le=200)
+    discovery_arxiv_page_size: int = Field(default=50, ge=1, le=2000)
+    #: arXiv's API terms: one request every three seconds. The floor is the terms',
+    #: so a configuration cannot set a pace arXiv has asked us not to use (D123).
+    discovery_arxiv_min_gap_seconds: float = Field(default=3.0, ge=3.0)
 
     # -- generation --------------------------------------------------------
     #: Local carries sustained load; hosted quota is a deliberate spend (D26).

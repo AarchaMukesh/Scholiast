@@ -32,7 +32,7 @@ count without bound.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from contextlib import AbstractAsyncContextManager
 
 from prometheus_client import CollectorRegistry, Counter, Gauge, generate_latest
@@ -98,6 +98,24 @@ BREAKER_STATE = Gauge(
 )
 
 _BREAKER_VALUES = {"closed": 0, "half_open": 1, "open": 2}
+
+DISCOVERY_SOURCE_OUTCOMES = Counter(
+    "scholiast_discovery_source_outcomes_total",
+    "Discovery searches by source and outcome: ok, timeout, rate_limited, error, "
+    "circuit_open (D122). Without it, arXiv skipped by its pacing on most searches "
+    "(D123) would be invisible.",
+    ("source", "status"),
+    registry=REGISTRY,
+)
+
+DISCOVERY_SOURCE_DURATION = Gauge(
+    "scholiast_discovery_source_duration_seconds_last",
+    "Time from the most recent search's start to this source's outcome. A gauge, "
+    "for HTTP_DURATION's reason: the deadline is checked by measured runs, not read "
+    "off a dashboard (D122, D125).",
+    ("source",),
+    registry=REGISTRY,
+)
 
 # -- read at scrape time: facts about the work (D111) ----------------------
 
@@ -171,6 +189,13 @@ def record_generation(*, provider: str | None, usage: TokenUsage | None) -> None
 def record_degradations(modes: tuple[str, ...]) -> None:
     for mode in modes:
         DEGRADATIONS.labels(mode=mode).inc()
+
+
+def record_discovery(outcomes: Iterable[tuple[str, str, float]]) -> None:
+    """One search's per-source outcomes, as (source, status, seconds)."""
+    for source, status, seconds in outcomes:
+        DISCOVERY_SOURCE_OUTCOMES.labels(source=source, status=status).inc()
+        DISCOVERY_SOURCE_DURATION.labels(source=source).set(seconds)
 
 
 def refresh_breaker_states(providers: object) -> None:

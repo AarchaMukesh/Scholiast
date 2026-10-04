@@ -1,6 +1,6 @@
 {
-  "protocol_sha256": "b23f235ea5314c6a3a2db73f48fbce80060c549c840577e166926021a850dd79",
-  "at": "2026-10-02T06:32:05.073+00:00",
+  "protocol_sha256": "da128b48e71f95aff1514e65a374ab7b1387e3e9715ed5a72a6c08fd12ebb682",
+  "at": "2026-10-04T06:26:39.268+00:00",
   "address_table": {
     "refuse": 16,
     "accept": 3,
@@ -8,6 +8,9 @@
   },
   "url_cases": 7,
   "normalisation_cases": 13,
+  "addendum_a2": {
+    "failures": []
+  },
   "admission": {
     "per_host_cap_while_queued": {
       "outcomes": [
@@ -29,8 +32,8 @@
       ],
       "sent": 5,
       "refused_after_s": [
-        0.002,
-        0.002
+        0.0,
+        0.0
       ]
     },
     "total_cap_while_waiting": {
@@ -55,8 +58,8 @@
         "malformed:InvalidURL",
         "scheme:ftp",
         "address",
-        "label empty or too long",
-        "address"
+        "address",
+        "label empty or too long"
       ]
     },
     "transport_saw": {
@@ -121,7 +124,7 @@
     "pacer:admit-before-wait": {
       "caught": true,
       "caught_by": [
-        "admission: a stopped host's queued requests waited 1.02s for its Retry-After before being refused"
+        "admission: a stopped host's queued requests waited 1.01s for its Retry-After before being refused"
       ]
     },
     "pacer:admit-after-wait": {
@@ -135,6 +138,24 @@
       "caught_by": [
         "refusals: gave ['refused', 'dns_error', 'refused', 'fetched', 'fetched', 'fetched'] with 4 sent",
         "containment: the transport received ['https://10.0.0.1/a.pdf', 'https://127.0.0.1/x.pdf']"
+      ]
+    },
+    "a2-deadline": {
+      "caught": true,
+      "caught_by": [
+        "A2 rule: the deadline is inclusive: chose 15, want 25"
+      ]
+    },
+    "a2-anchors": {
+      "caught": true,
+      "caught_by": [
+        "A2 rule: half the anchors is enough: chose None, want 25"
+      ]
+    },
+    "a2-failures": {
+      "caught": true,
+      "caught_by": [
+        "A2 counts a failed request as finishing in time (D125)"
       ]
     },
     "document:probe-s2-only": {

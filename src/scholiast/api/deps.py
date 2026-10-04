@@ -65,6 +65,10 @@ from scholiast.application.use_cases.authentication import (
     RegisterUserUseCase,
     StartSessionUseCase,
 )
+from scholiast.application.use_cases.discover_papers import (
+    ConfiguredSource,
+    DiscoverPapersUseCase,
+)
 from scholiast.application.use_cases.remove_paper import RemovePaperUseCase
 from scholiast.config.settings import Settings
 from scholiast.infrastructure.db import pending
@@ -358,10 +362,14 @@ def peer_rate_limit(bucket: str, allowance: Callable[[Settings], int]) -> Callab
 AUTH_BUCKET = "auth"
 QA_BUCKET = "qa"
 UPLOAD_BUCKET = "upload"
+DISCOVERY_BUCKET = "discovery"
 
 AuthRateLimit = Depends(peer_rate_limit(AUTH_BUCKET, lambda s: s.rate_limit_auth_per_minute))
 QaRateLimit = Depends(user_rate_limit(QA_BUCKET, lambda s: s.rate_limit_qa_per_minute))
 UploadRateLimit = Depends(user_rate_limit(UPLOAD_BUCKET, lambda s: s.rate_limit_upload_per_minute))
+DiscoveryRateLimit = Depends(
+    user_rate_limit(DISCOVERY_BUCKET, lambda s: s.rate_limit_discovery_per_minute)
+)
 
 IndexDep = Annotated[VectorIndex, Depends(get_index)]
 EmbedderDep = Annotated[Embedder, Depends(get_embedder)]
@@ -479,3 +487,20 @@ def answer_use_case(
 AddPaperDep = Annotated[AddPaperUseCase, Depends(add_paper_use_case)]
 RemovePaperDep = Annotated[RemovePaperUseCase, Depends(remove_paper_use_case)]
 AnswerDep = Annotated[AnswerQuestionUseCase, Depends(answer_use_case)]
+
+
+def get_discovery_sources(request: Request) -> list[ConfiguredSource]:
+    """The process's sources: built once, because each breaker and the arXiv pacer
+    are state that must outlive a request (D104, D123)."""
+    sources: list[ConfiguredSource] = request.app.state.discovery_sources
+    return sources
+
+
+def discover_use_case(request: Request) -> DiscoverPapersUseCase:
+    settings: Settings = request.app.state.settings
+    return DiscoverPapersUseCase(
+        get_discovery_sources(request), deadline_seconds=settings.discovery_deadline_seconds
+    )
+
+
+DiscoverDep = Annotated[DiscoverPapersUseCase, Depends(discover_use_case)]

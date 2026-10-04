@@ -13,6 +13,9 @@ from scholiast.domain.discovery import (
     OpenAccessLink,
     PaperCandidate,
     arxiv_id_from_url,
+    interleave,
+    is_searchable,
+    is_web_url,
     normalise_arxiv_id,
     normalise_doi,
     normalise_query,
@@ -129,3 +132,68 @@ class TestCandidate:
     def test_an_open_access_link_needs_a_url(self) -> None:
         with pytest.raises(InvariantViolation):
             OpenAccessLink(" ", LinkKind.PDF)
+
+
+class TestOnlyAWebLinkMayReachABrowser:
+    """D122: a link from a third-party record is shown to a browser from phase 3 on."""
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "javascript:alert(document.cookie)",
+            "JAVASCRIPT:alert(1)",
+            "data:text/html,<script>alert(1)</script>",
+            "vbscript:msgbox(1)",
+            "file:///etc/passwd",
+            "ftp://example.org/paper.pdf",
+            "//example.org/paper.pdf",
+            "https://",
+            "https://[::1/paper.pdf",
+            "   ",
+        ],
+    )
+    def test_anything_but_an_absolute_http_url_is_refused(self, url: str) -> None:
+        assert not is_web_url(url)
+        with pytest.raises(InvariantViolation):
+            OpenAccessLink(url, LinkKind.PDF)
+
+    @pytest.mark.parametrize(
+        "url",
+        ["https://arxiv.org/pdf/2106.09685v2", "http://aclanthology.org/2020.emnlp-main.550.pdf"],
+    )
+    def test_ordinary_links_are_kept(self, url: str) -> None:
+        assert is_web_url(url)
+        assert OpenAccessLink(url, LinkKind.PDF).url == url
+
+
+class TestSearchability:
+    @pytest.mark.parametrize("query", ["?", " ?!? ", "...", "", "   ", "* -- *"])
+    def test_a_query_with_no_letter_or_digit_has_nothing_to_search(self, query: str) -> None:
+        assert not is_searchable(query)
+
+    @pytest.mark.parametrize(
+        "query", ["LoRA", "how do diffusion models work?", "Ψ-net", "2106.09685"]
+    )
+    def test_any_letter_or_digit_in_any_script_is_searchable(self, query: str) -> None:
+        assert is_searchable(query)
+
+
+class TestInterleaving:
+    """D122's order until phase 8: each source's first, then each one's second."""
+
+    def test_sources_take_turns_and_a_shorter_page_simply_runs_out(self) -> None:
+        a = [_candidate(source="a", source_id=f"a{i}", rank=i) for i in (1, 2, 3)]
+        b = [_candidate(source="b", source_id=f"b{i}", rank=i) for i in (1,)]
+
+        assert [c.source_id for c in interleave([a, b])] == ["a1", "b1", "a2", "a3"]
+
+    def test_duplicates_across_sources_are_kept_for_phase_7(self) -> None:
+        # Merging here would be dedup before dedup exists, with no measurement.
+        same = _candidate(source="a", source_id="x", doi="10.1/same")
+        other = _candidate(source="b", source_id="y", doi="10.1/same")
+
+        assert len(interleave([[same], [other]])) == 2
+
+    def test_no_pages_is_no_candidates(self) -> None:
+        assert interleave([]) == ()
+        assert interleave([[], []]) == ()

@@ -34,38 +34,36 @@ nothing needed.
 with a single provider configured, an open breaker means `generation_unavailable`
 for the whole cooldown even if the provider recovered a second later. The
 HALF-OPEN probe is what bounds that.
+
+**The state machine is `scholiast.infrastructure.circuit`'s** (D122), shared with
+the discovery sources' breakers. This class adapts it to the provider port: what
+counts as a failure, and which exception a refusal becomes.
 """
 
 from __future__ import annotations
 
 import time
 from collections.abc import AsyncIterator, Callable
-from enum import StrEnum, unique
 
 from scholiast.application.ports.llm import (
     GenerationChunk,
     GenerationUnavailable,
     LLMProvider,
 )
+from scholiast.infrastructure.circuit import (
+    DEFAULT_COOLDOWN_SECONDS,
+    DEFAULT_FAILURE_THRESHOLD,
+    BreakerState,
+    Circuit,
+    Refused,
+)
 
-#: D48's number, for D48's reason: three consecutive failures survives a restart
-#: of the thing being called without sitting through an outage.
-DEFAULT_FAILURE_THRESHOLD = 3
-#: Only used when the provider said nothing. A 429 overrides it (D103).
-DEFAULT_COOLDOWN_SECONDS = 30.0
-
-
-@unique
-class BreakerState(StrEnum):
-    """Derived from the counters rather than stored alongside them.
-
-    A stored state plus the data it summarises is two representations of one
-    fact, and they drift: every transition then has to remember to update both.
-    """
-
-    CLOSED = "closed"
-    OPEN = "open"
-    HALF_OPEN = "half_open"
+__all__ = [
+    "DEFAULT_COOLDOWN_SECONDS",
+    "DEFAULT_FAILURE_THRESHOLD",
+    "BreakerState",
+    "CircuitBreaker",
+]
 
 
 class CircuitBreaker:
@@ -86,18 +84,9 @@ class CircuitBreaker:
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._inner = inner
-        self._threshold = max(1, failure_threshold)
-        self._cooldown = max(0.0, cooldown_seconds)
-        #: Monotonic on purpose. Wall-clock would let an NTP correction close a
-        #: breaker early or hold it open past its window, and the window is the
-        #: one thing this class is supposed to get right.
-        self._clock = clock
-        self._failures = 0
-        self._opened_until: float | None = None
-        #: True while one HALF-OPEN probe is in flight, so concurrent requests
-        #: do not all become probes and all pay the timeout the breaker exists
-        #: to avoid. D104 says "a single HALF-OPEN probe"; this is that word.
-        self._probing = False
+        self._circuit = Circuit(
+            failure_threshold=failure_threshold, cooldown_seconds=cooldown_seconds, clock=clock
+        )
 
     @property
     def name(self) -> str:
@@ -110,16 +99,12 @@ class CircuitBreaker:
     @property
     def state(self) -> BreakerState:
         """Where the breaker is now — for tests, and for phase 7's metrics."""
-        if self._opened_until is None:
-            return BreakerState.CLOSED
-        if self._clock() < self._opened_until:
-            return BreakerState.OPEN
-        return BreakerState.HALF_OPEN
+        return self._circuit.state
 
     @property
     def failures(self) -> int:
         """Consecutive failures. A success resets it, so it measures an outage."""
-        return self._failures
+        return self._circuit.failures
 
     async def stream(self, *, system: str, user: str) -> AsyncIterator[GenerationChunk]:
         """Stream from the inner provider, unless it is known to be down.
@@ -129,54 +114,29 @@ class CircuitBreaker:
         the port's docstring requires and what lets the chain treat a breaker
         and a bare provider identically.
         """
-        self._before_call()
+        admission = self._circuit.admit()
+        if isinstance(admission, Refused):
+            raise GenerationUnavailable(
+                self.name, admission.reason, retry_after=admission.retry_after
+            )
+        settled = False
         try:
             async for chunk in self._inner.stream(system=system, user=user):
                 yield chunk
         except GenerationUnavailable as exc:
-            self._record_failure(exc.retry_after)
+            settled = True
+            self._circuit.failed(exc.retry_after)
             raise
-        # Completion counts as success even if nothing was yielded. A provider
-        # that streams no tokens without raising is handled by the use case,
-        # which fails over on empty output; making it a breaker failure too
-        # would put one decision in two places.
-        self._record_success()
-
-    def _before_call(self) -> None:
-        state = self.state
-        if state is BreakerState.OPEN:
-            raise GenerationUnavailable(
-                self.name,
-                f"circuit open for another {self._remaining():.1f}s",
-                # Pass the remaining window on, so a caller that stacks breakers
-                # or logs the reason sees the same number this one is holding.
-                retry_after=self._remaining(),
-            )
-        if state is BreakerState.HALF_OPEN:
-            if self._probing:
-                raise GenerationUnavailable(self.name, "circuit half-open, probe in flight")
-            self._probing = True
-
-    def _remaining(self) -> float:
-        if self._opened_until is None:
-            return 0.0
-        return max(0.0, self._opened_until - self._clock())
-
-    def _record_success(self) -> None:
-        self._failures = 0
-        self._opened_until = None
-        self._probing = False
-
-    def _record_failure(self, retry_after: float | None) -> None:
-        was_probing = self._probing
-        self._probing = False
-        self._failures += 1
-
-        # A failed probe re-opens at once, whatever the count: the half-open
-        # call exists precisely to answer "is it back", and it said no.
-        # An explicit `Retry-After` also opens at once — see the module
-        # docstring on why waiting for the threshold would spend the calls the
-        # window was meant to save.
-        if was_probing or retry_after is not None or self._failures >= self._threshold:
-            window = self._cooldown if retry_after is None else retry_after
-            self._opened_until = self._clock() + window
+        else:
+            # Completion counts as success even if nothing was yielded. A provider
+            # that streams no tokens without raising is handled by the use case,
+            # which fails over on empty output; making it a breaker failure too
+            # would put one decision in two places.
+            settled = True
+            self._circuit.succeeded()
+        finally:
+            # A caller that stopped reading, a cancellation, or any other exception
+            # says nothing about the provider, so it is not a failure; but a probe
+            # that ends this way must free the probe slot (D122).
+            if not settled:
+                self._circuit.abandoned(admission)

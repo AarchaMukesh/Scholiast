@@ -2,8 +2,9 @@
 
 **The primary source, on measured grounds** (D116, D118): in the spike it met three
 of ASM-1's four bars, returning full metadata (title, year and citations on every
-record, abstracts on 92%) with zero 429s on a key. It missed only latency, and
-that is a page-size question phase 3 measures.
+record, abstracts on 92%) with zero 429s on a key. It missed only latency, which
+addendum A2 settled (D125). Its ranking changed between the spike and A2, finding
+6 of 20 anchors where it had found 14 (D126); that is phase 8's to answer.
 
 **The key is required and travels only in a header.** OpenAlex has required an API
 key since 13 February 2026, beyond a test allowance. A URL ends up in access logs,
@@ -14,9 +15,12 @@ sent it that way and why a test here pins it.
 refuses both as wildcards with HTTP 400, so every question a user types as a
 question would fail. They become spaces, as the spike's amended protocol did.
 
-**Request shape is the spike's until phase 3 measures a smaller one** (D119): 50
-results with abstracts and every location, the shape the frozen pools were
-recorded with, so a recorded URL and the one built here can be compared.
+**The field list is the spike's, and the page size is the caller's** (D125). Author
+lists are half of every page and `select` cannot trim inside a field, and dropping
+`locations` would lose the arXiv id phase 7 links sources by on 18% of records, so
+the fields stay. The caller asks for 25 results by default: at that size A2 measured
+p95 1.58 s against D122's 2.0 s deadline, and a recorded URL and the one built here
+can still be compared.
 """
 
 from __future__ import annotations
@@ -35,17 +39,19 @@ from scholiast.domain.discovery import (
     OpenAccessLink,
     PaperCandidate,
     arxiv_id_from_url,
+    is_web_url,
     normalise_arxiv_id,
     normalise_doi,
     normalise_query,
 )
-from scholiast.infrastructure.discovery import USER_AGENT
+from scholiast.infrastructure.discovery import USER_AGENT, tls_context
 from scholiast.infrastructure.retry_after import retry_after_seconds
 
 SOURCE_NAME = "openalex"
-ADAPTER_VERSION = "openalex-1"
+#: 2: links that are not http(s) URLs are dropped (D122).
+ADAPTER_VERSION = "openalex-2"
 DEFAULT_BASE_URL = "https://api.openalex.org"
-#: The spike's field list (D116), kept until phase 3 measures a slimmer one (D119).
+#: The spike's field list (D116), kept by addendum A2 (D125).
 SELECT = (
     "id,doi,title,display_name,publication_year,publication_date,ids,type,authorships,"
     "primary_location,locations,best_oa_location,open_access,cited_by_count,"
@@ -99,7 +105,9 @@ class OpenAlexSource:
     async def search(self, query: str, *, limit: int) -> SourcePage:
         request = self.request(query, limit=limit)
         try:
-            async with httpx.AsyncClient(timeout=self._timeout, follow_redirects=False) as client:
+            async with httpx.AsyncClient(
+                timeout=self._timeout, follow_redirects=False, verify=tls_context()
+            ) as client:
                 response = await client.send(request)
         except httpx.TimeoutException as exc:
             raise SourceUnavailable(SOURCE_NAME, SourceFailure.TIMEOUT, type(exc).__name__) from exc
@@ -214,7 +222,9 @@ def _oa_links(work: dict[str, Any], locations: list[dict[str, Any]]) -> tuple[Op
     seen: set[str] = set()
 
     def add(url: Any, kind: LinkKind, licence: Any) -> None:
-        if isinstance(url, str) and url.strip() and url.strip() not in seen:
+        # Only an http(s) link may reach a browser (D122): a `javascript:` URL in a
+        # poisoned record is dropped here, and the rest of the record is kept.
+        if isinstance(url, str) and is_web_url(url) and url.strip() not in seen:
             seen.add(url.strip())
             links.append(
                 OpenAccessLink(url.strip(), kind, licence if isinstance(licence, str) else None)

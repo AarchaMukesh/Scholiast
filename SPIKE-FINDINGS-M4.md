@@ -4,10 +4,11 @@
 PDF probe 05:24–05:54 · download sample 05:54–06:03 · session 2 12:12–12:13, 6 h 49 min after
 session 1's last request (the protocol requires at least 6 h).
 **Protocol:** `spike/m4-protocol.json`, approved at canonical SHA-256 `6a280902…` (D116),
-amended to `6f46de9a…` by DEV-2 after the first 15 requests (D117), and given addendum A1 as
-`b23f235e…` before A1's first request on 2026-10-02 (D120). Every run line records the hash it
-ran under. The spike's frozen pools and `18_oa_probe.json` carry `6f46de9a…`; the results files
-regenerated after A1, and A1's pools, carry `b23f235e…`.
+amended to `6f46de9a…` by DEV-2 after the first 15 requests (D117), given addendum A1 as
+`b23f235e…` before A1's first request on 2026-10-02 (D120), and addendum A2 as `da128b48…`
+before A2's first request on 2026-10-04 (D125). Every run line records the hash it ran under.
+The spike's frozen pools and `18_oa_probe.json` carry `6f46de9a…`, A1's pools `b23f235e…`, and
+the results files regenerated after A2, and A2's pools, `da128b48…`.
 
 Purpose (D116): measure ASM-1 (each academic source is fast, complete and permissive enough
 for a 3 s discovery search) and ASM-2 (how often a discovered paper has a fetchable
@@ -316,9 +317,9 @@ Each of these is decided in the phase that implements it, with these numbers (D1
 
 | Decision | What the spike says |
 |---|---|
-| Which sources to build | OpenAlex met three of four bars, and its fourth looks like a page-size question. arXiv also met three; its fourth is mostly our AND query construction, and OR is worse (section 7), so the fix is not a different join. S2 needs a key decision: keyless was 10/10 × 429 across two windows, and a keyed pass would be its own addendum |
+| Which sources to build | OpenAlex met three of four bars, and its fourth was a page-size question, which A2 answered (section 8); its ranking then changed between the spike and A2 (section 8, D126). arXiv also met three; its fourth is mostly our AND query construction, and OR is worse (section 7), so the fix is not a different join. S2 needs a key decision: keyless was 10/10 × 429 across two windows, and a keyed pass would be its own addendum |
 | OpenAlex query handling | Strip or escape `?` and `*`; the default stemmed search refuses them |
-| Page size and `select` vs NFR-P1's 3 s | Transfer dominates OpenAlex latency; measure a smaller page through the real adapter before fixing a timeout |
+| Page size and `select` vs NFR-P1's 3 s | Measured by A2 through the real adapter (section 8, D125): `select` cannot usefully shrink, so page size is the lever, and 25 results came in at p95 1.58 s against D122's 2.0 s deadline |
 | arXiv query construction | AND-of-every-word excludes canonical papers, and OR was measured and is worse (section 7, D120): AND stays. What remains untested is a construction between the two, such as AND over the rarest few words; that needs its own measurement |
 | Allowlist (D115) | A1 66%, A2 76% (74% when enforced on every hop), A3 84% of works. Any allowlist must cover redirect hosts, not only the hosts serving the PDF |
 | Dedup | Title (and probably year) matching on top of identifiers |
@@ -332,10 +333,10 @@ Each of these is decided in the phase that implements it, with these numbers (D1
 
 | # | Criterion | Status |
 |---|---|---|
-| 1 | Protocol approved before the first call; every results file records its hash | ✅ D116 approval before any call. The DEV-2 amendment was approved after 15 requests (D117), and the run logs record both hashes |
-| 2 | P0 passed, including the checker mutant | ✅ before the first live call. 11/11 mutants caught |
-| 3 | The log checker confirms budgets, pacing, address refusals and no automatic redirects | ✅ for D116's run: 354 requests, 0 violations. With A1's 40 the log holds 394, and the checker reports one 3 s gap it cannot verify, after the request cut off by hand (section 7) |
-| 4 | Every planned request has a logged outcome | ✅ for D116's run: 0 planned requests missing, 0 sent without an outcome. A1 has one sent with no outcome, the same request (section 7) |
+| 1 | Protocol approved before the first call; every results file records its hash | ✅ D116 approval before any call. The DEV-2 amendment was approved after 15 requests (D117), addenda A1 and A2 each before their first request (D120, D125), and the run logs record every hash |
+| 2 | P0 passed, including the checker mutant | ✅ before the first live call, 11/11 mutants caught; 14/14 after A2 added three for its decision rule |
+| 3 | The log checker confirms budgets, pacing, address refusals and no automatic redirects | ✅ for D116's run: 354 requests, 0 violations. With A1's 40 and A2's 60 the log holds 454, and the checker reports one 3 s gap it cannot verify, after the request cut off by hand (section 7) |
+| 4 | Every planned request has a logged outcome | ✅ for D116's run: 0 planned requests missing, 0 sent without an outcome. A1 has one sent with no outcome, the same request (section 7); A2 has none |
 | 5 | ASM-1 verdict per source, with n and Wilson intervals | ✅ FAIL, above |
 | 6 | ASM-2 verdict with the funnel under A1, A2 and A3 | ✅ PASS, above |
 | 7 | Allowlist, dedup, licence, stability and phrasing evidence exists | ✅ section 3 |
@@ -418,6 +419,75 @@ twice and resumed at 06:26 UTC.
 
 ---
 
+## 8. Addendum A2: OpenAlex's page size (D125)
+
+Run on 2026-10-04, 06:27–06:29 UTC, under a protocol addendum approved before its first
+request: the 20 session-1 queries against OpenAlex only, at 50, 25 and 15 results per page,
+every request built by the production adapter and sent on a fresh connection.
+**Pre-registered rule:** ship the largest page whose p95 latency is at most D122's 2.0 s
+deadline and whose keyword anchor recall within the page is at least 50%; if no size passes
+both, the owner decides. Its responses are in `data/eval/discovery-pools-openalex-a2.json.gz`.
+It is the second addendum, and has nothing to do with ASM-2's allowlist A2 in section 2.
+
+**What A2 does not establish.**
+
+- **20 requests a size make p95 the 19th value.** A size that passes narrowly may not pass on
+  another day.
+- **One day, one home connection.** A deployment elsewhere sees different network latency.
+- **Not the latency of a whole search.** Dedup and ranking must fit the remaining 1.0 s, and
+  phase 10's live run measures the whole request.
+- **Anchor recall is a known-item check on famous papers**, and on this day it measured
+  OpenAlex's ranking more than the page size (below).
+
+**Result: no size passed the rule, so the owner chose 25 results.**
+
+| Results per page | p95, all 20 | p50 | Slowest | Within 2.0 s | Headers p50 | Body p50 | Keyword anchors in the page |
+|---|---|---|---|---|---|---|---|
+| 50 | 1.72 s | 1.51 s | 2.56 s | 19 of 20 | 0.55 s | 513 KB | 6 of 20 |
+| 25 | 1.58 s | 1.28 s | 1.58 s | 20 of 20 | 0.50 s | 246 KB | 6 of 20 |
+| 15 | 1.23 s | 1.02 s | 1.45 s | 20 of 20 | 0.46 s | 146 KB | 5 of 20 |
+
+All 60 requests answered 200, at $0.06 by OpenAlex's own headers, and the log checker found
+nothing new.
+
+**Every size met the deadline; none met the anchor bar, and page size is not why.** For all
+20 queries the 25- and 15-result pages were exactly the first 25 and 15 of the same query's
+50-result page, so a smaller page only cuts the same list shorter. The anchors were missing
+at every size because OpenAlex's ranking had changed since the spike:
+
+- The same URLs that put 14 anchors in OpenAlex's top 50 on 2026-10-01 put 6 there on
+  2026-10-04. LoRA, Sentence-BERT, DDPM, latent diffusion, neural message passing,
+  self-consistency, Contriever and Lost in the Middle dropped out, and Mamba fell from rank 7
+  to 24.
+- The two days' top 50s share 4 to 18 papers per query. OpenAlex's reported totals moved by
+  at most 7%, and the query it reports running (`x_query`, a full-text search for the same
+  words) is identical.
+- Top relevance scores fell from 1,517–7,869 to 123–269, and the median citation count of the
+  top 10 from 247–9,609 to 0–92.
+
+OpenAlex's search help page, updated 2026-10-03, now says citations raise the score "by at
+most half". That fits a capped citation boost, but the page does not date the change, so the
+cause is inferred, not confirmed. Session 2's seven-hour stability check (top-10 overlap 0.97)
+did not predict a change three days later. D126 records what this does to D118, which chose
+OpenAlex as primary partly on its anchor recall, and hands the ranking question to phase 8.
+
+**Latency was better than the spike's, on fresh connections.** At 50 results p95 was 1.72 s,
+against 2.61 s in the spike, whose shared client could reuse a connection. This run cannot tell whether the ranking
+change made OpenAlex's searches cheaper.
+
+**What A2 timed, and a defect it exposed.** A2's harness built each client before starting
+the clock, so its latencies exclude building one. Phase 2's adapters built a client per
+search, and building one creates a TLS context: 183 ms, synchronous, outside what A2 timed.
+Phase 3 found it through a test's run time and fixed it (D122): the adapters now share one
+TLS context, so a production search pays what A2 measured.
+
+**Incidents: none.** The watcher, fixed before the first request, would have paused on any
+timeout, 429, 5xx or transport error. Unlike A1's, it did not pause on slow successes,
+because latency is what A2 measures and pausing on it would keep only the fast windows. It
+never fired.
+
+---
+
 ## Reproduce
 
 ```bash
@@ -432,6 +502,8 @@ twice and resumed at 06:26 UTC.
 .venv\Scripts\python.exe spike\scripts\19_discovery_analysis.py leakcheck
 .venv\Scripts\python.exe spike\scripts\17_discovery_search.py addendum-a1   # A1 (D120)
 .venv\Scripts\python.exe spike\scripts\19_discovery_analysis.py finalize-a1
+.venv\Scripts\python.exe spike\scripts\17_discovery_search.py addendum-a2   # A2 (D125)
+.venv\Scripts\python.exe spike\scripts\19_discovery_analysis.py finalize-a2
 ```
 
 The live passes need `OPENALEX_API_KEY` in `spike/.env`, and none of them repeats a request

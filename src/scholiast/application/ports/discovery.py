@@ -16,6 +16,11 @@ Two things are in the contract rather than left to adapters:
   retry_after        a number, not prose (D103). A 429 or a 503 that names a wait is
                      the source stating when it will accept work again, and phase 3's
                      per-source breaker opens for exactly that window (D104).
+
+  sent               whether a request reached the source at all. Our own arXiv
+                     pacing (D123) and an open breaker refuse without asking, and a
+                     breaker must not count those against the source's health, or a
+                     burst of searches would open arXiv's breaker for nothing arXiv did.
 """
 
 from __future__ import annotations
@@ -28,11 +33,16 @@ from scholiast.domain.discovery import PaperCandidate
 
 
 class SourceFailure(StrEnum):
-    """Why a source did not answer: the per-source statuses phase 3 reports (FR-D6)."""
+    """Why a source did not answer: the per-source statuses phase 3 reports (FR-D6, D122)."""
 
     TIMEOUT = "timeout"
+    #: The source's own limit, or our pacing of it (D123): in both, its limit and
+    #: not its health is why nothing came back.
     RATE_LIMITED = "rate_limited"
     ERROR = "error"
+    #: Not asked: its breaker is open (D104). Distinct from ERROR because nothing
+    #: was sent, so it says nothing new about the source.
+    CIRCUIT_OPEN = "circuit_open"
 
 
 class SourceUnavailable(Exception):
@@ -44,7 +54,13 @@ class SourceUnavailable(Exception):
     """
 
     def __init__(
-        self, source: str, kind: SourceFailure, detail: str, *, retry_after: float | None = None
+        self,
+        source: str,
+        kind: SourceFailure,
+        detail: str,
+        *,
+        retry_after: float | None = None,
+        sent: bool = True,
     ) -> None:
         super().__init__(f"{source}: {kind}: {detail}")
         self.source = source
@@ -53,6 +69,8 @@ class SourceUnavailable(Exception):
         #: Seconds the source asked us to wait, when it said so at all. None means it
         #: said nothing, not "retry immediately".
         self.retry_after = retry_after
+        #: False when the refusal was ours and no request reached the source.
+        self.sent = sent
 
 
 @dataclass(frozen=True, slots=True)

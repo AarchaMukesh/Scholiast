@@ -13,8 +13,8 @@ a workspace called nothing.
 
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Annotated
+from datetime import date, datetime
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
@@ -220,3 +220,61 @@ class TokenPair(BaseModel):
     #: the one a client actually schedules against.
     expires_in: int
     user_id: str
+
+
+# -- discovery (FR-D1, FR-D6, D122) ---------------------------------------------
+
+
+class DiscoverySearch(_Input):
+    #: A topic or a question. Searchability (a letter or digit) is the domain's
+    #: rule, so a query of punctuation is a 400 from the use case, not a 422 here.
+    query: NonBlank = Field(max_length=500)
+
+
+class OpenAccessLinkOut(BaseModel):
+    url: str
+    #: What the SOURCE claims the link is ("pdf" or "landing"). The claim was wrong
+    #: in both directions in the spike, so a client must not treat it as a fact.
+    kind: str
+    licence: str | None = None
+
+
+class CandidateOut(BaseModel):
+    """One source's record of one paper (FR-D1). Not deduplicated until phase 7."""
+
+    source: str
+    source_id: str
+    #: The position in that source's own results, 1-based.
+    source_rank: int
+    title: str
+    authors: list[str]
+    year: int | None = None
+    published: date | None = None
+    venue: str | None = None
+    abstract: str | None = None
+    #: None when the source reports none, which arXiv never does. Never 0 for unknown.
+    citation_count: int | None = None
+    doi: str | None = None
+    arxiv_id: str | None = None
+    open_access: list[OpenAccessLinkOut] = Field(default_factory=list)
+
+
+class SourceStatusOut(BaseModel):
+    """What happened to one source in this search (FR-D6)."""
+
+    source: str
+    status: Literal["ok", "timeout", "rate_limited", "error", "circuit_open"]
+    results: int
+    total_hits: int | None = None
+    #: When the source said, or our pacing knows, when it will accept work again.
+    retry_after_seconds: float | None = None
+
+
+class DiscoveryResults(BaseModel):
+    results: list[CandidateOut]
+    source_status: list[SourceStatusOut]
+    #: True whenever any source did not answer (FR-D6).
+    partial: bool
+    #: How `results` is ordered. Until phase 8 ranks, it is each source's own order,
+    #: interleaved, and the same paper can appear once per source (D122).
+    ordering: Literal["source_rank"] = "source_rank"

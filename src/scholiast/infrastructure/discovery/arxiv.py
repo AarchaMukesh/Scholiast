@@ -39,15 +39,17 @@ from scholiast.domain.discovery import (
     LinkKind,
     OpenAccessLink,
     PaperCandidate,
+    is_web_url,
     normalise_arxiv_id,
     normalise_doi,
     normalise_query,
 )
-from scholiast.infrastructure.discovery import USER_AGENT
+from scholiast.infrastructure.discovery import USER_AGENT, tls_context
 from scholiast.infrastructure.retry_after import retry_after_seconds
 
 SOURCE_NAME = "arxiv"
-ADAPTER_VERSION = "arxiv-1"
+#: 2: links that are not http(s) URLs are dropped (D122).
+ADAPTER_VERSION = "arxiv-2"
 DEFAULT_BASE_URL = "https://export.arxiv.org/api/query"
 #: How the words of a query are joined. AND, kept by addendum A1 (D120); OR is
 #: accepted by the constructor so a later measurement can try it again.
@@ -177,7 +179,9 @@ class ArxivSource:
     async def search(self, query: str, *, limit: int) -> SourcePage:
         request = self.request(query, limit=limit)
         try:
-            async with httpx.AsyncClient(timeout=self._timeout, follow_redirects=False) as client:
+            async with httpx.AsyncClient(
+                timeout=self._timeout, follow_redirects=False, verify=tls_context()
+            ) as client:
                 response = await client.send(request)
         except httpx.TimeoutException as exc:
             raise SourceUnavailable(SOURCE_NAME, SourceFailure.TIMEOUT, type(exc).__name__) from exc
@@ -241,7 +245,8 @@ def _candidate(entry: ET.Element, rank: int) -> PaperCandidate | None:
         (
             link.get("href")
             for link in entry.findall(f"{_ATOM}link")
-            if link.get("title") == "pdf" and link.get("href")
+            # Only an http(s) link may reach a browser (D122); anything else is dropped.
+            if link.get("title") == "pdf" and is_web_url(link.get("href") or "")
         ),
         None,
     )

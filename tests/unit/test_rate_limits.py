@@ -269,6 +269,8 @@ PROTECTED: dict[tuple[str, str], str] = {
         "POST",
         "/v1/workspaces/{workspace_id}/conversations/{conversation_id}/messages",
     ): "qa",
+    # Each search spends from an OpenAlex allowance every user shares (D122).
+    ("POST", "/v1/discovery/search"): "discovery",
 }
 
 

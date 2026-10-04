@@ -1,0 +1,300 @@
+"""`POST /v1/discovery/search` (FR-D1, FR-D5's groundwork, FR-D6, D122).
+
+The endpoint's claims are about what a client is told: every source's status beside
+a partial result, a 503 rather than an empty list when nobody answered, a 400 for a
+query with nothing in it, and never a third party's error text or our OpenAlex key.
+The sources are fakes, except where the claim is about a real adapter's output.
+"""
+
+from __future__ import annotations
+
+from datetime import date
+from http import HTTPStatus
+
+import httpx
+import pytest
+import respx
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+from structlog.testing import capture_logs
+
+from scholiast.api import deps
+from scholiast.api.errors import PROBLEM_CONTENT_TYPE, register_error_handlers
+from scholiast.api.routers import discovery
+from scholiast.application.ports.discovery import SourceFailure, SourcePage, SourceUnavailable
+from scholiast.application.ports.tenancy import TenantContext
+from scholiast.application.use_cases.discover_papers import ConfiguredSource
+from scholiast.config.settings import Settings
+from scholiast.domain.discovery import LinkKind, OpenAccessLink, PaperCandidate
+from scholiast.infrastructure.discovery.openalex import OpenAlexSource
+from scholiast.infrastructure.observability.metrics import REGISTRY
+from scholiast.infrastructure.security.ratelimit import FixedWindowLimiter
+
+KEY = "test-key-0123456789"
+SEARCH = "/v1/discovery/search"
+
+
+def paper(source: str, rank: int, **fields: object) -> PaperCandidate:
+    base: dict[str, object] = {
+        "source": source,
+        "source_id": f"{source}-{rank}",
+        "rank": rank,
+        "title": f"{source} paper {rank}",
+        "adapter_version": "fake-1",
+    }
+    base.update(fields)
+    return PaperCandidate(**base)  # type: ignore[arg-type]
+
+
+class Fake:
+    def __init__(
+        self,
+        name: str,
+        *,
+        papers: tuple[PaperCandidate, ...] | None = None,
+        raises: BaseException | None = None,
+    ) -> None:
+        self._name = name
+        self.papers = papers if papers is not None else (paper(name, 1), paper(name, 2))
+        self.raises = raises
+        self.calls = 0
+
+    @property
+    def name(self) -> str:
+        return self._name
+
+    async def search(self, query: str, *, limit: int) -> SourcePage:
+        self.calls += 1
+        if self.raises is not None:
+            raise self.raises
+        return SourcePage(self._name, self.papers, total_hits=1000)
+
+
+def build(
+    *sources: object, settings: Settings | None = None, authenticated: bool = True
+) -> TestClient:
+    app = FastAPI()
+    register_error_handlers(app)
+    app.include_router(discovery.router)
+    app.state.settings = settings or Settings()
+    app.state.rate_limiter = FixedWindowLimiter()
+    app.state.discovery_sources = [ConfiguredSource(s, 25) for s in sources]  # type: ignore[arg-type]
+    if authenticated:
+        app.dependency_overrides[deps.current_tenant] = lambda: TenantContext(user_id="u-1")
+    else:
+        app.state.tokens = object()  # never reached: no credentials are presented
+    return TestClient(app, raise_server_exceptions=False)
+
+
+def down(
+    kind: SourceFailure, retry_after: float | None = None, detail: str = "x"
+) -> SourceUnavailable:
+    return SourceUnavailable("s", kind, detail, retry_after=retry_after)
+
+
+class TestAPartialResult:
+    def test_every_source_is_named_with_its_status(self) -> None:
+        client = build(Fake("openalex"), Fake("arxiv", raises=down(SourceFailure.TIMEOUT)))
+
+        response = client.post(SEARCH, json={"query": "dense passage retrieval"})
+
+        assert response.status_code == HTTPStatus.OK
+        body = response.json()
+        assert body["partial"] is True
+        assert body["ordering"] == "source_rank"
+        assert body["source_status"] == [
+            {
+                "source": "openalex",
+                "status": "ok",
+                "results": 2,
+                "total_hits": 1000,
+                "retry_after_seconds": None,
+            },
+            {
+                "source": "arxiv",
+                "status": "timeout",
+                "results": 0,
+                "total_hits": None,
+                "retry_after_seconds": None,
+            },
+        ]
+        assert [r["source_id"] for r in body["results"]] == ["openalex-1", "openalex-2"]
+
+    def test_every_source_answering_is_not_partial(self) -> None:
+        body = build(Fake("openalex"), Fake("arxiv")).post(SEARCH, json={"query": "x y"}).json()
+
+        assert body["partial"] is False
+        assert [r["source_id"] for r in body["results"]] == [
+            "openalex-1",
+            "arxiv-1",
+            "openalex-2",
+            "arxiv-2",
+        ]
+
+    def test_a_result_carries_what_fr_d1_asks_for_and_unknown_is_null_not_zero(self) -> None:
+        rich = paper(
+            "arxiv",
+            1,
+            authors=("Vladimir Karpukhin", "Barlas Oguz"),
+            year=2020,
+            published=date(2020, 4, 10),
+            venue="EMNLP",
+            abstract="Open-domain question answering relies on efficient passage retrieval.",
+            citation_count=None,
+            doi="10.18653/v1/2020.emnlp-main.550",
+            arxiv_id="2004.04906",
+            oa_links=(OpenAccessLink("https://arxiv.org/pdf/2004.04906v3", LinkKind.PDF),),
+        )
+
+        result = build(Fake("arxiv", papers=(rich,))).post(SEARCH, json={"query": "dpr"}).json()
+
+        assert result["results"] == [
+            {
+                "source": "arxiv",
+                "source_id": "arxiv-1",
+                "source_rank": 1,
+                "title": "arxiv paper 1",
+                "authors": ["Vladimir Karpukhin", "Barlas Oguz"],
+                "year": 2020,
+                "published": "2020-04-10",
+                "venue": "EMNLP",
+                "abstract": "Open-domain question answering relies on efficient passage retrieval.",
+                "citation_count": None,
+                "doi": "10.18653/v1/2020.emnlp-main.550",
+                "arxiv_id": "2004.04906",
+                "open_access": [
+                    {"url": "https://arxiv.org/pdf/2004.04906v3", "kind": "pdf", "licence": None}
+                ],
+            }
+        ]
+
+
+class TestNoSourceAnswering:
+    def test_is_a_503_problem_never_an_empty_list(self) -> None:
+        client = build(
+            Fake("openalex", raises=down(SourceFailure.RATE_LIMITED, retry_after=7.0)),
+            Fake("arxiv", raises=down(SourceFailure.CIRCUIT_OPEN, retry_after=15.0)),
+        )
+
+        response = client.post(SEARCH, json={"query": "x"})
+
+        assert response.status_code == HTTPStatus.SERVICE_UNAVAILABLE
+        assert response.headers["content-type"] == PROBLEM_CONTENT_TYPE
+        body = response.json()
+        assert body["type"] == "/problems/discovery-unavailable"
+        assert "results" not in body, "a failure must not look like an answer with no papers"
+        assert [(s["source"], s["status"]) for s in body["source_status"]] == [
+            ("openalex", "rate_limited"),
+            ("arxiv", "circuit_open"),
+        ]
+        # Every source said when; the soonest is when this search can next succeed.
+        assert response.headers["Retry-After"] == "7"
+
+    def test_says_nothing_about_when_unless_every_source_did(self) -> None:
+        client = build(
+            Fake("openalex", raises=down(SourceFailure.RATE_LIMITED, retry_after=7.0)),
+            Fake("arxiv", raises=down(SourceFailure.ERROR)),
+        )
+
+        response = client.post(SEARCH, json={"query": "x"})
+
+        assert response.status_code == HTTPStatus.SERVICE_UNAVAILABLE
+        assert "Retry-After" not in response.headers
+
+
+class TestWhatTheClientIsNotTold:
+    @pytest.mark.parametrize("partial", [True, False])
+    def test_why_a_source_failed_stays_in_the_log(self, partial: bool) -> None:
+        leak = "upstream says: db-7.internal refused user scholiast"
+        sources: list[object] = [Fake("arxiv", raises=down(SourceFailure.ERROR, detail=leak))]
+        if partial:
+            sources.append(Fake("openalex"))
+
+        with capture_logs() as logs:
+            response = build(*sources).post(SEARCH, json={"query": "x"})
+
+        assert leak not in response.text
+        assert any(leak in str(entry.get("detail")) for entry in logs), "and it is not lost"
+
+    @respx.mock
+    def test_the_openalex_key_reaches_neither_a_log_nor_the_client(self) -> None:
+        respx.get("https://api.openalex.org/works").mock(
+            side_effect=httpx.ConnectError("connection refused")
+        )
+        with capture_logs() as logs:
+            response = build(OpenAlexSource(KEY), Fake("arxiv")).post(SEARCH, json={"query": "x"})
+
+        assert response.status_code == HTTPStatus.OK
+        assert KEY not in response.text
+        assert KEY not in repr(logs)
+
+    def test_a_crashing_source_is_logged_with_its_traceback(self) -> None:
+        with capture_logs() as logs:
+            response = build(Fake("buggy", raises=KeyError("results")), Fake("ok")).post(
+                SEARCH, json={"query": "x"}
+            )
+
+        assert response.status_code == HTTPStatus.OK
+        crashed = [e for e in logs if e["event"] == "discovery.source_crashed"]
+        assert crashed and crashed[0]["source"] == "buggy"
+        assert crashed[0]["exc_info"][0] is KeyError
+
+
+class TestTheRequest:
+    def test_a_query_of_punctuation_is_a_400_and_no_source_is_asked(self) -> None:
+        source = Fake("openalex")
+        response = build(source).post(SEARCH, json={"query": " ?!? "})
+
+        assert response.status_code == HTTPStatus.BAD_REQUEST
+        assert response.json()["type"] == "/problems/invalid-request"
+        assert source.calls == 0
+
+    @pytest.mark.parametrize(
+        "payload",
+        [{"query": "   "}, {"query": "x" * 501}, {"query": "x", "limit": 5}, {}],
+        ids=["blank", "too long", "unknown field", "missing"],
+    )
+    def test_a_malformed_body_is_a_422(self, payload: dict[str, object]) -> None:
+        assert build(Fake("a")).post(SEARCH, json=payload).status_code == (
+            HTTPStatus.UNPROCESSABLE_ENTITY
+        )
+
+    def test_login_is_required_even_without_the_limiter(self) -> None:
+        """Authentication must not depend on the limiter happening to need a user.
+
+        Today the limiter resolves the principal whether or not limiting is on, so
+        switching limiting off proves nothing: a mutation run showed that version of
+        this test passing with the route's own login dependency deleted. Replacing
+        the limiter outright, as moving limits to a gateway would, is what isolates
+        the claim.
+        """
+        client = build(Fake("a"), authenticated=False)
+        client.app.dependency_overrides[deps.DiscoveryRateLimit.dependency] = lambda: None  # type: ignore[attr-defined]
+
+        assert client.post(SEARCH, json={"query": "x"}).status_code == HTTPStatus.UNAUTHORIZED
+
+    def test_the_configured_discovery_allowance_is_the_one_applied(self) -> None:
+        client = build(Fake("a"), settings=Settings(rate_limit_discovery_per_minute=2))
+
+        statuses = [client.post(SEARCH, json={"query": "x"}).status_code for _ in range(3)]
+
+        assert statuses == [HTTPStatus.OK, HTTPStatus.OK, HTTPStatus.TOO_MANY_REQUESTS]
+
+
+class TestMetrics:
+    def test_each_sources_outcome_is_counted(self) -> None:
+        def count(source: str, status: str) -> float:
+            value = REGISTRY.get_sample_value(
+                "scholiast_discovery_source_outcomes_total", {"source": source, "status": status}
+            )
+            return value or 0.0
+
+        before = (count("m-ok", "ok"), count("m-down", "rate_limited"))
+        build(Fake("m-ok"), Fake("m-down", raises=down(SourceFailure.RATE_LIMITED))).post(
+            SEARCH, json={"query": "x"}
+        )
+
+        assert (count("m-ok", "ok"), count("m-down", "rate_limited")) == (
+            before[0] + 1,
+            before[1] + 1,
+        )

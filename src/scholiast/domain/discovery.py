@@ -17,12 +17,13 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
 from enum import StrEnum
 from urllib.parse import urlsplit
 
-from scholiast.domain.errors import InvariantViolation
+from scholiast.domain.errors import DomainError, InvariantViolation
 
 _WHITESPACE = re.compile(r"\s+")
 _DOI_PREFIXES = (
@@ -47,6 +48,35 @@ def normalise_query(text: str) -> str:
     is a relevance decision, not a normalisation one.
     """
     return _WHITESPACE.sub(" ", unicodedata.normalize("NFKC", text).casefold()).strip()
+
+
+class UnsearchableQuery(DomainError):
+    """A query with no letter or digit in it: nothing any source could search for.
+
+    The caller's mistake, so a 400 and not a source failure (the discovery port's
+    rule): reporting every source as failed would tell the user the sources are
+    down when the query was empty.
+    """
+
+
+def is_searchable(query: str) -> bool:
+    """Whether a query has at least one letter or digit, in any script, to search for."""
+    return any(ch.isalnum() for ch in normalise_query(query))
+
+
+def is_web_url(url: str) -> bool:
+    """An absolute http or https URL with a host: the only kind a source's link may be.
+
+    A link from a third-party record is shown to a browser (D122), and `javascript:`
+    or `data:` in a poisoned record would be clickable there. This decides what may
+    be shown, not what may be fetched; fetching has its own, stricter guard (D115).
+    """
+    try:
+        parts = urlsplit(url.strip())
+        host = parts.hostname
+    except ValueError:  # a malformed netloc, such as an unclosed IPv6 bracket
+        return False
+    return parts.scheme.lower() in ("http", "https") and bool(host)
 
 
 def _letters_and_digits(text: str) -> str:
@@ -143,8 +173,12 @@ class OpenAccessLink:
     licence: str | None = None
 
     def __post_init__(self) -> None:
-        if not self.url.strip():
-            raise InvariantViolation("an open-access link must have a URL")
+        if not is_web_url(self.url):
+            # Adapters drop such links before building one (D122), so reaching this
+            # means an adapter forgot to, and a poisoned record must not ride on it.
+            raise InvariantViolation(
+                f"an open-access link must be an http(s) URL, got {self.url!r}"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -177,8 +211,8 @@ class PaperCandidate:
     arxiv_id: str | None = None
     oa_links: tuple[OpenAccessLink, ...] = ()
     #: The source's own relevance score, if it gives one. Not comparable across
-    #: sources (OpenAlex's carries citation weighting, D116), so ranking must not
-    #: mix it with another source's.
+    #: sources (OpenAlex's carries a citation weighting it capped in 2026-10, D116,
+    #: D126), so ranking must not mix it with another source's.
     source_score: float | None = None
     #: Which adapter build produced this (NFR-M5), so a change in candidates can be
     #: traced to a change in parsing rather than in the source.
@@ -203,3 +237,19 @@ class PaperCandidate:
             )
         if not self.adapter_version.strip():
             raise InvariantViolation("a candidate must record the adapter version that produced it")
+
+
+def interleave(pages: Sequence[Sequence[PaperCandidate]]) -> tuple[PaperCandidate, ...]:
+    """Each source's first result, then each source's second, and so on (D122).
+
+    The order until phases 7 and 8 replace it: it favours no source and makes no
+    relevance claim of its own, and a source with fewer results simply runs out.
+    Duplicates across sources are kept; merging them is phase 7's job.
+    """
+    out: list[PaperCandidate] = []
+    longest = max((len(page) for page in pages), default=0)
+    for position in range(longest):
+        for page in pages:
+            if position < len(page):
+                out.append(page[position])
+    return tuple(out)

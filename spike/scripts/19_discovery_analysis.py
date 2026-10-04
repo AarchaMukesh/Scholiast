@@ -5,6 +5,7 @@
     .venv\\Scripts\\python.exe spike\\scripts\\19_discovery_analysis.py analyse
     .venv\\Scripts\\python.exe spike\\scripts\\19_discovery_analysis.py finalize
     .venv\\Scripts\\python.exe spike\\scripts\\19_discovery_analysis.py finalize-a1
+    .venv\\Scripts\\python.exe spike\\scripts\\19_discovery_analysis.py finalize-a2
     .venv\\Scripts\\python.exe spike\\scripts\\19_discovery_analysis.py leakcheck
 
 `selftest` is P0: the address classifier against the protocol's table, URL checks,
@@ -44,6 +45,7 @@ from urllib.parse import urlsplit
 
 import httpx
 from m4_common import (
+    A2_SIZES,
     MAX_REDIRECTS,
     POOLS_MANIFEST_PATH,
     POOLS_PATH,
@@ -77,6 +79,8 @@ from m4_http import Chain, Ctx, build_ctx, fetch_chain
 from m4_parse import Rec, parse
 from m4_works import build_works, p1_keyword_records, record_keys, search_records
 
+from scholiast.infrastructure.discovery.openalex import ADAPTER_VERSION, SELECT, OpenAlexSource
+
 SOURCES = ("openalex", "semantic_scholar", "arxiv")
 OUT_REQUESTS = RESULTS_DIR / "17_discovery_requests.json"
 OUT_PROBE = RESULTS_DIR / "18_oa_probe.json"
@@ -84,6 +88,8 @@ OUT_ANALYSIS = RESULTS_DIR / "19_discovery_analysis.json"
 FINDINGS = ROOT / "SPIKE-FINDINGS-M4.md"
 POOLS_A1_PATH = ROOT / "data" / "eval" / "discovery-pools-arxiv-a1.json.gz"
 POOLS_A1_MANIFEST_PATH = ROOT / "data" / "eval" / "discovery-pools-arxiv-a1.manifest.json"
+POOLS_A2_PATH = ROOT / "data" / "eval" / "discovery-pools-openalex-a2.json.gz"
+POOLS_A2_MANIFEST_PATH = ROOT / "data" / "eval" / "discovery-pools-openalex-a2.manifest.json"
 CURVE_S = (1.0, 1.5, 2.0, 2.5, 3.0)
 
 
@@ -272,6 +278,12 @@ MUTANTS = {
     "address": "elif False:",
     "auto-redirect": "if False:",
     "missing-hop": "if False:",
+}
+#: A2's rule (D125), broken the ways a careless edit would break it.
+A2_MUTANTS = {
+    "a2-deadline": "fits = p95 is not None and p95 < A2_DEADLINE_S",
+    "a2-anchors": "if fits and 2 * row[\"keyword_anchors\"] > n_anchors:",
+    "a2-failures": 'all_s = [o["latency_s"] if o is not None else float("inf")',
 }
 
 
@@ -527,6 +539,44 @@ def _containment_test(document: Any = None) -> list[str]:
     return failures
 
 
+def _a2_tests(protocol: dict[str, Any], choice: Any = None, analysis: Any = None) -> list[str]:
+    """A2 (D125): the adapter builds the protocol's URLs, and the rule chooses what D125 says."""
+    choice = choice or a2_choice
+    analysis = analysis or addendum_a2
+    failures = []
+    spec = protocol["sources"]["openalex"]["search"]
+    phrased = [(t, ph) for t in protocol["topics"] for ph in ("keyword", "natural_language")]
+    for t, ph in phrased:
+        for size in A2_SIZES:
+            want = httpx.URL(spec["url"], params={**spec["params"], "search": openalex_query(t[ph]),
+                                                  "per_page": size})
+            got = OpenAlexSource("selftest").request(t[ph], limit=size).url
+            if got != want:
+                failures.append(f"A2: the adapter's URL for {t['id']}-{ph} at {size} is not the protocol's")
+
+    def row(p95: float | None, anchors: int) -> dict[str, Any]:
+        return {"p95_s": p95, "keyword_anchors": anchors}
+
+    cases = [
+        ("the deadline is inclusive", {50: row(2.3, 14), 25: row(2.0, 12), 15: row(1.4, 12)}, 25),
+        ("the largest passing size wins", {50: row(1.9, 14), 25: row(1.5, 12), 15: row(1.2, 12)}, 50),
+        ("a failure at the 95th rank fails the size", {50: row(None, 14), 25: row(None, 12), 15: row(1.6, 12)}, 15),
+        ("half the anchors is enough", {50: row(2.4, 14), 25: row(1.8, 10), 15: row(1.5, 10)}, 25),
+        ("under half is not", {50: row(2.4, 14), 25: row(1.8, 9), 15: row(1.5, 9)}, None),
+    ]
+    for name, per_size, want in cases:
+        if (got_size := choice(per_size, 20)) != want:
+            failures.append(f"A2 rule: {name}: chose {got_size}, want {want}")
+    # Two failed requests of 20 put a failure at the 19th rank, which is nearest-rank p95.
+    outcomes = [{"rid": f"A2/{t['id']}-{ph}/25", "pass": "A2", "outcome": "timeout" if i < 2 else "ok",
+                 "latency_s": 1.0, "headers_s": 0.5, "bytes": 1000, "headers": {}}
+                for i, (t, ph) in enumerate(phrased)]
+    result = analysis(protocol, [], outcomes)
+    if result is None or result["per_size"]["25"]["p95_s"] is not None:
+        failures.append("A2 counts a failed request as finishing in time (D125)")
+    return failures
+
+
 def selftest() -> int:
     protocol, digest = load_protocol()
     results: dict[str, Any] = {"protocol_sha256": digest, "at": iso(wall())}
@@ -605,6 +655,17 @@ def selftest() -> int:
         failures.append("budget allows a 41st A1 request (D120)")
     if not a1_budget.can([("api", "arxiv_api", "search")]):
         failures.append("A1's budget spends the P1-P5 arXiv budget (D120)")
+    a2_budget = Budget(protocol)
+    a2_keys = [("api", "openalex", "a2")]
+    for _ in range(protocol["addenda"]["A2"]["budget"]["max"]["searches"]):
+        a2_budget.take(a2_keys)
+    if a2_budget.can(a2_keys):
+        failures.append("budget allows a 61st A2 request (D125)")
+    if not a2_budget.can([("api", "openalex", "search")]):
+        failures.append("A2's budget spends the P1-P5 OpenAlex budget (D125)")
+    a2 = _a2_tests(protocol)
+    failures += a2
+    results["addendum_a2"] = {"failures": a2}
     replayed = Budget(protocol)
     replayed.replay([{"event": "sending", "budget_keys": [["probe_host", "arxiv.org"], ["probe_total"]]}] * 120)
     if replayed.can([("probe_host", "arxiv.org"), ("probe_total",)]):
@@ -661,6 +722,14 @@ def selftest() -> int:
         mutants[f"fetch:{name}"] = {"caught": bool(under["failures"]), "caught_by": under["failures"]}
         if not under["failures"]:
             failures.append(f"mutant fetch:{name} survived")
+    for name, replacement in A2_MUTANTS.items():
+        target = addendum_a2 if name == "a2-failures" else a2_choice
+        mutated = _mutated(target, name, replacement)
+        caught_by = (_a2_tests(protocol, analysis=mutated) if name == "a2-failures"
+                     else _a2_tests(protocol, choice=mutated))
+        mutants[name] = {"caught": bool(caught_by), "caught_by": caught_by}
+        if not caught_by:
+            failures.append(f"mutant {name} survived")
     for name, replacement in DOCUMENT_MUTANTS.items():
         caught_by = _containment_test(_mutated(probe_document, name, replacement))
         mutants[f"document:{name}"] = {"caught": bool(caught_by), "caught_by": caught_by}
@@ -1251,6 +1320,88 @@ def addendum_a1(protocol: dict[str, Any], bodies: list[dict[str, Any]],
     return out
 
 
+#: D122's source deadline: the bar A2 judges each page size's latency against (D125).
+A2_DEADLINE_S = 2.0
+
+
+def a2_choice(per_size: dict[int, dict[str, Any]], n_anchors: int) -> int | None:
+    """D125's rule: the largest page whose p95 fits the deadline and whose keyword anchors reach 50%.
+
+    `p95_s` is None when the 95th-ranked request failed, which no deadline admits.
+    """
+    for size in sorted(per_size, reverse=True):
+        row = per_size[size]
+        p95 = row["p95_s"]
+        fits = p95 is not None and p95 <= A2_DEADLINE_S  # MUTATION-POINT: a2-deadline
+        if fits and 2 * row["keyword_anchors"] >= n_anchors:  # MUTATION-POINT: a2-anchors
+            return size
+    return None
+
+
+def addendum_a2(protocol: dict[str, Any], bodies: list[dict[str, Any]],
+                outcomes: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """A2 (D125): OpenAlex latency and anchors at three page sizes, and the pre-registered choice."""
+    a2_bodies = [e for e in bodies if e.get("pass") == "A2"]
+    a2_out = {o["rid"]: o for o in outcomes if o.get("pass") == "A2"}
+    if not a2_out:
+        return None
+    anchor_list = [(t["id"], a) for t in protocol["topics"] for a in t["anchors"]]
+    verified = _verified_anchor_ids(protocol, bodies)
+    query_ids = [f"{t['id']}-{ph}" for t in protocol["topics"] for ph in ("keyword", "natural_language")]
+    parsed = {(e["query_id"], e["per_page"]): parse("openalex", e["body"])
+              for e in a2_bodies if e.get("status") == 200}
+    per_size: dict[int, dict[str, Any]] = {}
+    for size in A2_SIZES:
+        rows = [a2_out.get(f"A2/{q}/{size}") for q in query_ids]
+        ok = [o for o in rows if o is not None and o["outcome"] == "ok"]
+        # Every planned request counts; one that failed or was never sent did not finish.
+        all_s = [o["latency_s"] if o is not None and o["outcome"] == "ok" else float("inf")  # MUTATION-POINT: a2-failures
+                 for o in rows]
+        p95 = nearest_rank(all_s, 95)
+        hits = []
+        for topic, anchor in anchor_list:
+            page = parsed.get((f"{topic}-keyword", size))
+            rank, rule, _ = (_anchor_rank(page.records, anchor, verified[anchor["arxiv_id"]])
+                             if page is not None else (None, None, []))
+            hits.append({"topic": topic, "anchor": anchor["title"], "rank": rank, "rule": rule,
+                         "query_failed": page is None})
+        per_size[size] = {
+            "requests": len([o for o in rows if o is not None]),
+            "outcomes": dict(Counter(o["outcome"] for o in rows if o is not None)),
+            "p95_s": None if p95 is None or p95 == float("inf") else p95,
+            "latency_ok_s": _pct([o["latency_s"] for o in ok]),
+            "within_deadline": wilson(sum(1 for x in all_s if x <= A2_DEADLINE_S), len(query_ids)),
+            "headers_s": _pct([o["headers_s"] for o in ok if o.get("headers_s") is not None]),
+            "bytes": _pct([float(o["bytes"]) for o in ok if o.get("bytes") is not None]),
+            "keyword_anchors": sum(1 for h in hits if h["rank"] is not None and h["rank"] <= size),
+            "anchors": hits,
+        }
+    prefix: dict[str, Any] = {}
+    for size in A2_SIZES[1:]:
+        same = differ = 0
+        examples = []
+        for q in query_ids:
+            big, small = parsed.get((q, 50)), parsed.get((q, size))
+            if big is None or small is None:
+                continue
+            if [r.source_id for r in small.records] == [r.source_id for r in big.records[:size]]:
+                same += 1
+            else:
+                differ += 1
+                examples.append(q)
+        prefix[str(size)] = {"same_as_first_of_50": same, "differ": differ, "differing_queries": examples}
+    cost = sum(float((o.get("headers") or {}).get("x-ratelimit-cost-usd") or 0) for o in a2_out.values())
+    choice = a2_choice(per_size, len(anchor_list))
+    return {
+        "deadline_s": A2_DEADLINE_S,
+        "per_size": {str(k): v for k, v in per_size.items()},
+        "prefix_of_50": prefix,
+        "cost_usd": round(cost, 4),
+        "decision": {"rule": protocol["addenda"]["A2"]["decision_rule"], "n_anchors": len(anchor_list),
+                     "chosen_per_page": choice, "owner_decides": choice is None},
+    }
+
+
 def planned_coverage(protocol: dict[str, Any], api: list[dict[str, Any]]) -> dict[str, Any]:
     decided_rids = decided(api)
     missing = []
@@ -1270,6 +1421,12 @@ def planned_coverage(protocol: dict[str, Any], api: list[dict[str, Any]]) -> dic
                 for join in ("AND", "OR"):
                     if f"A1/{t['id']}-{ph}/{join}" not in decided_rids:
                         missing.append(f"A1/{t['id']}-{ph}/{join}")
+    if any(r.get("pass") == "A2" for r in api):  # and A2 once its run has started
+        for t in protocol["topics"]:
+            for ph in ("keyword", "natural_language"):
+                for size in A2_SIZES:
+                    if f"A2/{t['id']}-{ph}/{size}" not in decided_rids:
+                        missing.append(f"A2/{t['id']}-{ph}/{size}")
     return {"missing": missing, "complete": not missing}
 
 
@@ -1332,6 +1489,7 @@ def analyse() -> int:
                  "openalex_bodies_with_relevance_score": relevance_present},
         "asm2": asm2(protocol, run),
         "addendum_a1": addendum_a1(protocol, bodies, outcomes),
+        "addendum_a2": addendum_a2(protocol, bodies, outcomes),
         "evidence": {"allowlist": allowlist_evidence(run), "licence": licence_evidence(run),
                      "dedup": dedup_evidence(), "stability": stability(bodies), "phrasing": phrasing(bodies)},
     }
@@ -1544,15 +1702,16 @@ def _requests_doc(run: dict[str, list[dict[str, Any]]], digest: str, s2_ids: set
             "records": api_rows}
 
 
-def _verify_frozen_pools(entries: list[dict[str, Any]]) -> None:
-    """The committed pools still hash to their manifest and hold exactly these entries."""
-    manifest = json.loads(POOLS_MANIFEST_PATH.read_text(encoding="utf-8"))
-    blob = POOLS_PATH.read_bytes()
+def _verify_frozen_pools(entries: list[dict[str, Any]], path: Path = POOLS_PATH,
+                         manifest_path: Path = POOLS_MANIFEST_PATH) -> None:
+    """Committed pools still hash to their manifest and hold exactly these entries."""
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    blob = path.read_bytes()
     if hashlib.sha256(blob).hexdigest() != manifest["sha256"]:
-        raise SystemExit(f"{POOLS_PATH.name} no longer matches its manifest's SHA-256")
+        raise SystemExit(f"{path.name} no longer matches its manifest's SHA-256")
     frozen = sorted(e["rid"] for e in json.loads(gzip.decompress(blob))["entries"])
     if frozen != sorted(e["rid"] for e in entries):
-        raise SystemExit(f"{POOLS_PATH.name} and the run log disagree about which responses it holds")
+        raise SystemExit(f"{path.name} and the run log disagree about which responses it holds")
 
 
 def finalize_a1() -> int:
@@ -1611,6 +1770,65 @@ def finalize_a1() -> int:
     return 0
 
 
+def finalize_a2() -> int:
+    """A2's tracked outputs (D125): its own pools, and the request log with A2 in it.
+
+    The spike's pools and A1's are verified against the log and not rewritten: a rerun
+    of finalize-a1 now would restamp A1's manifest with this protocol's hash.
+    """
+    protocol, digest = load_protocol()
+    env = load_env()
+    secrets = Secrets([env.get("OPENALEX_API_KEY", ""), env.get("S2_API_KEY", "")])
+    run = load_run()
+    s2_ids = _s2_ids(run["bodies"])
+    _verify_frozen_pools([e for e in run["bodies"] if e.get("source") in ("openalex", "arxiv")
+                          and e.get("pass") in ASM1_PASSES])
+    _verify_frozen_pools([e for e in run["bodies"] if e.get("pass") == "A1"],
+                         POOLS_A1_PATH, POOLS_A1_MANIFEST_PATH)
+    print(f"{POOLS_PATH.relative_to(ROOT)} and {POOLS_A1_PATH.relative_to(ROOT)} verified against the "
+          "log; not rewritten")
+
+    text = json.dumps(_requests_doc(run, digest, s2_ids), indent=1, ensure_ascii=False, default=str)
+    secrets.assert_absent(text, where=str(OUT_REQUESTS))
+    OUT_REQUESTS.write_text(text + "\n", encoding="utf-8")
+    print("wrote", OUT_REQUESTS.relative_to(ROOT))
+
+    entries = sorted((e for e in run["bodies"] if e.get("pass") == "A2"), key=lambda e: e["rid"])
+    if not entries or any(e.get("source") != "openalex" for e in entries):
+        raise SystemExit("A2 holds no responses, or holds a response not from OpenAlex")
+    payload = json.dumps({"protocol_sha256": digest, "entries": entries}, ensure_ascii=False,
+                         sort_keys=True).encode("utf-8")
+    secrets.assert_absent(payload.decode("utf-8"), where=str(POOLS_A2_PATH))
+    with POOLS_A2_PATH.open("wb") as raw, gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0) as gz:
+        gz.write(payload)
+    blob = POOLS_A2_PATH.read_bytes()
+    manifest = {
+        "dataset": "scholiast-m4-discovery-pools-openalex-a2",
+        "decision": "D125",
+        "protocol_sha256": digest,
+        "file": POOLS_A2_PATH.name,
+        "sha256": hashlib.sha256(blob).hexdigest(),
+        "bytes": len(blob),
+        "entries": len(entries),
+        "by_per_page_and_phrasing": dict(Counter(f"{e['per_page']}/{e['phrasing']}" for e in entries)),
+        "recorded_from": min(e["received_at"] for e in entries),
+        "recorded_to": max(e["received_at"] for e in entries),
+        "licence": "OpenAlex data CC0",
+        "request": {"built_by": "scholiast.infrastructure.discovery.openalex.OpenAlexSource.request",
+                    "adapter_version": ADAPTER_VERSION, "select": SELECT, "per_page": list(A2_SIZES)},
+        "addendum": protocol["addenda"]["A2"],
+        "caveat": protocol["pools_caveat"],
+    }
+    POOLS_A2_MANIFEST_PATH.write_text(json.dumps(manifest, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    reloaded = json.loads(gzip.decompress(POOLS_A2_PATH.read_bytes()))
+    assert hashlib.sha256(POOLS_A2_PATH.read_bytes()).hexdigest() == manifest["sha256"]
+    assert len(reloaded["entries"]) == len(entries)
+    bad = [e["rid"] for e in reloaded["entries"] if e["status"] == 200 and parse("openalex", e["body"]).error]
+    print(f"wrote {POOLS_A2_PATH.relative_to(ROOT)} ({len(blob)} bytes, {len(entries)} entries); "
+          f"reload verified; unparseable 200s: {bad or 'none'}")
+    return 0
+
+
 def _rid_public(rid: str, key_public: Any) -> str:
     parts = rid.split("/")
     if len(parts) >= 3 and parts[0] in ("P3", "P4"):
@@ -1631,9 +1849,9 @@ def leakcheck() -> int:
     tracked_outputs = [OUT_REQUESTS, OUT_PROBE, OUT_ANALYSIS, RESULTS_DIR / "19_selftest.json",
                        POOLS_MANIFEST_PATH, FINDINGS, ROOT / "spike" / "m4-protocol.json",
                        ROOT / "spike" / ".env.example", ROOT / "spike" / "README.md",
-                       POOLS_A1_MANIFEST_PATH]
+                       POOLS_A1_MANIFEST_PATH, POOLS_A2_MANIFEST_PATH]
     texts = {str(p.relative_to(ROOT)): p.read_text(encoding="utf-8") for p in tracked_outputs if p.exists()}
-    for pools in (POOLS_PATH, POOLS_A1_PATH):
+    for pools in (POOLS_PATH, POOLS_A1_PATH, POOLS_A2_PATH):
         if pools.exists():
             texts[str(pools.relative_to(ROOT))] = gzip.decompress(pools.read_bytes()).decode("utf-8")
     for p in sorted((ROOT / "spike" / "scripts").glob("m4_*.py")) + sorted((ROOT / "spike" / "scripts").glob("1[789]_*.py")):
@@ -1656,9 +1874,9 @@ def leakcheck() -> int:
                 problems.append(f"{name}: contains a bearer token")
             if re.search(r"api_key=", text, re.IGNORECASE):
                 problems.append(f"{name}: contains an api_key parameter")
-    pools_text = texts.get(str(POOLS_PATH.relative_to(ROOT)), "")
-    if '"source": "semantic_scholar"' in pools_text:
-        problems.append("pools contain Semantic Scholar entries")
+    for pools in (POOLS_PATH, POOLS_A1_PATH, POOLS_A2_PATH):
+        if '"source": "semantic_scholar"' in texts.get(str(pools.relative_to(ROOT)), ""):
+            problems.append(f"{pools.name} contains Semantic Scholar entries")
 
     status = subprocess.run(["git", "status", "--porcelain", "--untracked-files=all"], cwd=ROOT,
                             capture_output=True, text=True, encoding="utf-8", errors="replace", check=True)
@@ -1686,10 +1904,10 @@ def leakcheck() -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=["selftest", "check", "analyse", "finalize", "finalize-a1",
-                                            "leakcheck"])
+                                            "finalize-a2", "leakcheck"])
     command = parser.parse_args().command
     return {"selftest": selftest, "check": check, "analyse": analyse, "finalize": finalize,
-            "finalize-a1": finalize_a1, "leakcheck": leakcheck}[command]()
+            "finalize-a1": finalize_a1, "finalize-a2": finalize_a2, "leakcheck": leakcheck}[command]()
 
 
 if __name__ == "__main__":

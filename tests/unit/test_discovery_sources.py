@@ -13,6 +13,7 @@ count invented as zero, and a PDF link rebuilt from a bare id.
 from __future__ import annotations
 
 import json
+import ssl
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
@@ -117,7 +118,7 @@ class TestOpenAlexParsing:
         assert page.source == "openalex" and page.skipped == 0
         assert page.total_hits is not None and page.total_hits > len(page.candidates)
         assert [c.rank for c in page.candidates] == [1, 2, 3]
-        assert {c.adapter_version for c in page.candidates} == {"openalex-1"}
+        assert {c.adapter_version for c in page.candidates} == {"openalex-2"}
 
     def test_an_arxiv_id_is_found_through_a_location_when_the_doi_is_a_publishers(self) -> None:
         # Phase 7 links this work to arXiv's record of it only through this id.
@@ -333,3 +334,75 @@ class TestArxivFailures:
         )
         page = await arxiv().search("dense retrieval open domain question answering", limit=50)
         assert route.call_count == 1 and len(page.candidates) == 3
+
+
+class TestASearchDoesNotRebuildTheTlsContext:
+    """D122: a TLS context costs 183 ms to build, synchronously, on this machine.
+
+    Phase 2's adapters built one per search, inside a fresh httpx client, so two
+    sources blocked the event loop for about 370 ms before either request left:
+    18% of the 2.0 s deadline, and outside what addendum A2 measured. Found because
+    the fan-out tests through the real adapters took 0.38 s each.
+    """
+
+    @respx.mock
+    async def test_searches_after_the_first_build_no_tls_context(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        respx.get(f"{OPENALEX}/works").mock(
+            return_value=httpx.Response(200, text=fixture("openalex_search.json"))
+        )
+        respx.get(ARXIV).mock(return_value=httpx.Response(200, text=fixture("arxiv_search.xml")))
+        # The shared context may be built once, by whoever needs it first.
+        await openalex().search("dense retrieval", limit=25)
+        await arxiv().search("dense retrieval", limit=50)
+
+        built: list[object] = []
+        real = ssl.create_default_context
+
+        def counting(*args: object, **kwargs: object) -> ssl.SSLContext:
+            built.append(args)
+            return real(*args, **kwargs)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(ssl, "create_default_context", counting)
+        for _ in range(2):
+            await openalex().search("dense retrieval", limit=25)
+            await arxiv().search("dense retrieval", limit=50)
+
+        assert built == [], f"{len(built)} TLS contexts built for 4 searches"
+
+
+class TestAPoisonedLinkCostsTheLinkNotTheRecord:
+    """D122: a non-http(s) URL in a source's record is dropped before it reaches a browser.
+
+    Dropped, not refused with the record: a `javascript:` link raising inside the
+    parser would fail the whole page, and one poisoned record in OpenAlex would then
+    take OpenAlex out of every search that matched it.
+    """
+
+    def test_openalex_drops_the_bad_link_and_keeps_the_rest(self) -> None:
+        payload = json.loads(fixture("openalex_search.json"))
+        work = payload["results"][1]
+        work["best_oa_location"]["pdf_url"] = "javascript:alert(document.cookie)"
+        work["open_access"]["oa_url"] = "data:text/html,<script>alert(1)</script>"
+
+        page = parse_works(payload)
+
+        kept = page.candidates[1]
+        assert len(page.candidates) == 3
+        assert [link.url for link in kept.oa_links] == [
+            "https://www.aclweb.org/anthology/2020.emnlp-main.550.pdf",
+            "https://arxiv.org/pdf/2004.04906",
+        ]
+
+    def test_arxiv_drops_the_bad_link_and_keeps_the_rest(self) -> None:
+        feed = fixture("arxiv_search.xml").replace(
+            'href="https://arxiv.org/pdf/2004.04906v3"', 'href="javascript:alert(1)"'
+        )
+
+        page = parse_feed(feed)
+
+        assert len(page.candidates) == 3
+        assert page.candidates[0].arxiv_id == "2004.04906"
+        assert page.candidates[0].oa_links == ()
+        assert all(link.url.startswith("https://") for c in page.candidates for link in c.oa_links)

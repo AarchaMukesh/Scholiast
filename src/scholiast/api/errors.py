@@ -23,6 +23,7 @@ so this handler could not leak it even if it wanted to.
 
 from __future__ import annotations
 
+import math
 from http import HTTPStatus
 
 from fastapi import FastAPI, Request
@@ -30,6 +31,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from scholiast.application.ports.security import AuthenticationFailed
+from scholiast.application.use_cases.discover_papers import NoSourceAnswered
 from scholiast.domain.errors import (
     DomainError,
     FailureClass,
@@ -192,6 +194,36 @@ def register_error_handlers(app: FastAPI) -> None:
             instance=request.url.path,
         )
         response.headers["Retry-After"] = str(max(1, int(exc.retry_after) + 1))
+        return response
+
+    @app.exception_handler(NoSourceAnswered)
+    async def _no_source(request: Request, exc: NoSourceAnswered) -> JSONResponse:
+        # 503, never an empty 200 (D119, D122): an empty list would tell the user
+        # there are no papers on the topic when the truth is that no source
+        # answered. Each source's status goes with it, as on a partial result;
+        # why each failed does not, because that text is a third party's.
+        response = problem(
+            status=HTTPStatus.SERVICE_UNAVAILABLE,
+            slug="discovery-unavailable",
+            title="No discovery source answered",
+            detail="None of the academic sources answered this search. Try again shortly.",
+            instance=request.url.path,
+            source_status=[
+                {
+                    "source": o.source,
+                    "status": o.status.value,
+                    "results": 0,
+                    "total_hits": None,
+                    "retry_after_seconds": o.retry_after,
+                }
+                for o in exc.sources
+            ],
+        )
+        # When every source said when it will take work again, the soonest of
+        # those is when this search can next succeed. Otherwise nothing is known.
+        waits = [o.retry_after for o in exc.sources if o.retry_after is not None]
+        if waits and len(waits) == len(exc.sources):
+            response.headers["Retry-After"] = str(max(1, math.ceil(min(waits))))
         return response
 
     @app.exception_handler(AuthenticationFailed)

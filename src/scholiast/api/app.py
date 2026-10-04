@@ -33,10 +33,12 @@ from fastapi.staticfiles import StaticFiles
 
 from scholiast.api.errors import register_error_handlers
 from scholiast.api.middleware import ObservabilityMiddleware
-from scholiast.api.routers import auth, chat, health, papers, workspaces
+from scholiast.api.routers import auth, chat, discovery, health, papers, workspaces
 from scholiast.application.ports.ml import Precision
 from scholiast.config.settings import Settings, get_settings
 from scholiast.infrastructure.db.engine import build_engine, build_session_factory
+from scholiast.infrastructure.discovery import tls_context
+from scholiast.infrastructure.discovery.sources import build_discovery_sources
 from scholiast.infrastructure.llm.chain import build_provider_chain
 from scholiast.infrastructure.ml.embedder import LocalEmbedder
 from scholiast.infrastructure.observability.logging import configure_logging
@@ -100,6 +102,9 @@ async def api_lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     app.state.index = index
     app.state.providers = build_provider_chain(settings)
+    # Build discovery's shared TLS context now, so the first search after a restart
+    # does not spend 183 ms of blocked event loop on it (D122).
+    tls_context()
 
     # Creates the collection and its payload index, or refuses to start if an
     # existing collection was built for a different embedder (D46, and the
@@ -153,6 +158,11 @@ def create_app(
     # that forgot it would 500 on the first limited route. One per app, which in
     # production is one per process (D112).
     app.state.rate_limiter = FixedWindowLimiter()
+    # Discovery's sources, breakers and arXiv pacer (D122, D123). Here and not in
+    # the lifespan for the limiter's reason, and because they are state that must
+    # outlive a request: a pacer rebuilt per request would pace nothing. Building
+    # them opens no connection, so a test app pays nothing for them.
+    app.state.discovery_sources = build_discovery_sources(app.state.settings)
 
     # FR-O1. Configured here rather than in the lifespan for the same reason the
     # dispatcher is: every lifespan override would otherwise have to remember it,
@@ -172,6 +182,7 @@ def create_app(
     app.include_router(papers.router)
     app.include_router(papers.jobs_router)
     app.include_router(chat.router)
+    app.include_router(discovery.router)
 
     if STATIC_DIR.is_dir():
         # Mounted last and at the root, so it cannot shadow an API route.
