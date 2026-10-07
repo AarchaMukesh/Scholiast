@@ -35,6 +35,7 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from scholiast.application.ports.fetch import PdfFetcher
 from scholiast.application.ports.ml import Embedder
 from scholiast.application.ports.parsing import DocumentParser
 from scholiast.application.ports.queue import DEFAULT_LEASE_SECONDS, QueuedJob
@@ -51,6 +52,7 @@ from scholiast.infrastructure.db.repositories import (
     SqlChunkRepository,
     SqlPaperRepository,
     SqlSectionRepository,
+    SqlWorkspaceRepository,
 )
 from scholiast.infrastructure.observability.logging import bind_correlation_id
 from scholiast.infrastructure.queue.postgres import PostgresQueue
@@ -101,12 +103,18 @@ class IngestionWorker:
         index: VectorIndex,
         config: WorkerConfig | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        fetcher: PdfFetcher | None = None,
     ) -> None:
         self._sessions = sessions
         self._store = store
         self._parser = parser
         self._embedder = embedder
         self._index = index
+        #: One per process, not per job (D134): its per-host pacing is what keeps
+        #: arXiv's 15 s between this worker's requests, and a fetcher built per job
+        #: would start every job with a clean slate. None in a worker that only
+        #: ever sees uploads; a paper awaiting its PDF then fails loudly.
+        self._fetcher = fetcher
         self._config = config or WorkerConfig()
         self._clock = clock
         self._stopping = asyncio.Event()
@@ -223,13 +231,32 @@ class IngestionWorker:
                 uow=SqlUnitOfWork(session),
                 chunking=self._config.chunking,
                 embed_batch_size=self._config.embed_batch_size,
+                workspaces=SqlWorkspaceRepository(session, scope),
+                fetcher=self._fetcher,
+                # The lease this worker claims with, so a heartbeat renews the
+                # same lease the claim took rather than the port's default.
+                lease_seconds=self._config.lease_seconds,
             )
             outcome = await use_case.execute(
                 job_id=job.id,
                 workspace_id=job.workspace_id,
                 paper_id=job.paper_id,
                 membership=membership,
+                source_links=job.source_links,
             )
+
+            if outcome.merged_into is not None:
+                # D134: the owner already had this PDF. The use case re-homed the
+                # membership and completed the job itself, and the job row may be
+                # gone with the placeholder paper, so there is nothing to complete.
+                log.info(
+                    "ingestion.merged",
+                    job_id=job.id,
+                    paper_id=job.paper_id,
+                    merged_into=outcome.merged_into,
+                    workspace_id=job.workspace_id,
+                )
+                return outcome
 
             if outcome.succeeded:
                 if not await queue.complete(job.id):

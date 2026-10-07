@@ -53,6 +53,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from scholiast.domain.errors import FailureClass
 from scholiast.domain.paper import (
     ChunkRole,
+    PaperOrigin,
     PaperVisibility,
     ParseStatus,
     SectionKind,
@@ -166,7 +167,18 @@ class Paper(Base):
     owner_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True
     )
-    content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    #: NULL only while a discovered paper awaits its PDF (D132); see
+    #: ck_papers_hash_or_awaiting below.
+    content_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    #: Identity by external id (FR-I7, D132). Columns, not `external_ids` paths,
+    #: because `update()` rewrites `external_ids` on every parse and identity
+    #: under a unique index must sit where an update cannot move it.
+    doi: Mapped[str | None] = mapped_column(Text, nullable=True)
+    arxiv_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: Whose metadata wins on a parse (D135).
+    origin: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=PaperOrigin.UPLOAD.value
+    )
     external_ids: Mapped[dict[str, Any]] = mapped_column(
         JSONB, nullable=False, default=dict, server_default=sa_text("'{}'::jsonb")
     )
@@ -216,6 +228,25 @@ class Paper(Base):
             "(visibility = 'private') = (owner_id IS NOT NULL)",
             name="ck_papers_private_iff_owned",
         ),
+        CheckConstraint(_one_of("origin", PaperOrigin), name="ck_papers_origin"),
+        # D132. A row without its PDF has parsed nothing and can be found by an
+        # identifier; the domain entity enforces the same rule.
+        CheckConstraint(
+            "content_hash IS NOT NULL OR "
+            "(parse_status = 'pending' AND (doi IS NOT NULL OR arxiv_id IS NOT NULL))",
+            name="ck_papers_hash_or_awaiting",
+        ),
+        # One spelling per identity, or the unique indexes below enforce nothing:
+        # lowercase, and never arXiv's DataCite DOI, which is an arXiv id.
+        CheckConstraint(
+            "doi IS NULL OR (doi = lower(doi) AND doi LIKE '10.%/%' "
+            "AND doi NOT LIKE '10.48550/arxiv.%')",
+            name="ck_papers_doi_canonical",
+        ),
+        CheckConstraint(
+            "arxiv_id IS NULL OR (arxiv_id = lower(arxiv_id) AND arxiv_id !~ 'v[0-9]+$')",
+            name="ck_papers_arxiv_id_canonical",
+        ),
         # Open-access papers deduplicate globally: parsed and embedded once.
         Index(
             "uq_papers_public_hash",
@@ -232,6 +263,22 @@ class Paper(Base):
             "content_hash",
             unique=True,
             postgresql_where=("visibility = 'private'"),
+        ),
+        # A user holds one row per work (D132). Per owner, because discovered
+        # papers are private (D131): two users adding one paper get two rows.
+        Index(
+            "uq_papers_private_owner_doi",
+            "owner_id",
+            "doi",
+            unique=True,
+            postgresql_where=("visibility = 'private' AND doi IS NOT NULL"),
+        ),
+        Index(
+            "uq_papers_private_owner_arxiv",
+            "owner_id",
+            "arxiv_id",
+            unique=True,
+            postgresql_where=("visibility = 'private' AND arxiv_id IS NOT NULL"),
         ),
     )
 
@@ -449,6 +496,10 @@ class IngestionJob(Base):
     #: Nullable because every row written before migration 0006 has no request
     #: behind it, and because a job the sweep created has no request either.
     correlation_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: The open-access links the FETCHING stage tries, best first (D133, D134).
+    #: On the job, not the paper: input to this unit of work, irrelevant once the
+    #: paper has its PDF. NULL for uploads, which have their bytes already.
+    source_links: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
     #: The lease. A crashed worker's job becomes visible again rather than being
     #: lost, which is the at-least-once half of AD-5.
     visible_at: Mapped[datetime] = mapped_column(

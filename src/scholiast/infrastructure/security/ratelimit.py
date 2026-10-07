@@ -75,14 +75,20 @@ class FixedWindowLimiter:
         #: makes oldest-first eviction a `next(iter(...))` rather than a sort.
         self._windows: dict[str, tuple[float, int]] = {}
 
-    def check(self, *, key: str, bucket: str, limit: Limit) -> Decision:
-        """Record one request and say whether it is allowed.
+    def check(self, *, key: str, bucket: str, limit: Limit, cost: int = 1) -> Decision:
+        """Record one request costing `cost` and say whether it is allowed.
+
+        `cost` is how much of the allowance the request spends: one, except where
+        a bucket counts what a request carries rather than the request (D133's add,
+        which counts papers). A request that does not fit whole is refused whole.
 
         Counting and deciding are one operation on purpose. Splitting them into
         `allowed()` then `record()` would leave a window where two concurrent
         requests both read a count below the limit and both proceed — and this
         runs on an event loop where that interleaving is ordinary.
         """
+        if cost < 1:
+            raise ValueError(f"a request costs at least 1, got {cost}")
         now = self._clock()
         tracked = f"{bucket}:{key}"
         started, count = self._windows.get(tracked, (now, 0))
@@ -105,7 +111,7 @@ class FixedWindowLimiter:
             # which is nothing.
             started, count = now, 0
 
-        if count >= limit.requests:
+        if count + cost > limit.requests:
             # Not incremented. Counting refused requests would extend the
             # penalty every time a caller retried, which turns a rate limit into
             # an escalating ban nobody configured.
@@ -114,7 +120,7 @@ class FixedWindowLimiter:
                 allowed=False, retry_after=max(0.0, started + limit.window_seconds - now)
             )
 
-        self._windows[tracked] = (started, count + 1)
+        self._windows[tracked] = (started, count + cost)
         self._evict_if_needed()
         return Decision(allowed=True)
 

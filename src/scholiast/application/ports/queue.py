@@ -27,6 +27,7 @@ case commit a job alongside the rows it belongs to.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
@@ -70,14 +71,22 @@ class QueuedJob:
     #: None for a job enqueued outside a request, and for every row written
     #: before migration 0006.
     correlation_id: str | None = None
+    #: The open-access links a FETCHING job tries, best first (D133, D134).
+    #: Empty for an upload, whose bytes are stored already.
+    source_links: tuple[str, ...] = ()
 
 
 @runtime_checkable
 class Queue(Protocol):
     """Durable, at-least-once ingestion work."""
 
-    async def enqueue(self, *, workspace_id: str, paper_id: str) -> str:
+    async def enqueue(
+        self, *, workspace_id: str, paper_id: str, source_links: Sequence[str] = ()
+    ) -> str:
         """Record a job and return its id.
+
+        `source_links` travel with the job for a paper that still has to be
+        fetched (D134); they are input to this unit of work, not a paper fact.
 
         At-least-once delivery plus an idempotent consumer (FR-I7) is the
         contract; exactly-once is not offered because it cannot be honoured

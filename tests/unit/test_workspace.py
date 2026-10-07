@@ -339,3 +339,29 @@ class TestMembershipEntryStates:
 
     def test_the_default_entry_is_still_queued(self) -> None:
         assert workspace().add_paper("p-1", now=NOW).state is PaperState.QUEUED
+
+
+class TestABatchIsMeasuredWholeAgainstTheCap:
+    """D133: an add is all or nothing, so the cap is checked before any of it lands."""
+
+    def filled(self, count: int) -> Workspace:
+        ws = workspace()
+        for i in range(count):
+            ws.add_paper(f"paper-{i}", now=NOW)
+        return ws
+
+    def test_a_batch_that_fits_exactly_is_allowed(self) -> None:
+        self.filled(MAX_PAPERS_PER_WORKSPACE - 2).ensure_room_for(["a", "b"])
+
+    def test_one_paper_over_refuses_the_batch(self) -> None:
+        with pytest.raises(WorkspaceCapacityExceeded):
+            self.filled(MAX_PAPERS_PER_WORKSPACE - 2).ensure_room_for(["a", "b", "c"])
+
+    def test_papers_already_here_and_repeats_take_no_extra_room(self) -> None:
+        ws = self.filled(MAX_PAPERS_PER_WORKSPACE - 1)
+        ws.ensure_room_for(["paper-0", "paper-1", "new", "new"])
+
+    def test_a_removed_paper_frees_its_room(self) -> None:
+        ws = self.filled(MAX_PAPERS_PER_WORKSPACE)
+        ws.remove_paper("paper-0")
+        ws.ensure_room_for(["new"])

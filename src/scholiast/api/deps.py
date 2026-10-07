@@ -42,6 +42,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from scholiast.api.errors import RateLimited
+from scholiast.api.schemas import AddDiscoveredPapers
 from scholiast.application.ports.accounts import AccountRepository, SessionRepository
 from scholiast.application.ports.dispatch import JobDispatcher
 from scholiast.application.ports.llm import LLMProvider
@@ -57,6 +58,7 @@ from scholiast.application.ports.tenancy import (
     TenantContext,
 )
 from scholiast.application.ports.vector import VectorIndex
+from scholiast.application.use_cases.add_discovered import AddDiscoveredPapersUseCase
 from scholiast.application.use_cases.add_paper import AddPaperUseCase
 from scholiast.application.use_cases.answer_question import AnswerQuestionUseCase
 from scholiast.application.use_cases.authentication import (
@@ -71,6 +73,7 @@ from scholiast.application.use_cases.discover_papers import (
 )
 from scholiast.application.use_cases.remove_paper import RemovePaperUseCase
 from scholiast.config.settings import Settings
+from scholiast.domain.fetch_policy import host_allowlist
 from scholiast.infrastructure.db import pending
 from scholiast.infrastructure.db.accounts import SqlAccountRepository, SqlSessionRepository
 from scholiast.infrastructure.db.repositories import (
@@ -291,13 +294,13 @@ def _peer_key(request: Request) -> str:
     return f"ip:{client.host}" if client is not None else "ip:unknown"
 
 
-def _enforce(request: Request, *, bucket: str, allowance: int, key: str) -> None:
+def _enforce(request: Request, *, bucket: str, allowance: int, key: str, cost: int = 1) -> None:
     settings: Settings = request.app.state.settings
     if not settings.rate_limit_enabled:
         return
     limiter: FixedWindowLimiter = request.app.state.rate_limiter
     decision = limiter.check(
-        key=key, bucket=bucket, limit=Limit(requests=allowance, window_seconds=60.0)
+        key=key, bucket=bucket, limit=Limit(requests=allowance, window_seconds=60.0), cost=cost
     )
     if not decision.allowed:
         # Warning, not info: on a healthy system nobody hits these, so every line
@@ -363,6 +366,7 @@ AUTH_BUCKET = "auth"
 QA_BUCKET = "qa"
 UPLOAD_BUCKET = "upload"
 DISCOVERY_BUCKET = "discovery"
+ADD_BUCKET = "add"
 
 AuthRateLimit = Depends(peer_rate_limit(AUTH_BUCKET, lambda s: s.rate_limit_auth_per_minute))
 QaRateLimit = Depends(user_rate_limit(QA_BUCKET, lambda s: s.rate_limit_qa_per_minute))
@@ -370,6 +374,27 @@ UploadRateLimit = Depends(user_rate_limit(UPLOAD_BUCKET, lambda s: s.rate_limit_
 DiscoveryRateLimit = Depends(
     user_rate_limit(DISCOVERY_BUCKET, lambda s: s.rate_limit_discovery_per_minute)
 )
+
+
+def _add_rate_limit(request: Request, scope: TenantDep, body: AddDiscoveredPapers) -> None:
+    """Limit adding discovered papers, counting each PAPER rather than the request (D133).
+
+    Each paper is a lookup share, a paced fetch, a parse and an embedding pass, so
+    ten papers in one request must cost what ten requests would. The body is the
+    route's own (same name, same model), which FastAPI parses once; a malformed
+    body is a 422 before this runs and spends nothing.
+    """
+    _enforce(
+        request,
+        bucket=ADD_BUCKET,
+        allowance=request.app.state.settings.rate_limit_add_per_minute,
+        key=f"user:{scope.user_id}",
+        cost=len(body.papers),
+    )
+
+
+_add_rate_limit.rate_limit_bucket = ADD_BUCKET  # type: ignore[attr-defined]
+AddRateLimit = Depends(_add_rate_limit)
 
 IndexDep = Annotated[VectorIndex, Depends(get_index)]
 EmbedderDep = Annotated[Embedder, Depends(get_embedder)]
@@ -508,3 +533,29 @@ def discover_use_case(request: Request) -> DiscoverPapersUseCase:
 
 
 DiscoverDep = Annotated[DiscoverPapersUseCase, Depends(discover_use_case)]
+
+
+def add_discovered_use_case(
+    request: Request,
+    session: SessionDep,
+    scope: TenantDep,
+    workspace_repo: WorkspacesDep,
+    paper_repo: PapersDep,
+) -> AddDiscoveredPapersUseCase:
+    settings: Settings = request.app.state.settings
+    return AddDiscoveredPapersUseCase(
+        workspaces=workspace_repo,
+        papers=paper_repo,
+        chunks=SqlChunkRepository(session, scope),
+        # Same session as the repositories: papers, memberships and jobs are one
+        # transaction (D47), so a batch that fails part-way leaves nothing (D133).
+        queue=PostgresQueue(session, scope),
+        # The process's sources, so a lookup passes through the same breakers and
+        # the same arXiv pacer as a search (D123, D133).
+        sources={c.source.name: c.source for c in get_discovery_sources(request)},
+        allowed_hosts=host_allowlist(settings.fetch_allowed_hosts),
+        owner_id=scope.user_id,
+    )
+
+
+AddDiscoveredDep = Annotated[AddDiscoveredPapersUseCase, Depends(add_discovered_use_case)]

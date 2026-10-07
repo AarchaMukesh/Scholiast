@@ -28,6 +28,7 @@ function where a table error is an SSRF hole.
 from __future__ import annotations
 
 import ipaddress
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum, unique
 from urllib.parse import urlsplit, urlunsplit
@@ -111,6 +112,16 @@ class UrlVerdict:
 
 def _refused(reason: Refusal) -> UrlVerdict:
     return UrlVerdict(url=None, host=None, refusal=reason)
+
+
+def host_allowlist(hosts: Iterable[str]) -> frozenset[str]:
+    """An allowlist in the form `check_fetch_url` compares hosts in: lowercase, no final dot.
+
+    One function, because the fetcher and the add endpoint must agree exactly on
+    what is allowed (D137): an add that accepted a link the fetcher then refused
+    would create the doomed job the refusal exists to prevent.
+    """
+    return frozenset(host.lower().rstrip(".") for host in hosts)
 
 
 def check_fetch_url(url: str, allowed_hosts: frozenset[str]) -> UrlVerdict:

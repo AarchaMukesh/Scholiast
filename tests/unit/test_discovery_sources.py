@@ -406,3 +406,141 @@ class TestAPoisonedLinkCostsTheLinkNotTheRecord:
         assert page.candidates[0].arxiv_id == "2004.04906"
         assert page.candidates[0].oa_links == ()
         assert all(link.url.startswith("https://") for c in page.candidates for link in c.oa_links)
+
+
+class TestALookupByIdIsOneRequestPerBatch:
+    """D133: an add resolves `{source, source_id}` at the source, one request a batch.
+
+    What fails silently here: an id the source rejects for the WHOLE request (OpenAlex
+    answers `W1` with a 400, measured 2026-10-07), which would read as the source
+    being down and count against its breaker; a record matched to an id nobody asked
+    for; and an unknown id read as an outage rather than as "not found".
+    """
+
+    @pytest.mark.parametrize("source_id", ["W12", "W4389984066", "W999999999999"])
+    def test_openalex_accepts_work_ids_as_search_returns_them(self, source_id: str) -> None:
+        assert openalex().is_valid_id(source_id)
+
+    @pytest.mark.parametrize(
+        "source_id",
+        [
+            "W1",  # OpenAlex's own 400 for the whole batch
+            "W0123",
+            "w4389984066",
+            "A5023888391",  # an author, not a work
+            "W4389984066 ",
+            "https://openalex.org/W4389984066",
+            "W1234567890123",
+            "",
+        ],
+    )
+    def test_openalex_refuses_ids_that_would_fail_the_whole_batch(self, source_id: str) -> None:
+        assert not openalex().is_valid_id(source_id)
+
+    def test_an_openalex_lookup_is_one_filtered_request_with_nothing_to_score(self) -> None:
+        request = openalex().lookup_request(["W4389984066", "W3015883388", "W4389984066"])
+        params = parse_qs(urlsplit(str(request.url)).query)
+        assert params["filter"] == ["openalex:W4389984066|W3015883388"]
+        assert params["per_page"] == ["2"]
+        # A lookup has no search to score against; the rest of the record is the same.
+        assert "relevance_score" not in params["select"][0]
+        assert "abstract_inverted_index" in params["select"][0]
+        assert KEY not in str(request.url)
+        assert request.headers["Authorization"] == f"Bearer {KEY}"
+
+    @pytest.mark.parametrize("source", [openalex, arxiv])
+    def test_a_bad_batch_is_refused_before_anything_is_sent(self, source: object) -> None:
+        build = source()  # type: ignore[operator]
+        good = "W12" if isinstance(build, OpenAlexSource) else "2004.04906"
+        for batch in ([], [good] * 11, [good, "nonsense"]):
+            with pytest.raises(ValueError):
+                build.lookup_request(batch)
+
+    @respx.mock
+    async def test_openalex_records_are_keyed_by_the_id_asked_for_and_unknown_ids_are_absent(
+        self,
+    ) -> None:
+        route = respx.get(f"{OPENALEX}/works").mock(
+            return_value=httpx.Response(200, text=fixture("openalex_search.json"))
+        )
+        found = await openalex().lookup(["W3015883388", "W12"])
+
+        assert route.call_count == 1
+        assert set(found) == {"W3015883388"}
+        assert found["W3015883388"].doi == "10.18653/v1/2020.emnlp-main.550"
+
+    @respx.mock
+    async def test_an_openalex_429_on_a_lookup_is_rate_limited_not_not_found(self) -> None:
+        respx.get(f"{OPENALEX}/works").mock(
+            return_value=httpx.Response(429, headers={"retry-after": "7"})
+        )
+        with pytest.raises(SourceUnavailable) as caught:
+            await openalex().lookup(["W12"])
+        assert caught.value.kind is SourceFailure.RATE_LIMITED
+        assert caught.value.retry_after == 7
+
+    @pytest.mark.parametrize(
+        "source_id",
+        [
+            "2004.04906",
+            "2004.04906v3",
+            "0704.0001",  # the first new-style month
+            "1412.9999",  # four digits until December 2014
+            "1501.00001",  # five from January 2015
+            "hep-th/9901001",
+            "hep-th/9901001v2",
+            "cond-mat/0102536",
+        ],
+    )
+    def test_arxiv_accepts_the_id_shapes_search_returns(self, source_id: str) -> None:
+        assert arxiv().is_valid_id(source_id)
+
+    @pytest.mark.parametrize(
+        "source_id",
+        [
+            "2004.4906",  # four digits after 2014
+            "1412.12345",  # five before 2015
+            "0703.0001",  # before new-style ids existed
+            "2013.12345",  # month 13
+            "2004.04906v0",
+            "math.GT/0309136",  # search returns the archive without its class
+            "HEP-TH/9901001",
+            "hep-th/9913001",
+            "arxiv:2004.04906",
+            "https://arxiv.org/abs/2004.04906",
+            "2004.04906.pdf",
+            "",
+        ],
+    )
+    def test_arxiv_refuses_ids_that_would_turn_the_whole_feed_into_an_error(
+        self, source_id: str
+    ) -> None:
+        assert not arxiv().is_valid_id(source_id)
+
+    def test_an_arxiv_lookup_is_one_id_list_request(self) -> None:
+        request = arxiv().lookup_request(["2004.04906v3", "2110.01599", "2004.04906v3"])
+        params = parse_qs(urlsplit(str(request.url)).query)
+        assert params == {"id_list": ["2004.04906v3,2110.01599"], "max_results": ["2"]}
+
+    @respx.mock
+    async def test_a_versioned_id_finds_that_revision_and_a_bare_id_finds_the_latest(
+        self,
+    ) -> None:
+        route = respx.get(ARXIV).mock(
+            return_value=httpx.Response(200, text=fixture("arxiv_search.xml"))
+        )
+        found = await arxiv().lookup(["2004.04906v3", "2110.01599", "2010.08191v1", "2004.99999"])
+
+        assert route.call_count == 1
+        assert found["2004.04906v3"].source_id == "2004.04906v3"
+        assert found["2110.01599"].source_id == "2110.01599v1"
+        # The feed carries v2; v1 was asked for, and another revision is not it.
+        assert "2010.08191v1" not in found
+        assert "2004.99999" not in found
+
+    @respx.mock
+    async def test_an_arxiv_error_feed_on_a_lookup_is_an_error_not_not_found(self) -> None:
+        respx.get(ARXIV).mock(return_value=httpx.Response(200, text=fixture("arxiv_error.xml")))
+        with pytest.raises(SourceUnavailable) as caught:
+            await arxiv().lookup(["2004.04906"])
+        assert caught.value.kind is SourceFailure.ERROR

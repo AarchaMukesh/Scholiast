@@ -21,7 +21,9 @@ from sqlalchemy import select
 
 from scholiast.api import schemas
 from scholiast.api.deps import (
+    AddDiscoveredDep,
     AddPaperDep,
+    AddRateLimit,
     PapersDep,
     RemovePaperDep,
     SectionsDep,
@@ -29,6 +31,7 @@ from scholiast.api.deps import (
     UploadRateLimit,
     WorkspacesDep,
 )
+from scholiast.application.use_cases.add_discovered import DiscoveredRef
 from scholiast.domain.errors import FailureClass, WorkspaceNotAvailable
 from scholiast.domain.upload import MAX_PDF_BYTES
 from scholiast.domain.workspace import PaperState, Workspace
@@ -71,6 +74,42 @@ async def upload_paper(
         job_id=result.job_id,
         state=result.state.value,
         deduplicated=result.deduplicated,
+    )
+
+
+@router.post(
+    "",
+    status_code=HTTPStatus.ACCEPTED,
+    response_model=schemas.AddDiscoveredAccepted,
+    dependencies=[AddRateLimit],
+)
+async def add_discovered_papers(
+    workspace_id: str, body: schemas.AddDiscoveredPapers, use_case: AddDiscoveredDep
+) -> schemas.AddDiscoveredAccepted:
+    """Add discovered papers by identifier, and queue each one's fetch (D133, D137).
+
+    The client sends `{source, source_id}` pairs exactly as search returned them.
+    The server looks each up at its source and creates the paper from the source's
+    own record, so no URL and no metadata is ever taken from the client. All or
+    nothing: a refused paper is a 422 naming it, and a source that does not answer
+    is a 503, with nothing written either way.
+    """
+    added = await use_case.execute(
+        workspace_id=workspace_id,
+        refs=[DiscoveredRef(source=p.source, source_id=p.source_id) for p in body.papers],
+    )
+    return schemas.AddDiscoveredAccepted(
+        papers=[
+            schemas.AddedPaperOut(
+                source=a.ref.source,
+                source_id=a.ref.source_id,
+                paper_id=a.result.paper_id,
+                job_id=a.result.job_id,
+                state=a.result.state.value,
+                deduplicated=a.result.deduplicated,
+            )
+            for a in added
+        ]
     )
 
 

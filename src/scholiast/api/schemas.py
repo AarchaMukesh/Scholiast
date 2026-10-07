@@ -18,6 +18,8 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
+from scholiast.application.use_cases.add_discovered import MAX_ADD_PAPERS
+
 
 class _Input(BaseModel):
     """Base for anything a client sends."""
@@ -283,3 +285,35 @@ class DiscoveryResults(BaseModel):
     #: How `results` is ordered. Until phase 8 ranks, it is each source's own order,
     #: interleaved, and the same paper can appear once per source (D122).
     ordering: Literal["source_rank"] = "source_rank"
+
+
+# -- adding discovered papers (D133, D137) ---------------------------------------
+
+
+class DiscoveredPaperRef(_Input):
+    """One paper to add, exactly as search returned it: never a URL, never metadata."""
+
+    source: NonBlank = Field(max_length=32)
+    source_id: NonBlank = Field(max_length=64)
+
+
+class AddDiscoveredPapers(_Input):
+    #: All added, or none (D133).
+    papers: list[DiscoveredPaperRef] = Field(min_length=1, max_length=MAX_ADD_PAPERS)
+
+
+class AddedPaperOut(BaseModel):
+    source: str
+    source_id: str
+    paper_id: str
+    #: None when the paper was already here, or already indexed, and nothing was queued.
+    job_id: str | None
+    state: str
+    #: True when an existing paper of yours was reused rather than created (FR-I7).
+    deduplicated: bool
+
+
+class AddDiscoveredAccepted(BaseModel):
+    """`202` from the add endpoint: one entry per paper sent, in the order sent."""
+
+    papers: list[AddedPaperOut]

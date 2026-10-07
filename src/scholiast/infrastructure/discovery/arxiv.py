@@ -23,18 +23,29 @@ marked as a superseded duplicate.
 external entities, over expat 2.6, which refuses entity-amplification bombs; a test
 feeds it one. The GROBID adapter's reason ("our own service, our own network") does
 not apply here, so this is the reason instead.
+
+**A lookup is `id_list`, one request for a whole batch** (D133). Measured on
+2026-10-07: an id arXiv does not have is simply absent from the feed, so absence is
+"not found". An id it cannot parse turns the whole answer into an error feed, which
+is why `is_valid_id` accepts only the shapes search itself returns.
 """
 
 from __future__ import annotations
 
 import re
 import xml.etree.ElementTree as ET
+from collections.abc import Mapping, Sequence
 from datetime import date, datetime
 from typing import Final
 
 import httpx
 
-from scholiast.application.ports.discovery import SourceFailure, SourcePage, SourceUnavailable
+from scholiast.application.ports.discovery import (
+    MAX_LOOKUP_IDS,
+    SourceFailure,
+    SourcePage,
+    SourceUnavailable,
+)
 from scholiast.domain.discovery import (
     LinkKind,
     OpenAccessLink,
@@ -122,6 +133,11 @@ _OPENSEARCH = "{http://a9.com/-/spec/opensearch/1.1/}"
 _WORD = re.compile(r"[^\W_]+")
 _WHITESPACE = re.compile(r"\s+")
 _ABS_ID = re.compile(r"/abs/(.+)$")
+#: The id shapes search returns, as `/abs/` gives them: new style `YYMM.NNNN(N)`
+#: since April 2007, and old style `archive/YYMMNNN`, each with an optional version.
+_NEW_STYLE_ID = re.compile(r"^(\d{2})(\d{2})\.(\d{4,5})(?:v[1-9]\d*)?$")
+_OLD_STYLE_ID = re.compile(r"^[a-z]+(?:-[a-z]+)*/\d{2}(\d{2})\d{3}(?:v[1-9]\d*)?$")
+_VERSION = re.compile(r"v[1-9]\d*$")
 
 
 def arxiv_terms(query: str) -> list[str]:
@@ -177,7 +193,56 @@ class ArxivSource:
         )
 
     async def search(self, query: str, *, limit: int) -> SourcePage:
-        request = self.request(query, limit=limit)
+        return parse_feed(await self._send(self.request(query, limit=limit)))
+
+    def is_valid_id(self, source_id: str) -> bool:
+        new_style = _NEW_STYLE_ID.match(source_id)
+        if new_style:
+            year, month, number = new_style.groups()
+            # Four digits after the dot until December 2014, five from January 2015.
+            digits = 5 if (int(year), int(month)) >= (15, 1) else 4
+            return (
+                1 <= int(month) <= 12
+                and (int(year), int(month)) >= (7, 4)
+                and (len(number) == digits)
+            )
+        old_style = _OLD_STYLE_ID.match(source_id)
+        return old_style is not None and 1 <= int(old_style.group(1)) <= 12
+
+    def lookup_request(self, source_ids: Sequence[str]) -> httpx.Request:
+        """The request `lookup` sends, built without sending it."""
+        if not 1 <= len(source_ids) <= MAX_LOOKUP_IDS:
+            raise ValueError(f"a lookup carries 1..{MAX_LOOKUP_IDS} ids, got {len(source_ids)}")
+        invalid = [source_id for source_id in source_ids if not self.is_valid_id(source_id)]
+        if invalid:
+            raise ValueError(f"not arXiv ids: {invalid!r}")
+        unique = list(dict.fromkeys(source_ids))
+        return httpx.Request(
+            "GET",
+            self._base_url,
+            params={"id_list": ",".join(unique), "max_results": len(unique)},
+            headers={"User-Agent": USER_AGENT},
+        )
+
+    async def lookup(self, source_ids: Sequence[str]) -> Mapping[str, PaperCandidate]:
+        page = parse_feed(await self._send(self.lookup_request(source_ids)))
+        by_version = {candidate.source_id: candidate for candidate in page.candidates}
+        by_work = {candidate.arxiv_id: candidate for candidate in page.candidates}
+        found: dict[str, PaperCandidate] = {}
+        for source_id in source_ids:
+            # A versioned id names that revision exactly; a bare one is answered
+            # with the latest revision, whose own id carries a version.
+            candidate = (
+                by_version.get(source_id)
+                if _VERSION.search(source_id)
+                else by_work.get(normalise_arxiv_id(source_id))
+            )
+            if candidate is not None:
+                found[source_id] = candidate
+        return found
+
+    async def _send(self, request: httpx.Request) -> bytes:
+        """Send one request and return its body, or raise `SourceUnavailable`."""
         try:
             async with httpx.AsyncClient(
                 timeout=self._timeout, follow_redirects=False, verify=tls_context()
@@ -203,7 +268,7 @@ class ArxivSource:
                 SourceFailure.ERROR,
                 f"HTTP {response.status_code}: {response.text[:200]}",
             )
-        return parse_feed(response.content)
+        return response.content
 
 
 def parse_feed(body: bytes | str) -> SourcePage:

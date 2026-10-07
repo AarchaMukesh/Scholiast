@@ -129,7 +129,28 @@ def normalise_arxiv_id(value: str | None) -> str | None:
     if text.lower().endswith(".pdf"):
         text = text[:-4]
     match = _ARXIV_NEW.match(text.strip("/")) or _ARXIV_OLD.match(text.strip("/"))
-    return match.group(1) if match else None
+    # Lowercased so an old-style id has one spelling (`hep-th/9901001`, never
+    # `HEP-TH/9901001`): identity is unique per owner on this value (D132), and a
+    # unique index over two spellings of one id enforces nothing. New-style ids
+    # are digits and unaffected.
+    return match.group(1).lower() if match else None
+
+
+def paper_identity(doi: str | None, arxiv_id: str | None) -> tuple[str | None, str | None]:
+    """A work's (DOI, arXiv id) with one spelling each (D132).
+
+    arXiv's DataCite DOI (`10.48550/arxiv.X`) is another spelling of the arXiv id
+    X, not a publisher DOI, so it becomes the arXiv id and the DOI slot is left for
+    a publisher's. Without this, OpenAlex (which keeps the DataCite DOI as the DOI)
+    and arXiv (which reports the journal DOI or none) would give one work two
+    identities, and per-owner uniqueness on each would let a user hold it twice.
+    """
+    normal_doi = normalise_doi(doi)
+    normal_arxiv = normalise_arxiv_id(arxiv_id)
+    if normal_doi is not None and normal_doi.startswith(ARXIV_DOI_PREFIX):
+        normal_arxiv = normal_arxiv or normalise_arxiv_id(normal_doi)
+        normal_doi = None
+    return normal_doi, normal_arxiv
 
 
 def arxiv_id_from_url(url: str | None) -> str | None:

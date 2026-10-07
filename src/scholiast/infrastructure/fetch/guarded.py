@@ -40,7 +40,7 @@ import structlog
 
 from scholiast.application.ports.fetch import FetchAttempt, FetchedPdf, FetchFailed
 from scholiast.domain.errors import FailureClass
-from scholiast.domain.fetch_policy import check_fetch_url, is_public_address
+from scholiast.domain.fetch_policy import check_fetch_url, host_allowlist, is_public_address
 from scholiast.domain.upload import MAX_PDF_BYTES, PDF_MAGIC
 from scholiast.infrastructure.discovery import USER_AGENT
 from scholiast.infrastructure.tls import tls_context
@@ -124,7 +124,7 @@ class GuardedPdfFetcher:
         read_timeout: float = 30.0,
         total_timeout: float = 60.0,
     ) -> None:
-        self._allowed = frozenset(h.lower().rstrip(".") for h in allowed_hosts)
+        self._allowed = host_allowlist(allowed_hosts)
         self._pacer = pacer
         self._resolver = resolver
         self._transport = transport

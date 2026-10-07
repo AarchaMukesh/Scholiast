@@ -21,18 +21,32 @@ lists are half of every page and `select` cannot trim inside a field, and droppi
 the fields stay. The caller asks for 25 results by default: at that size A2 measured
 p95 1.58 s against D122's 2.0 s deadline, and a recorded URL and the one built here
 can still be compared.
+
+**A lookup is the same request with a filter instead of a search** (D133):
+`filter=openalex:W1|W2`, one request for a whole batch. Measured on 2026-10-07: an
+id OpenAlex does not know is simply absent from the results (`W12`, `W9999999999`),
+while one it considers malformed (`W1`) fails the WHOLE request with a 400, which
+is why `is_valid_id` insists on two digits or more before anything is sent.
+`relevance_score` is left out of the lookup's fields, because there is no search
+to score against.
 """
 
 from __future__ import annotations
 
 import json
 import re
+from collections.abc import Mapping, Sequence
 from datetime import date
 from typing import Any
 
 import httpx
 
-from scholiast.application.ports.discovery import SourceFailure, SourcePage, SourceUnavailable
+from scholiast.application.ports.discovery import (
+    MAX_LOOKUP_IDS,
+    SourceFailure,
+    SourcePage,
+    SourceUnavailable,
+)
 from scholiast.domain.discovery import (
     ARXIV_DOI_PREFIX,
     LinkKind,
@@ -57,8 +71,14 @@ SELECT = (
     "primary_location,locations,best_oa_location,open_access,cited_by_count,"
     "abstract_inverted_index,relevance_score"
 )
+#: A lookup's fields: the search's, less the score a lookup has no query for.
+LOOKUP_SELECT = ",".join(field for field in SELECT.split(",") if field != "relevance_score")
 #: OpenAlex's own ceiling for one page.
 MAX_PER_PAGE = 200
+#: A work id as search returns it: `W` and at least two digits. OpenAlex refuses
+#: `W1` with a 400 for the whole request (measured 2026-10-07), so one digit is
+#: refused here, where it costs the caller a 422 instead of the source a failure.
+_WORK_ID = re.compile(r"^W[1-9][0-9]{1,11}$")
 _WILDCARDS = re.compile(r"[?*]")
 _WHITESPACE = re.compile(r"\s+")
 
@@ -103,7 +123,37 @@ class OpenAlexSource:
         )
 
     async def search(self, query: str, *, limit: int) -> SourcePage:
-        request = self.request(query, limit=limit)
+        return parse_works(await self._send(self.request(query, limit=limit)))
+
+    def is_valid_id(self, source_id: str) -> bool:
+        return bool(_WORK_ID.match(source_id))
+
+    def lookup_request(self, source_ids: Sequence[str]) -> httpx.Request:
+        """The request `lookup` sends, built without sending it."""
+        if not 1 <= len(source_ids) <= MAX_LOOKUP_IDS:
+            raise ValueError(f"a lookup carries 1..{MAX_LOOKUP_IDS} ids, got {len(source_ids)}")
+        invalid = [source_id for source_id in source_ids if not self.is_valid_id(source_id)]
+        if invalid:
+            raise ValueError(f"not OpenAlex work ids: {invalid!r}")
+        unique = list(dict.fromkeys(source_ids))
+        return httpx.Request(
+            "GET",
+            f"{self._base_url}/works",
+            params={
+                "filter": "openalex:" + "|".join(unique),
+                "per_page": len(unique),
+                "select": LOOKUP_SELECT,
+            },
+            headers={"Authorization": f"Bearer {self._api_key}", "User-Agent": USER_AGENT},
+        )
+
+    async def lookup(self, source_ids: Sequence[str]) -> Mapping[str, PaperCandidate]:
+        page = parse_works(await self._send(self.lookup_request(source_ids)))
+        found = {candidate.source_id: candidate for candidate in page.candidates}
+        return {source_id: found[source_id] for source_id in source_ids if source_id in found}
+
+    async def _send(self, request: httpx.Request) -> Any:
+        """Send one request and return its JSON, or raise `SourceUnavailable`."""
         try:
             async with httpx.AsyncClient(
                 timeout=self._timeout, follow_redirects=False, verify=tls_context()
@@ -137,7 +187,7 @@ class OpenAlexSource:
             raise SourceUnavailable(
                 SOURCE_NAME, SourceFailure.ERROR, "response is not JSON"
             ) from exc
-        return parse_works(payload)
+        return payload
 
 
 def _error_message(response: httpx.Response) -> str:

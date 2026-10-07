@@ -107,6 +107,12 @@ class Settings(BaseSettings):
     #: request at arXiv's pace; one user at this limit would spend the OpenAlex
     #: allowance in under two hours. A guess, with no traffic yet to fit it to.
     rate_limit_discovery_per_minute: int = 10
+    #: Adding discovered papers, keyed by user and counted PER PAPER, not per
+    #: request (D133): each paper costs a share of a lookup, a paced fetch, a GROBID
+    #: parse and an embedding pass, and a batch of ten is ten of those. Twenty is two
+    #: full batches a minute. The floor is one full batch (10, the add's maximum),
+    #: or a full batch could never be accepted at all.
+    rate_limit_add_per_minute: int = Field(default=20, ge=10)
     #: When set, `/metrics` and `/health/ready` require it as a bearer token
     #: (D114). Empty leaves them open, which is the development default;
     #: `/health/live` is never gated, because an orchestrator's restart decision

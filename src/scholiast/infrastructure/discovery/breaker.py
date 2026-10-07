@@ -16,12 +16,17 @@ instead of its share of the deadline, and an outage costs OpenAlex no credits.
                    is the caller's mistake. Counting them would let a burst of
                    searches, or three stopword-only queries, open arXiv's breaker
                    for something arXiv never saw.
+
+A lookup by id (D133) goes through the same gate with the same rules, so an add
+never asks a source the breaker knows is down, and a source that fails lookups is
+as down for searches as one that fails searches.
 """
 
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable, Mapping, Sequence
+from typing import TypeVar
 
 from scholiast.application.ports.discovery import (
     AcademicSource,
@@ -29,6 +34,7 @@ from scholiast.application.ports.discovery import (
     SourcePage,
     SourceUnavailable,
 )
+from scholiast.domain.discovery import PaperCandidate
 from scholiast.infrastructure.circuit import (
     DEFAULT_COOLDOWN_SECONDS,
     DEFAULT_FAILURE_THRESHOLD,
@@ -36,6 +42,8 @@ from scholiast.infrastructure.circuit import (
     Circuit,
     Refused,
 )
+
+T = TypeVar("T")
 
 
 class SourceBreaker:
@@ -67,6 +75,15 @@ class SourceBreaker:
         return self._circuit.failures
 
     async def search(self, query: str, *, limit: int) -> SourcePage:
+        return await self._guarded(lambda: self._inner.search(query, limit=limit))
+
+    def is_valid_id(self, source_id: str) -> bool:
+        return self._inner.is_valid_id(source_id)
+
+    async def lookup(self, source_ids: Sequence[str]) -> Mapping[str, PaperCandidate]:
+        return await self._guarded(lambda: self._inner.lookup(source_ids))
+
+    async def _guarded(self, call: Callable[[], Awaitable[T]]) -> T:
         admission = self._circuit.admit()
         if isinstance(admission, Refused):
             raise SourceUnavailable(
@@ -78,14 +95,15 @@ class SourceBreaker:
             )
         settled = False
         try:
-            page = await self._inner.search(query, limit=limit)
+            result = await call()
         except SourceUnavailable as exc:
             if exc.sent:
                 settled = True
                 self._circuit.failed(exc.retry_after)
             raise
         except ValueError:
-            # The port's "nothing searchable in this query": nothing was sent.
+            # The port's "nothing searchable in this query" or "not this source's
+            # id": refused before sending, so nothing was sent.
             raise
         except BaseException:
             # A crash in the adapter, or the deadline cancelling a request still in
@@ -99,4 +117,4 @@ class SourceBreaker:
         finally:
             if not settled:
                 self._circuit.abandoned(admission)
-        return page
+        return result

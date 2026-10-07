@@ -34,6 +34,7 @@ from fastapi import FastAPI
 
 from scholiast.api.app import api_lifespan, create_app
 from scholiast.config.settings import Settings, get_settings
+from scholiast.infrastructure.fetch import build_pdf_fetcher
 from scholiast.infrastructure.parsing.grobid import GrobidParser
 from scholiast.workers.ingestion import IngestionWorker, WorkerConfig
 
@@ -68,6 +69,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
                 batch=settings.worker_batch_size,
                 embed_batch_size=settings.embedding_batch_size,
             ),
+            # Built once with the worker, so its pacing spans every job (D134).
+            fetcher=build_pdf_fetcher(settings),
         )
         task = asyncio.create_task(worker.run_forever())
         log.info("worker.started", poll_seconds=settings.worker_poll_seconds)

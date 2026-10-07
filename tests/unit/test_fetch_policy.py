@@ -13,7 +13,12 @@ from pathlib import Path
 
 import pytest
 
-from scholiast.domain.fetch_policy import Refusal, check_fetch_url, is_public_address
+from scholiast.domain.fetch_policy import (
+    Refusal,
+    check_fetch_url,
+    host_allowlist,
+    is_public_address,
+)
 
 ALLOWED = frozenset({"arxiv.org", "aclanthology.org", "www.aclweb.org"})
 PROTOCOL = Path(__file__).resolve().parents[2] / "spike" / "m4-protocol.json"
@@ -126,3 +131,13 @@ class TestUrls:
         # alternative to upgrading is a request in plaintext.
         verdict = check_fetch_url(url, ALLOWED)
         assert (verdict.allowed, verdict.url, verdict.upgraded) == (True, requested, upgraded)
+
+
+class TestTheAllowlistHasOneForm:
+    """D137: the add and the fetcher must agree on exactly which hosts are allowed."""
+
+    def test_a_configured_host_is_compared_the_way_urls_are(self) -> None:
+        # A setting written `ArXiv.org.` would otherwise allow nothing, silently.
+        allowed = host_allowlist(["ArXiv.org.", "aclanthology.org"])
+        assert allowed == frozenset({"arxiv.org", "aclanthology.org"})
+        assert check_fetch_url("https://arxiv.org/pdf/2004.04906", allowed).allowed

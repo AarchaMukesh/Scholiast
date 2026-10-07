@@ -35,6 +35,7 @@ from scholiast.domain.paper import (
     Chunk,
     ChunkRole,
     Paper,
+    PaperOrigin,
     PaperVisibility,
     ParseStatus,
     Provenance,
@@ -323,6 +324,24 @@ class SqlPaperRepository(ScopedRepository):
         ).scalar_one_or_none()
         return _to_paper(row) if row is not None else None
 
+    async def get_for_update(self, paper_id: str) -> Paper | None:
+        target = _as_uuid(paper_id)
+        if target is None:
+            return None
+        row = (
+            await self._session.execute(
+                select(models.Paper)
+                .where(
+                    models.Paper.id == target,
+                    models.Paper.id.in_(self._reachable_papers()),
+                )
+                # The paper row only: the reachability subquery's tables are read,
+                # never locked, so a membership change elsewhere does not wait on it.
+                .with_for_update(of=models.Paper)
+            )
+        ).scalar_one_or_none()
+        return _to_paper(row) if row is not None else None
+
     async def find_by_content_hash(self, content_hash: str) -> Paper | None:
         # Mirrors the two partial unique indexes. Public rows are registry-wide
         # by design (§4.4.2 / AD-8 — parsed and embedded once); private rows stay
@@ -364,10 +383,59 @@ class SqlPaperRepository(ScopedRepository):
             ),
             parser_version=paper.parser_version,
             tei_key=paper.tei_key,
+            doi=paper.doi,
+            arxiv_id=paper.arxiv_id,
+            origin=paper.origin.value,
         )
         self._session.add(row)
         await self._session.flush()
         return _to_paper(row)
+
+    async def find_by_identity(self, *, arxiv_id: str | None, doi: str | None) -> Paper | None:
+        """This owner's paper with the arXiv id, else with the DOI (FR-I7, D132).
+
+        Owner-scoped, and private rows only: a discovered paper is its adder's
+        (D131), so another user's row for the same work is not this user's to
+        reuse. The arXiv id is tried first because it is the identity the fetch
+        path runs on (D130); a DOI match on a different row is the rarer case of
+        one user holding the preprint and the published version separately.
+        """
+        if self._scope.is_system:
+            raise PermissionError("find_by_identity is per owner; a system scope has no owner")
+        owner = _as_uuid(self._tenant_id())
+        mine = (models.Paper.visibility == PaperVisibility.PRIVATE.value) & (
+            models.Paper.owner_id == owner
+        )
+        for column, value in ((models.Paper.arxiv_id, arxiv_id), (models.Paper.doi, doi)):
+            if value is None:
+                continue
+            row = (
+                await self._session.execute(select(models.Paper).where(mine & (column == value)))
+            ).scalar_one_or_none()
+            if row is not None:
+                return _to_paper(row)
+        return None
+
+    async def set_content_hash(self, paper_id: str, content_hash: str) -> bool:
+        """Write a fetched paper's hash, once (D134).
+
+        `WHERE content_hash IS NULL` makes it write-once: a hash, once set, is
+        which bytes this paper IS, and the partial unique indexes encoding §4.4.2
+        are not something a later write may move it across. Scoped like `update`.
+        """
+        target = _as_uuid(paper_id)
+        if target is None:
+            return False
+        affected = await self._affected_rows(
+            update(models.Paper)
+            .where(
+                models.Paper.id == target,
+                models.Paper.content_hash.is_(None),
+                models.Paper.id.in_(self._reachable_papers()),
+            )
+            .values(content_hash=content_hash)
+        )
+        return affected > 0
 
     async def update(self, paper: Paper) -> bool:
         """Write back what a parse produced. Identity columns are not touched.
@@ -909,6 +977,9 @@ def _to_paper(row: models.Paper) -> Paper:
         ),
         parser_version=row.parser_version,
         tei_key=row.tei_key,
+        doi=row.doi,
+        arxiv_id=row.arxiv_id,
+        origin=PaperOrigin(row.origin),
         created_at=row.created_at,
     )
 

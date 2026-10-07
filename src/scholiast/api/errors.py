@@ -31,6 +31,11 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from scholiast.application.ports.security import AuthenticationFailed
+from scholiast.application.use_cases.add_discovered import (
+    AddRefusal,
+    AddRefused,
+    SourceLookupFailed,
+)
 from scholiast.application.use_cases.discover_papers import NoSourceAnswered
 from scholiast.domain.errors import (
     DomainError,
@@ -99,6 +104,22 @@ _UPLOAD_STATUS: dict[FailureClass, int] = {
     FailureClass.TOO_LARGE: HTTPStatus.REQUEST_ENTITY_TOO_LARGE,
     FailureClass.UNPARSEABLE: HTTPStatus.UNSUPPORTED_MEDIA_TYPE,
     FailureClass.SCANNED_IMAGE: HTTPStatus.UNSUPPORTED_MEDIA_TYPE,
+}
+
+
+#: What each refusal of a discovered paper asks the user to do (D133, D137, NFR-U2).
+_ADD_REFUSAL_MESSAGES: dict[AddRefusal, str] = {
+    AddRefusal.UNKNOWN_SOURCE: "Papers cannot be added from this source here.",
+    AddRefusal.INVALID_ID: (
+        "This is not an id that source issues. Send it exactly as search returned it."
+    ),
+    AddRefusal.NOT_FOUND: "The source has no record with this id.",
+    AddRefusal.NO_IDENTIFIER: (
+        "The source gives this paper no DOI or arXiv id to track it by. Upload its PDF instead."
+    ),
+    AddRefusal.NO_FETCHABLE_PDF: (
+        "None of this paper's open-access PDF links can be fetched here. Upload its PDF instead."
+    ),
 }
 
 
@@ -224,6 +245,59 @@ def register_error_handlers(app: FastAPI) -> None:
         waits = [o.retry_after for o in exc.sources if o.retry_after is not None]
         if waits and len(waits) == len(exc.sources):
             response.headers["Retry-After"] = str(max(1, math.ceil(min(waits))))
+        return response
+
+    @app.exception_handler(AddRefused)
+    async def _add_refused(request: Request, exc: AddRefused) -> JSONResponse:
+        # 422: the request is well-formed and names papers that cannot be added.
+        # All or nothing (D133), so every refused paper is named at once, and the
+        # client can drop them and send the rest unchanged.
+        return problem(
+            status=HTTPStatus.UNPROCESSABLE_ENTITY,
+            slug="add-refused",
+            title="Some papers cannot be added",
+            detail="Nothing was added. Remove the papers listed and try again.",
+            instance=request.url.path,
+            papers=[
+                {
+                    "source": r.ref.source,
+                    "source_id": r.ref.source_id,
+                    "reason": r.reason.value,
+                    "message": _ADD_REFUSAL_MESSAGES[r.reason],
+                }
+                for r in exc.refused
+            ],
+        )
+
+    @app.exception_handler(SourceLookupFailed)
+    async def _lookup_failed(request: Request, exc: SourceLookupFailed) -> JSONResponse:
+        # 503, like a search no source answered (D133): the papers may well be
+        # addable, and the source said nothing either way. Each source's status
+        # goes with it; why one failed does not, because that text is a third party's.
+        response = problem(
+            status=HTTPStatus.SERVICE_UNAVAILABLE,
+            slug="lookup-unavailable",
+            title="A source did not answer",
+            detail=(
+                "Nothing was added: a source these papers come from did not answer. "
+                "Try again shortly."
+            ),
+            instance=request.url.path,
+            source_status=[
+                {
+                    "source": o.source,
+                    "status": o.failure.value if o.failure is not None else "ok",
+                    "retry_after_seconds": o.retry_after,
+                }
+                for o in exc.sources
+            ],
+        )
+        failed = [o for o in exc.sources if o.failure is not None]
+        waits = [o.retry_after for o in failed if o.retry_after is not None]
+        # The add needs EVERY source it asked, so it can succeed once the slowest
+        # of them takes work again; if any failed source said nothing, nothing is known.
+        if waits and len(waits) == len(failed):
+            response.headers["Retry-After"] = str(max(1, math.ceil(max(waits))))
         return response
 
     @app.exception_handler(AuthenticationFailed)

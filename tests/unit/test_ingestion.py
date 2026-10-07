@@ -9,14 +9,18 @@ either ordering while one of them silently loses chunks on a crash.
 
 from __future__ import annotations
 
+import asyncio
+import dataclasses
 import hashlib
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from typing import NamedTuple
 
 import pytest
 
+from scholiast.application.ports.fetch import FetchAttempt, FetchedPdf, FetchFailed
 from scholiast.application.ports.ml import TextRole
 from scholiast.application.ports.parsing import DocumentUnparseable, ParsedDocument
 from scholiast.application.ports.storage import ObjectNotFound, source_key
@@ -29,12 +33,13 @@ from scholiast.domain.paper import (
     Chunk,
     ChunkRole,
     Paper,
+    PaperOrigin,
     PaperVisibility,
     ParseStatus,
     Section,
     SectionKind,
 )
-from scholiast.domain.upload import UploadRejected
+from scholiast.domain.upload import UploadRejected, validate_upload
 from scholiast.domain.workspace import PaperMembership, PaperState, Workspace
 
 OWNER = "11111111-1111-4111-8111-111111111111"
@@ -77,6 +82,14 @@ class FakePapers:
         self.by_id: dict[str, Paper] = {}
         self.memberships: list[tuple[str, str, PaperState]] = []
         self.states: list[PaperState] = []
+        self.removed: list[tuple[str, str]] = []
+        self.deleted: list[str] = []
+        #: Papers some other workspace still holds, for the purge's question.
+        self.held_elsewhere: set[str] = set()
+        #: Another job's hash, as if it stored the PDF while this one fetched.
+        self.stored_meanwhile: str | None = None
+        #: The paper unreachable by the time the fetch returns.
+        self.gone_by_lock = False
         if existing is not None:
             self.by_id[existing.id] = existing
         self._existing = existing
@@ -93,6 +106,39 @@ class FakePapers:
         self._journal.record("papers.add")
         self.by_id[paper.id] = paper
         return paper
+
+    async def get_for_update(self, paper_id: str) -> Paper | None:
+        self._journal.record("papers.lock")
+        paper = self.by_id.get(paper_id)
+        if paper is None or self.gone_by_lock:
+            return None
+        if self.stored_meanwhile is not None:
+            paper = self.by_id[paper_id] = dataclasses.replace(
+                paper, content_hash=self.stored_meanwhile
+            )
+        # A copy, as a database read would be: the caller's object is not the row.
+        return dataclasses.replace(paper)
+
+    async def set_content_hash(self, paper_id: str, content_hash: str) -> bool:
+        self._journal.record("papers.set_content_hash")
+        paper = self.by_id.get(paper_id)
+        if paper is None or paper.content_hash is not None:
+            return False
+        self.by_id[paper_id] = dataclasses.replace(paper, content_hash=content_hash)
+        return True
+
+    async def remove_from_workspace(self, workspace_id: str, paper_id: str) -> bool:
+        self._journal.record(f"papers.remove_from_workspace:{paper_id}")
+        self.removed.append((workspace_id, paper_id))
+        return True
+
+    async def has_any_membership(self, paper_id: str) -> bool:
+        return paper_id in self.held_elsewhere
+
+    async def delete(self, paper_id: str) -> bool:
+        self._journal.record(f"papers.delete:{paper_id}")
+        self.deleted.append(paper_id)
+        return self.by_id.pop(paper_id, None) is not None
 
     async def update(self, paper: Paper) -> bool:
         self._journal.record("papers.update")
@@ -140,11 +186,18 @@ class FakeSections:
 
 
 class FakeChunks:
-    def __init__(self, journal: Journal, *, existing: list[Chunk] | None = None) -> None:
+    def __init__(
+        self,
+        journal: Journal,
+        *,
+        existing: list[Chunk] | None = None,
+        indexed_papers: Sequence[str] = (),
+    ) -> None:
         self._journal = journal
         self.written: list[Chunk] = []
         self.stamped: list[str] = []
         self._existing = existing or []
+        self._indexed_papers = set(indexed_papers)
 
     async def add_many(self, chunks: Sequence[Chunk], *, section_ids: dict[str, str]) -> int:
         self._journal.record("chunks.add_many")
@@ -160,6 +213,8 @@ class FakeChunks:
         return len(chunk_ids)
 
     async def list_for_paper(self, paper_id: str) -> list[Chunk]:
+        if paper_id in self._indexed_papers:
+            return [SimpleNamespace(is_indexed=True)]  # type: ignore[list-item]
         return list(self._existing)
 
 
@@ -184,17 +239,25 @@ class FakeStore:
     async def delete(self, key: str) -> bool:
         return self.objects.pop(key, None) is not None
 
+    async def list_keys(self, prefix: str) -> list[str]:
+        return [key for key in self.objects if key.startswith(prefix)]
+
 
 class FakeQueue:
     def __init__(self, journal: Journal) -> None:
         self._journal = journal
         self.enqueued: list[tuple[str, str]] = []
+        self.links: list[tuple[str, ...]] = []
         self.stages: list[PaperState] = []
+        self.leases: list[float] = []
         self.completed: list[str] = []
 
-    async def enqueue(self, *, workspace_id: str, paper_id: str) -> str:
+    async def enqueue(
+        self, *, workspace_id: str, paper_id: str, source_links: Sequence[str] = ()
+    ) -> str:
         self._journal.record("queue.enqueue")
         self.enqueued.append((workspace_id, paper_id))
+        self.links.append(tuple(source_links))
         return f"job-{len(self.enqueued)}"
 
     async def claim(self, *, limit: int = 1, lease_seconds: float = 300.0) -> list[object]:
@@ -205,9 +268,11 @@ class FakeQueue:
     ) -> bool:
         self._journal.record(f"queue.heartbeat:{state.value}")
         self.stages.append(state)
+        self.leases.append(lease_seconds)
         return True
 
     async def complete(self, job_id: str) -> bool:
+        self._journal.record(f"queue.complete:{job_id}")
         self.completed.append(job_id)
         return True
 
@@ -237,11 +302,35 @@ class FakeParser:
 
     def __init__(self, document: ParsedDocument | Exception) -> None:
         self._document = document
+        self.parsed: list[bytes] = []
 
     async def parse(self, pdf: bytes, *, filename: str = "") -> ParsedDocument:
+        self.parsed.append(pdf)
         if isinstance(self._document, Exception):
             raise self._document
         return self._document
+
+
+class FakeFetcher:
+    """Hands back fixed bytes, or a fixed failure, and records the links it was given."""
+
+    def __init__(self, result: bytes | BaseException = PDF, *, hang: bool = False) -> None:
+        self._result = result
+        self._hang = hang
+        self.calls: list[tuple[str, ...]] = []
+
+    async def fetch(self, links: Sequence[str]) -> FetchedPdf:
+        self.calls.append(tuple(links))
+        if self._hang:
+            await asyncio.Event().wait()
+        if isinstance(self._result, BaseException):
+            raise self._result
+        return FetchedPdf(
+            data=self._result,
+            link=links[0],
+            final_url=links[0],
+            attempts=(FetchAttempt(links[0], "fetched"),),
+        )
 
 
 class FakeEmbedder:
@@ -396,7 +485,9 @@ def make_ingester(
     return use_case, sections, chunks, index, store, papers
 
 
-async def ingest(use_case: IngestPaperUseCase, paper_id: str):  # type: ignore[no-untyped-def]
+async def ingest(  # type: ignore[no-untyped-def]
+    use_case: IngestPaperUseCase, paper_id: str, *, links: Sequence[str] = ()
+):
     return await use_case.execute(
         job_id="job-1",
         workspace_id=WORKSPACE,
@@ -407,7 +498,85 @@ async def ingest(use_case: IngestPaperUseCase, paper_id: str):  # type: ignore[n
             state=PaperState.QUEUED,
             added_at=datetime.now(UTC),
         ),
+        source_links=links,
     )
+
+
+LINK = "https://arxiv.org/pdf/2004.04906v3"
+
+
+def awaiting_paper(**overrides: object) -> Paper:
+    """A discovered paper as the add leaves it: private, identified, no PDF yet."""
+    values: dict[str, object] = {
+        "id": "55555555-5555-4555-8555-555555555555",
+        "content_hash": None,
+        "visibility": PaperVisibility.PRIVATE,
+        "owner_id": OWNER,
+        "title": "Dense Passage Retrieval for Open-Domain Question Answering",
+        "arxiv_id": "2004.04906",
+        "origin": PaperOrigin.DISCOVERY,
+    }
+    values.update(overrides)
+    return Paper(**values)  # type: ignore[arg-type]
+
+
+@dataclass
+class Fetching:
+    """An ingester for a paper awaiting its PDF, and every fake it was given."""
+
+    use_case: IngestPaperUseCase
+    journal: Journal
+    papers: FakePapers
+    store: FakeStore
+    queue: FakeQueue
+    parser: FakeParser
+    fetcher: FakeFetcher
+    workspace: Workspace
+    paper: Paper
+
+
+def make_fetching(
+    *,
+    fetcher: FakeFetcher | None = None,
+    paper: Paper | None = None,
+    existing: Paper | None = None,
+    indexed: Sequence[str] = (),
+    in_workspace: bool = True,
+    lease_seconds: float = 300.0,
+    with_fetcher: bool = True,
+) -> Fetching:
+    journal = Journal()
+    subject = paper or awaiting_paper()
+    papers = FakePapers(journal, existing=existing)
+    papers.by_id[subject.id] = subject
+    ws = workspace()
+    if in_workspace:
+        ws.memberships.append(
+            PaperMembership(
+                workspace_id=WORKSPACE,
+                paper_id=subject.id,
+                state=PaperState.QUEUED,
+                added_at=datetime.now(UTC),
+            )
+        )
+    store, queue = FakeStore(journal), FakeQueue(journal)
+    parser = FakeParser(document())
+    fake_fetcher = fetcher or FakeFetcher()
+    use_case = IngestPaperUseCase(
+        papers=papers,
+        sections=FakeSections(journal),
+        chunks=FakeChunks(journal, indexed_papers=indexed),
+        store=store,
+        parser=parser,
+        embedder=FakeEmbedder(journal),
+        index=FakeIndex(journal),
+        queue=queue,
+        uow=FakeUnitOfWork(journal),
+        workspaces=FakeWorkspaces(ws),
+        fetcher=fake_fetcher if with_fetcher else None,
+        lease_seconds=lease_seconds,
+    )
+    return Fetching(use_case, journal, papers, store, queue, parser, fake_fetcher, ws, subject)
 
 
 # ---------------------------------------------------------------------------
@@ -606,7 +775,7 @@ class TestIndexedIsNeverReachedWithoutVectors:
     succeed. This one proves what happens when the last one does not: if the
     vector store refuses the write, nothing downstream may claim it worked.
     Without it, `Chunk.is_indexed` and membership INDEXED are asserted by code
-    reading alone — and they are what `AddPaperUseCase._attach` trusts when it
+    reading alone — and they are what `attach_existing` trusts when it
     decides a paper needs no re-ingestion at all.
     """
 
@@ -981,3 +1150,303 @@ def _queue_of(use_case: IngestPaperUseCase) -> FakeQueue:
     queue = use_case._queue
     assert isinstance(queue, FakeQueue)
     return queue
+
+
+# ---------------------------------------------------------------------------
+# FETCHING (D134) and a discovered paper's metadata (D135)
+# ---------------------------------------------------------------------------
+
+
+class TestAPaperAwaitingItsPdfIsFetchedFirst:
+    async def test_an_upload_never_touches_the_fetcher(self) -> None:
+        # Keyed on the data, not on how the job was made: a paper with a hash has
+        # its bytes, and its stages are exactly what they were before phase 6.
+        world = make_fetching(paper=stored_paper())
+        world.store.objects[source_key(world.paper.id)] = PDF
+
+        outcome = await ingest(world.use_case, world.paper.id, links=(LINK,))
+
+        assert outcome.succeeded
+        assert world.fetcher.calls == []
+        assert world.papers.states[0] is PaperState.PARSING
+
+    async def test_the_paper_goes_through_fetching_and_parses_the_fetched_bytes(self) -> None:
+        world = make_fetching()
+
+        outcome = await ingest(world.use_case, world.paper.id, links=(LINK,))
+
+        assert outcome.succeeded and outcome.merged_into is None
+        assert world.fetcher.calls == [(LINK,)]
+        assert world.papers.states == [
+            PaperState.FETCHING,
+            PaperState.PARSING,
+            PaperState.CHUNKING,
+            PaperState.EMBEDDING,
+            PaperState.INDEXED,
+        ]
+        assert world.parser.parsed == [PDF]
+        assert world.papers.by_id[world.paper.id].content_hash == PDF_HASH
+
+    async def test_the_blob_is_stored_before_the_hash_is_written(self) -> None:
+        # D134: a crash between the two then re-fetches into the same key. The
+        # reverse leaves a hash with no PDF, and the user is told to upload one.
+        world = make_fetching()
+
+        await ingest(world.use_case, world.paper.id, links=(LINK,))
+
+        put = world.journal.index_of(f"store.put:{source_key(world.paper.id)}")
+        assert world.journal.index_of("papers.lock") < put
+        assert put < world.journal.index_of("papers.set_content_hash")
+        assert world.store.objects[source_key(world.paper.id)] == PDF
+
+    async def test_nothing_is_held_open_across_the_fetch(self) -> None:
+        # The FETCHING transition is committed before the fetch starts, and the row
+        # lock is taken only after it returns: a 15 s pacing wait holds neither.
+        world = make_fetching()
+
+        await ingest(world.use_case, world.paper.id, links=(LINK,))
+
+        events = world.journal.events
+        fetching = events.index("membership:fetching")
+        assert events.index("commit", fetching) < events.index("papers.lock")
+
+    async def test_a_refused_or_missing_link_is_source_unavailable_not_transient(self) -> None:
+        # The catch-all would make it TRANSIENT and spend three paced requests
+        # rediscovering a 404 (D134).
+        failed = FetchFailed(
+            FailureClass.SOURCE_UNAVAILABLE,
+            (FetchAttempt(LINK, "status:404"), FetchAttempt("https://evil.test/x", "refused:host")),
+        )
+        world = make_fetching(fetcher=FakeFetcher(failed))
+
+        outcome = await ingest(world.use_case, world.paper.id, links=(LINK,))
+
+        assert outcome.failure is not None
+        assert outcome.failure.failure_class is FailureClass.SOURCE_UNAVAILABLE
+        assert world.parser.parsed == []
+
+    async def test_a_failure_detail_says_what_happened_without_a_single_url(self) -> None:
+        # The detail reaches the API as `last_error` and the membership's detail;
+        # a third party's URL is for the worker's log, never for a client.
+        failed = FetchFailed(
+            FailureClass.SOURCE_UNAVAILABLE,
+            (FetchAttempt(LINK, "status:404"), FetchAttempt("https://evil.test/x", "refused:host")),
+        )
+        world = make_fetching(fetcher=FakeFetcher(failed))
+
+        outcome = await ingest(world.use_case, world.paper.id, links=(LINK,))
+
+        assert outcome.failure is not None
+        assert outcome.failure.detail == "links tried: status:404, refused:host"
+        assert "http" not in outcome.failure.detail
+
+    async def test_a_retryable_fetch_failure_stays_retryable(self) -> None:
+        failed = FetchFailed(FailureClass.TRANSIENT, (FetchAttempt(LINK, "status:503"),))
+        world = make_fetching(fetcher=FakeFetcher(failed))
+
+        outcome = await ingest(world.use_case, world.paper.id, links=(LINK,))
+
+        assert outcome.failure is not None
+        assert outcome.failure.failure_class is FailureClass.TRANSIENT
+
+    async def test_a_fetch_still_running_at_half_the_lease_is_cut_off_and_retried(
+        self,
+    ) -> None:
+        # Past its lease the job is claimed again and fetched twice at once (D134).
+        world = make_fetching(fetcher=FakeFetcher(hang=True), lease_seconds=0.1)
+
+        outcome = await asyncio.wait_for(
+            ingest(world.use_case, world.paper.id, links=(LINK,)), timeout=2.0
+        )
+
+        assert outcome.failure is not None
+        assert outcome.failure.failure_class is FailureClass.TRANSIENT
+        # Half the lease, not all of it: past the lease the job is redelivered.
+        assert outcome.failure.detail == "the fetch did not finish within 0.05 s"
+
+    async def test_fetched_bytes_pass_the_upload_gate_too(self) -> None:
+        not_a_pdf = b"<html>a landing page</html>"
+        with pytest.raises(UploadRejected) as expected:
+            validate_upload(not_a_pdf)
+        world = make_fetching(fetcher=FakeFetcher(not_a_pdf))
+
+        outcome = await ingest(world.use_case, world.paper.id, links=(LINK,))
+
+        assert outcome.failure is not None
+        assert outcome.failure.failure_class is expected.value.failure_class
+        assert world.store.objects == {}, "bytes the upload gate refuses were stored"
+
+    async def test_every_heartbeat_renews_the_workers_own_lease(self) -> None:
+        # The claim leased the job for the worker's configured lease; a heartbeat
+        # with the port's default would shorten or stretch it behind its back.
+        world = make_fetching(lease_seconds=120.0)
+
+        await ingest(world.use_case, world.paper.id, links=(LINK,))
+
+        assert world.queue.leases and set(world.queue.leases) == {120.0}
+
+    async def test_a_paper_awaiting_its_pdf_with_no_fetcher_fails_loudly(self) -> None:
+        # A wiring fault, not a property of the paper: classifying it would tell the
+        # user to upload a PDF because a worker was built wrong.
+        world = make_fetching(with_fetcher=False)
+
+        with pytest.raises(InvariantViolation):
+            await ingest(world.use_case, world.paper.id, links=(LINK,))
+
+    async def test_a_pdf_another_job_stored_first_is_kept_and_these_bytes_dropped(
+        self,
+    ) -> None:
+        # Two jobs fetched one paper. The second must not write over the blob the
+        # first one's hash describes (D134's lock).
+        theirs = b"%PDF-1.7\n" + b"their revision " * 50
+        world = make_fetching()
+        world.store.objects[source_key(world.paper.id)] = theirs
+        world.papers.stored_meanwhile = hashlib.sha256(theirs).hexdigest()
+
+        outcome = await ingest(world.use_case, world.paper.id, links=(LINK,))
+
+        assert outcome.succeeded
+        assert world.store.objects[source_key(world.paper.id)] == theirs
+        assert world.parser.parsed == [theirs]
+        assert "papers.set_content_hash" not in world.journal.events
+
+    async def test_a_paper_removed_while_it_was_fetched_is_not_stored(self) -> None:
+        world = make_fetching()
+        world.papers.gone_by_lock = True
+
+        outcome = await ingest(world.use_case, world.paper.id, links=(LINK,))
+
+        assert outcome.failure is not None
+        assert outcome.failure.failure_class is FailureClass.SOURCE_UNAVAILABLE
+        assert world.store.objects == {}
+
+
+class TestAFetchedPdfTheOwnerAlreadyHasIsMerged:
+    """D134: the user already uploaded or added these exact bytes."""
+
+    def _theirs(self) -> Paper:
+        return stored_paper(id="66666666-6666-4666-8666-666666666666", title="my upload")
+
+    async def test_the_workspace_is_pointed_at_the_indexed_paper_with_no_new_work(
+        self,
+    ) -> None:
+        theirs = self._theirs()
+        world = make_fetching(existing=theirs, indexed=[theirs.id])
+
+        outcome = await ingest(world.use_case, world.paper.id, links=(LINK,))
+
+        assert outcome.succeeded and outcome.merged_into == theirs.id
+        assert world.papers.removed == [(WORKSPACE, world.paper.id)]
+        assert (WORKSPACE, theirs.id, PaperState.INDEXED) in world.papers.memberships
+        assert world.queue.enqueued == []
+        assert world.parser.parsed == [], "the merged paper was parsed again"
+
+    async def test_an_unindexed_match_joins_queued_with_a_job_of_its_own(self) -> None:
+        theirs = self._theirs()
+        world = make_fetching(existing=theirs)
+
+        await ingest(world.use_case, world.paper.id, links=(LINK,))
+
+        assert (WORKSPACE, theirs.id, PaperState.QUEUED) in world.papers.memberships
+        assert world.queue.enqueued == [(WORKSPACE, theirs.id)]
+        assert world.queue.links == [()], "a paper with its PDF was given links to fetch"
+
+    async def test_the_job_completes_before_the_placeholder_and_its_jobs_are_deleted(
+        self,
+    ) -> None:
+        theirs = self._theirs()
+        world = make_fetching(existing=theirs, indexed=[theirs.id])
+
+        await ingest(world.use_case, world.paper.id, links=(LINK,))
+
+        assert world.queue.completed == ["job-1"]
+        assert world.papers.deleted == [world.paper.id]
+        assert world.journal.index_of("queue.complete:job-1") < world.journal.index_of(
+            f"papers.delete:{world.paper.id}"
+        )
+        assert source_key(world.paper.id) not in world.store.objects
+
+    async def test_a_placeholder_another_workspace_holds_is_kept(self) -> None:
+        theirs = self._theirs()
+        world = make_fetching(existing=theirs, indexed=[theirs.id])
+        world.papers.held_elsewhere.add(world.paper.id)
+
+        await ingest(world.use_case, world.paper.id, links=(LINK,))
+
+        assert world.papers.deleted == []
+        assert world.queue.completed == ["job-1"]
+
+    async def test_a_paper_the_user_removed_mid_fetch_is_not_added_back(self) -> None:
+        theirs = self._theirs()
+        world = make_fetching(existing=theirs, indexed=[theirs.id], in_workspace=False)
+        # Another paper is still here, so "the workspace holds something" and "the
+        # workspace holds this paper" are different questions.
+        world.workspace.memberships.append(
+            PaperMembership(
+                workspace_id=WORKSPACE,
+                paper_id="77777777-7777-4777-8777-777777777777",
+                state=PaperState.INDEXED,
+                added_at=datetime.now(UTC),
+            )
+        )
+
+        outcome = await ingest(world.use_case, world.paper.id, links=(LINK,))
+
+        assert outcome.merged_into == theirs.id
+        assert world.papers.memberships == [], "a removed paper came back under another id"
+        assert world.papers.deleted == [world.paper.id]
+
+
+class TestADiscoveredPaperKeepsItsSourcesRecord:
+    """D135: GROBID fills gaps in a discovered paper's record and replaces nothing."""
+
+    def _chosen(self, **overrides: object) -> Paper:
+        values: dict[str, object] = {
+            "title": "Dense Passage Retrieval for Open-Domain Question Answering",
+            "authors": ("Vladimir Karpukhin",),
+            "abstract": "From the source's record.",
+            "arxiv_id": "2004.04906",
+            "origin": PaperOrigin.DISCOVERY,
+        }
+        values.update(overrides)
+        return stored_paper(**values)
+
+    async def test_grobids_header_guess_does_not_replace_what_the_user_chose(self) -> None:
+        journal = Journal()
+        use_case, _, _, _, _, papers = make_ingester(
+            journal, parser=FakeParser(document()), paper=self._chosen()
+        )
+        await ingest(use_case, self._chosen().id)
+
+        paper = papers.by_id[self._chosen().id]
+        assert paper.title == "Dense Passage Retrieval for Open-Domain Question Answering"
+        assert paper.authors == ("Vladimir Karpukhin",)
+        assert paper.abstract == "From the source's record."
+        assert paper.parse_status is ParseStatus.PARSED
+
+    async def test_the_title_embedded_is_the_title_stored(self) -> None:
+        # `rebuild_index` re-embeds from the row's title; embedding GROBID's while
+        # storing the source's would silently re-baseline every rebuild (NFR-R6).
+        journal = Journal()
+        use_case, _, _, _, _, _ = make_ingester(
+            journal, parser=FakeParser(document()), paper=self._chosen()
+        )
+        await ingest(use_case, self._chosen().id)
+
+        inputs = _embedder_of(use_case).inputs
+        assert inputs and all(
+            text.startswith("[Paper: Dense Passage Retrieval for Open-Domain") for text in inputs
+        )
+
+    async def test_grobid_fills_only_what_the_source_left_blank(self) -> None:
+        journal = Journal()
+        sparse = self._chosen(authors=(), abstract=None)
+        use_case, _, _, _, _, papers = make_ingester(
+            journal, parser=FakeParser(document()), paper=sparse
+        )
+        await ingest(use_case, sparse.id)
+
+        paper = papers.by_id[sparse.id]
+        assert paper.authors == ("Ada Lovelace",)
+        assert paper.abstract == "An abstract."
+        assert paper.title == "Dense Passage Retrieval for Open-Domain Question Answering"

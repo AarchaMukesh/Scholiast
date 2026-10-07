@@ -495,3 +495,124 @@ class TestFailureTaxonomy:
                 {"ws": workspace, "paper": paper},
             )
         await conn.rollback()
+
+
+async def _discovered(
+    conn: AsyncConnection,
+    *,
+    owner: uuid.UUID,
+    doi: str | None = None,
+    arxiv_id: str | None = "2004.04906",
+    content_hash: str | None = None,
+    parse_status: str = "pending",
+    origin: str = "discovery",
+) -> uuid.UUID:
+    paper_id = uuid.uuid4()
+    await conn.execute(
+        text(
+            "INSERT INTO papers (id, visibility, owner_id, content_hash, external_ids, "
+            "title, authors, parse_status, doi, arxiv_id, origin) VALUES "
+            "(:id, 'private', :owner, :hash, '{}'::jsonb, 'A Paper', '[]'::jsonb, "
+            ":status, :doi, :arxiv, :origin)"
+        ),
+        {
+            "id": paper_id,
+            "owner": owner,
+            "hash": content_hash,
+            "status": parse_status,
+            "doi": doi,
+            "arxiv": arxiv_id,
+            "origin": origin,
+        },
+    )
+    return paper_id
+
+
+class TestAPaperBeforeItsPdf:
+    """D132's CHECKs and indexes, each one attempted.
+
+    Alembic compares neither (CLAUDE.md), so a constraint that silently failed to be
+    created would look exactly like one that works until something violated it.
+    """
+
+    async def test_a_paper_awaiting_its_pdf_with_an_identifier_is_accepted(
+        self, conn: AsyncConnection
+    ) -> None:
+        owner = await _user(conn, "awaiting@example.com")
+        await _discovered(conn, owner=owner)
+        await conn.rollback()
+
+    async def test_no_pdf_and_no_identifier_is_rejected(self, conn: AsyncConnection) -> None:
+        # A paper that could never be found again by what it is.
+        owner = await _user(conn, "lost@example.com")
+        with pytest.raises(IntegrityError, match="ck_papers_hash_or_awaiting"):
+            await _discovered(conn, owner=owner, arxiv_id=None)
+        await conn.rollback()
+
+    async def test_no_pdf_and_already_parsed_is_rejected(self, conn: AsyncConnection) -> None:
+        owner = await _user(conn, "parsed@example.com")
+        with pytest.raises(IntegrityError, match="ck_papers_hash_or_awaiting"):
+            await _discovered(conn, owner=owner, parse_status="parsed")
+        await conn.rollback()
+
+    async def test_an_unknown_origin_is_rejected(self, conn: AsyncConnection) -> None:
+        owner = await _user(conn, "origin@example.com")
+        with pytest.raises(IntegrityError, match="ck_papers_origin"):
+            await _discovered(conn, owner=owner, origin="scraped")
+        await conn.rollback()
+
+    async def test_a_row_written_without_an_origin_is_an_upload(
+        self, conn: AsyncConnection
+    ) -> None:
+        # Every row before migration 0007 was an upload, which the default says.
+        paper = await _paper(conn, visibility="public", content_hash="old-row", owner_id=None)
+        origin = (
+            await conn.execute(text("SELECT origin FROM papers WHERE id = :id"), {"id": paper})
+        ).scalar_one()
+        assert origin == "upload"
+        await conn.rollback()
+
+    @pytest.mark.parametrize(
+        "doi", ["10.1/X", "doi:10.1/x", "11.1/x", "10.1", "10.48550/arxiv.2004.04906"]
+    )
+    async def test_a_doi_in_any_spelling_but_the_canonical_one_is_rejected(
+        self, conn: AsyncConnection, doi: str
+    ) -> None:
+        owner = await _user(conn, "doi@example.com")
+        with pytest.raises(IntegrityError, match="ck_papers_doi_canonical"):
+            await _discovered(conn, owner=owner, doi=doi, arxiv_id=None)
+        await conn.rollback()
+
+    @pytest.mark.parametrize("arxiv_id", ["2004.04906v3", "HEP-TH/9901001"])
+    async def test_an_arxiv_id_in_any_spelling_but_the_canonical_one_is_rejected(
+        self, conn: AsyncConnection, arxiv_id: str
+    ) -> None:
+        owner = await _user(conn, "arxiv@example.com")
+        with pytest.raises(IntegrityError, match="ck_papers_arxiv_id_canonical"):
+            await _discovered(conn, owner=owner, arxiv_id=arxiv_id)
+        await conn.rollback()
+
+    async def test_one_owner_cannot_hold_one_arxiv_id_twice(self, conn: AsyncConnection) -> None:
+        owner = await _user(conn, "twice@example.com")
+        await _discovered(conn, owner=owner)
+        with pytest.raises(IntegrityError, match="uq_papers_private_owner_arxiv"):
+            await _discovered(conn, owner=owner)
+        await conn.rollback()
+
+    async def test_one_owner_cannot_hold_one_doi_twice(self, conn: AsyncConnection) -> None:
+        owner = await _user(conn, "twice-doi@example.com")
+        await _discovered(conn, owner=owner, doi="10.1/x", arxiv_id=None)
+        with pytest.raises(IntegrityError, match="uq_papers_private_owner_doi"):
+            await _discovered(conn, owner=owner, doi="10.1/x", arxiv_id=None)
+        await conn.rollback()
+
+    async def test_two_owners_each_hold_their_own_row_for_one_work(
+        self, conn: AsyncConnection
+    ) -> None:
+        # D131: a discovered paper is its adder's, so the same work is two rows.
+        alice = await _user(conn, "alice-work@example.com")
+        bob = await _user(conn, "bob-work@example.com")
+        first = await _discovered(conn, owner=alice, doi="10.1/x")
+        second = await _discovered(conn, owner=bob, doi="10.1/x")
+        assert first != second
+        await conn.rollback()

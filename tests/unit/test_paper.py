@@ -22,6 +22,7 @@ from scholiast.domain.paper import (
     Chunk,
     ChunkRole,
     Paper,
+    PaperOrigin,
     PaperVisibility,
     ParseStatus,
     Provenance,
@@ -287,3 +288,46 @@ class TestParseStatus:
         )
         assert not paper.parse_failure_class.retryable
         assert "scan" in paper.parse_failure_class.user_message.lower()
+
+
+class TestAPaperBeforeItsPdf:
+    """D132: a discovered paper exists before its bytes, under the database's CHECK."""
+
+    def awaiting(self, **kw: object) -> Paper:
+        values: dict[str, object] = {
+            "content_hash": None,
+            "visibility": PaperVisibility.PRIVATE,
+            "owner_id": "u-1",
+            "arxiv_id": "2004.04906",
+            "origin": PaperOrigin.DISCOVERY,
+        }
+        return paper(**(values | kw))
+
+    def test_a_paper_awaiting_its_pdf_is_allowed_when_it_can_be_found_again(self) -> None:
+        assert self.awaiting().content_hash is None
+        assert self.awaiting(arxiv_id=None, doi="10.1/x").doi == "10.1/x"
+
+    def test_with_no_pdf_and_no_identifier_it_could_never_be_deduplicated(self) -> None:
+        with pytest.raises(InvariantViolation):
+            self.awaiting(arxiv_id=None, doi=None)
+
+    def test_with_no_pdf_nothing_can_have_been_parsed(self) -> None:
+        with pytest.raises(InvariantViolation):
+            self.awaiting(parse_status=ParseStatus.PARSED)
+
+    @pytest.mark.parametrize(
+        "doi", ["10.1/X", "https://doi.org/10.1/x", "10.48550/arxiv.2004.04906"]
+    )
+    def test_a_doi_must_be_one_normalised_publisher_doi(self, doi: str) -> None:
+        # Two spellings of one DOI under a unique index enforce nothing, and arXiv's
+        # DataCite DOI belongs in the arXiv id (D132).
+        with pytest.raises(InvariantViolation):
+            paper(doi=doi)
+
+    @pytest.mark.parametrize("arxiv_id", ["2004.04906v3", "HEP-TH/9901001", "arxiv:2004.04906"])
+    def test_an_arxiv_id_must_be_unversioned_and_one_spelling(self, arxiv_id: str) -> None:
+        with pytest.raises(InvariantViolation):
+            paper(arxiv_id=arxiv_id)
+
+    def test_every_existing_paper_is_an_upload(self) -> None:
+        assert paper().origin is PaperOrigin.UPLOAD

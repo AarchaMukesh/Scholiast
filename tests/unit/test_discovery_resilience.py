@@ -10,6 +10,7 @@ window to check it.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping, Sequence
 
 import pytest
 from pydantic import ValidationError
@@ -21,6 +22,7 @@ from scholiast.application.ports.discovery import (
     SourceUnavailable,
 )
 from scholiast.config.settings import Settings
+from scholiast.domain.discovery import PaperCandidate
 from scholiast.infrastructure.circuit import BreakerState
 from scholiast.infrastructure.discovery.breaker import SourceBreaker
 from scholiast.infrastructure.discovery.pacing import PacedSource
@@ -59,6 +61,14 @@ class Scripted:
         if self.raises is not None:
             raise self.raises
         return SourcePage(self.name, ())
+
+    def is_valid_id(self, source_id: str) -> bool:
+        return source_id.startswith("ok")
+
+    async def lookup(self, source_ids: Sequence[str]) -> Mapping[str, PaperCandidate]:
+        # The same script as `search`: a lookup is one more request to the source.
+        await self.search("lookup", limit=len(source_ids))
+        return {}
 
 
 def failure(kind: SourceFailure = SourceFailure.ERROR, **kw: object) -> SourceUnavailable:
@@ -182,9 +192,69 @@ class TestTheSourceBreaker:
         assert guard.state is BreakerState.CLOSED
 
 
-def paced(gap: float = 3.0) -> tuple[PacedSource, Scripted, FakeClock]:
+class TestTheBreakerGuardsALookupAsItGuardsASearch:
+    """D133: an add asks a source through the same breaker, by the same rules."""
+
+    async def test_an_open_breaker_refuses_a_lookup_without_asking(self) -> None:
+        guard, inner, _ = breaker(threshold=1)
+        inner.raises = failure()
+        await fail(guard, 1)
+
+        with pytest.raises(SourceUnavailable) as caught:
+            await guard.lookup(["ok-1"])
+
+        assert inner.calls == 1, "the breaker asked a source it had given up on"
+        assert caught.value.kind is SourceFailure.CIRCUIT_OPEN
+        assert caught.value.sent is False
+
+    async def test_failed_lookups_open_the_breaker_for_searches_too(self) -> None:
+        # One source, one health: an outage seen by adds is an outage for searches.
+        guard, inner, _ = breaker(threshold=2)
+        inner.raises = failure()
+        for _ in range(2):
+            with pytest.raises(SourceUnavailable):
+                await guard.lookup(["ok-1"])
+
+        with pytest.raises(SourceUnavailable) as caught:
+            await guard.search("q", limit=5)
+        assert caught.value.kind is SourceFailure.CIRCUIT_OPEN
+
+    async def test_a_lookup_refused_before_sending_is_not_a_failure(self) -> None:
+        # An id the adapter refuses never reached the source.
+        guard, inner, _ = breaker(threshold=1)
+        inner.raises = ValueError("not one of its ids")
+        with pytest.raises(ValueError):
+            await guard.lookup(["nonsense"])
+        assert guard.state is BreakerState.CLOSED
+
+    def test_id_syntax_is_the_sources_own(self) -> None:
+        guard, _, _ = breaker()
+        assert guard.is_valid_id("ok-7") and not guard.is_valid_id("nope")
+
+
+def paced(gap: float = 3.0, wait: float = 3.0) -> tuple[PacedSource, Scripted, FakeClock]:
     inner, clock = Scripted(), FakeClock()
-    return PacedSource(inner, min_gap_seconds=gap, clock=clock), inner, clock
+    return (
+        PacedSource(
+            inner,
+            min_gap_seconds=gap,
+            lookup_wait_seconds=wait,
+            clock=clock,
+            sleep=_sleeping_on(clock),
+        ),
+        inner,
+        clock,
+    )
+
+
+def _sleeping_on(clock: FakeClock):  # type: ignore[no-untyped-def]
+    """A sleep that moves the fake clock, and yields once so other tasks can run."""
+
+    async def sleep(seconds: float) -> None:
+        clock.advance(seconds)
+        await asyncio.sleep(0)
+
+    return sleep
 
 
 class TestArxivsPacer:
@@ -273,6 +343,73 @@ class TestArxivsPacer:
             await source.search("q", limit=5)
         clock.advance(0.1)
         await source.search("q", limit=5)
+
+
+class TestALookupWaitsForArxivsSlotButNotForLong:
+    """D133: an add may wait up to 3 s for arXiv's slot, where a search never waits."""
+
+    async def test_a_lookup_takes_a_slot_that_frees_within_the_wait(self) -> None:
+        source, inner, clock = paced(gap=3.0, wait=3.0)
+        await source.search("q", limit=5)  # the slot is next free at 1003
+        clock.advance(1.0)
+
+        await asyncio.wait_for(source.lookup(["ok-1"]), timeout=1.0)
+
+        assert inner.calls == 2
+        assert clock.now == pytest.approx(1003.0), "it went before the gap had passed"
+
+    async def test_a_slot_further_away_than_the_wait_is_refused_at_once(self) -> None:
+        source, inner, clock = paced(gap=15.0, wait=3.0)
+        await source.search("q", limit=5)  # next free at 1015
+
+        with pytest.raises(SourceUnavailable) as caught:
+            await asyncio.wait_for(source.lookup(["ok-1"]), timeout=1.0)
+
+        assert inner.calls == 1
+        assert clock.now == pytest.approx(1000.0), "it waited for a slot it could not reach"
+        assert caught.value.kind is SourceFailure.RATE_LIMITED
+        assert caught.value.sent is False
+        assert caught.value.retry_after == pytest.approx(15.0)
+
+    async def test_a_request_in_flight_puts_the_slot_out_of_a_gap_long_wait(self) -> None:
+        # Free a full gap after the request ends, so strictly more than 3 s away.
+        source, inner, _ = paced(gap=3.0, wait=3.0)
+        inner.hang = True
+        first = asyncio.create_task(source.search("q", limit=5))
+        await asyncio.sleep(0)
+
+        with pytest.raises(SourceUnavailable) as caught:
+            await asyncio.wait_for(source.lookup(["ok-1"]), timeout=1.0)
+
+        assert inner.calls == 1, "two requests reached arXiv at once"
+        assert caught.value.retry_after == pytest.approx(3.0)
+        inner.release.set()
+        await first
+
+    async def test_two_waiting_lookups_never_send_at_once(self) -> None:
+        source, inner, clock = paced(gap=3.0, wait=10.0)
+        await source.search("q", limit=5)
+        in_flight = 0
+        peak = 0
+        original = inner.search
+
+        async def search(query: str, *, limit: int) -> SourcePage:
+            nonlocal in_flight, peak
+            in_flight += 1
+            peak = max(peak, in_flight)
+            try:
+                await asyncio.sleep(0)  # in flight long enough for the other to try
+                return await original(query, limit=limit)
+            finally:
+                in_flight -= 1
+
+        inner.search = search  # type: ignore[method-assign]
+        await asyncio.wait_for(
+            asyncio.gather(source.lookup(["ok-1"]), source.lookup(["ok-2"])), timeout=1.0
+        )
+
+        assert peak == 1, "two lookups reached arXiv at once"
+        assert clock.now >= 1006.0, "the second lookup did not keep its gap"
 
 
 class TestTheWiring:

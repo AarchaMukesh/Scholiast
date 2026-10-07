@@ -14,6 +14,7 @@ bug, not a UX detail.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum, unique
@@ -312,6 +313,18 @@ class Workspace:
         self.memberships.append(membership)
         self.refresh_state()
         return membership
+
+    def ensure_room_for(self, paper_ids: Iterable[str]) -> None:
+        """Refuse a batch that would take this workspace past its cap (NFR-S1, D133).
+
+        A batch is all or nothing, so it is measured whole before any of it is
+        added: `add_paper` alone would find the cap part-way through. Papers that
+        are already members cost nothing, and a paper named twice counts once.
+        """
+        present = {m.paper_id for m in self.active_memberships}
+        arriving = set(paper_ids) - present
+        if len(present) + len(arriving) > MAX_PAPERS_PER_WORKSPACE:
+            raise WorkspaceCapacityExceeded(MAX_PAPERS_PER_WORKSPACE)
 
     def remove_paper(self, paper_id: str) -> None:
         for m in self.memberships:

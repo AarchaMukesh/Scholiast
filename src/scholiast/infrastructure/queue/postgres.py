@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import random
 import uuid
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any, cast
 
@@ -100,7 +101,9 @@ class PostgresQueue:
         self._session = session
         self._scope = scope
 
-    async def enqueue(self, *, workspace_id: str, paper_id: str) -> str:
+    async def enqueue(
+        self, *, workspace_id: str, paper_id: str, source_links: Sequence[str] = ()
+    ) -> str:
         await self._require_owned_workspace(workspace_id)
         row = models.IngestionJob(
             id=uuid.uuid4(),
@@ -117,6 +120,7 @@ class PostgresQueue:
             # through `AddPaperUseCase` would make the application layer
             # describe logging; None outside a request is the truth.
             correlation_id=current_correlation_id(),
+            source_links=list(source_links) or None,
         )
         self._session.add(row)
         await self._session.flush()
@@ -172,6 +176,7 @@ class PostgresQueue:
                     # the worker learns anything about the job, and the id has to
                     # arrive with the work rather than be fetched afterwards.
                     models.IngestionJob.correlation_id,
+                    models.IngestionJob.source_links,
                 )
             )
         ).all()
@@ -183,6 +188,7 @@ class PostgresQueue:
                 state=PaperState(row.state),
                 attempts=row.attempts,
                 correlation_id=row.correlation_id,
+                source_links=tuple(row.source_links or ()),
             )
             for row in rows
         ]

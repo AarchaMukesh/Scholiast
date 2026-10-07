@@ -50,6 +50,7 @@ import structlog
 from scholiast.application.ports.ml import Precision
 from scholiast.config.settings import Settings, get_settings
 from scholiast.infrastructure.db.engine import build_engine, build_session_factory
+from scholiast.infrastructure.fetch import build_pdf_fetcher
 from scholiast.infrastructure.ml.embedder import LocalEmbedder
 from scholiast.infrastructure.observability.logging import configure_logging
 from scholiast.infrastructure.parsing.grobid import GrobidParser
@@ -131,6 +132,8 @@ def _build(settings: Settings) -> tuple[IngestionWorker, MaintenanceWorker, Qdra
             batch=settings.worker_batch_size,
             embed_batch_size=settings.embedding_batch_size,
         ),
+        # Once per process, with the worker, so its pacing spans every job (D134).
+        fetcher=build_pdf_fetcher(settings),
     )
     maintenance = MaintenanceWorker(sessions=sessions, index=index, store=store)
     return worker, maintenance, index

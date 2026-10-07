@@ -21,10 +21,17 @@ Two things are in the contract rather than left to adapters:
                      pacing (D123) and an open breaker refuse without asking, and a
                      breaker must not count those against the source's health, or a
                      burst of searches would open arXiv's breaker for nothing arXiv did.
+
+  lookup by id       phase 6's add resolves `{source, source_id}` pairs exactly as
+                     search returned them (D133). The client never sends a URL or
+                     metadata, so the record a paper is created from is the source's
+                     own, fetched fresh, and the id is checked against the source's
+                     syntax before anything is sent.
 """
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -106,6 +113,30 @@ class AcademicSource(Protocol):
         must not be reported as the source failing.
         """
         ...
+
+    def is_valid_id(self, source_id: str) -> bool:
+        """Whether `source_id` has this source's id syntax (D133). Sends nothing.
+
+        Strict on purpose: an id the source itself would reject fails a whole
+        batched request, and that failure would read as the source being down.
+        """
+        ...
+
+    async def lookup(self, source_ids: Sequence[str]) -> Mapping[str, PaperCandidate]:
+        """The source's records for `source_ids`, in one request (D133).
+
+        Keyed by the id exactly as given. An id the source does not know is absent,
+        which is how both sources answer one: there is no error to tell apart from
+        an outage. Raises `SourceUnavailable` when the source does not answer, and
+        `ValueError`, before sending anything, for an id `is_valid_id` refuses or
+        for more ids than one request may carry (`MAX_LOOKUP_IDS`).
+        """
+        ...
+
+
+#: The most ids one lookup carries: the add endpoint's batch (D133). Both sources
+#: allow far more in one request, so this bounds a caller, not a source.
+MAX_LOOKUP_IDS = 10
 
 
 # -- the cache (D127) -----------------------------------------------------------

@@ -115,6 +115,28 @@ class PaperRepository(Protocol):
 
     async def add(self, paper: Paper) -> Paper: ...
 
+    async def find_by_identity(self, *, arxiv_id: str | None, doi: str | None) -> Paper | None:
+        """This owner's private paper with the arXiv id, else with the DOI (D132).
+
+        Per owner because a discovered paper is its adder's (D131); another user's
+        row for the same work is not this caller's to reuse.
+        """
+        ...
+
+    async def set_content_hash(self, paper_id: str, content_hash: str) -> bool:
+        """Write a fetched paper's hash, once: only while it has none (D134)."""
+        ...
+
+    async def get_for_update(self, paper_id: str) -> Paper | None:
+        """`get`, with the paper locked against other writers until the unit of work ends.
+
+        For the FETCHING stage's short critical section (D134): two jobs that
+        fetched the same paper must not both write its PDF, or the loser's bytes
+        would overwrite the blob the winner's hash describes. Held only around
+        writing the blob and the hash, never across the fetch itself.
+        """
+        ...
+
     async def update(self, paper: Paper) -> bool:
         """Persist a paper's mutable metadata — what a parse produced.
 
