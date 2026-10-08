@@ -1,0 +1,22 @@
+{
+ "dataset": "scholiast-m4-discovery-judgments",
+ "decision": "D149",
+ "file": "discovery-judgments.json",
+ "sha256": "fdefe1261254829addb90b634d4d7e9b4d5195b8a09dba0ad7bf21629506dc20",
+ "bytes": 264873,
+ "works": 1029,
+ "by_split_and_grade": {
+  "held_out/0": 12,
+  "held_out/1": 139,
+  "held_out/2": 375,
+  "train/0": 46,
+  "train/1": 146,
+  "train/2": 311
+ },
+ "unsure": 32,
+ "no_abstract": 41,
+ "frozen": "2026-10-08, before any ranker code was written",
+ "licence": "CC0 (titles and identifiers from arXiv and OpenAlex metadata; grades original)",
+ "labels_frozen_sha256": "14b7246e6a470f597c624a0bed0356ca5635a38fea5ecc0f127de0e7f7e19765",
+ "reviewed": "2026-10-08: owner agreed with all 50 sampled and all 32 unsure grades"
+}

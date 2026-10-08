@@ -1,6 +1,6 @@
 {
-  "protocol_sha256": "da128b48e71f95aff1514e65a374ab7b1387e3e9715ed5a72a6c08fd12ebb682",
-  "at": "2026-10-04T06:26:39.268+00:00",
+  "protocol_sha256": "7f9ee36501c99f9357b2561eb851d4f92378f0ee893608094526e25e2603d8de",
+  "at": "2026-10-08T10:37:08.740+00:00",
   "address_table": {
     "refuse": 16,
     "accept": 3,
@@ -32,8 +32,8 @@
       ],
       "sent": 5,
       "refused_after_s": [
-        0.0,
-        0.0
+        -0.0,
+        0.001
       ]
     },
     "total_cap_while_waiting": {
@@ -58,8 +58,8 @@
         "malformed:InvalidURL",
         "scheme:ftp",
         "address",
-        "address",
-        "label empty or too long"
+        "label empty or too long",
+        "address"
       ]
     },
     "transport_saw": {
@@ -124,7 +124,7 @@
     "pacer:admit-before-wait": {
       "caught": true,
       "caught_by": [
-        "admission: a stopped host's queued requests waited 1.01s for its Retry-After before being refused"
+        "admission: a stopped host's queued requests waited 1.00s for its Retry-After before being refused"
       ]
     },
     "pacer:admit-after-wait": {

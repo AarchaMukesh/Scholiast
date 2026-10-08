@@ -48,12 +48,14 @@ POOLS_PATH = ROOT / "data" / "eval" / "discovery-pools.json.gz"
 POOLS_MANIFEST_PATH = ROOT / "data" / "eval" / "discovery-pools.manifest.json"
 
 #: The canonical hash the owner approved: D116 on 2026-09-30, amended by DEV-2 on
-#: 2026-10-01 (D117), with addendum A1 added on 2026-10-02 (D120, b23f235e...) and
-#: addendum A2 on 2026-10-04 (D125). A protocol that hashes to anything else is not
-#: the approved protocol, and nothing runs. Each run line in the log records the
-#: hash it ran under: the first 15 requests ran under the original, the rest of the
-#: spike under DEV-2's, A1 under b23f235e..., and A2 under this one.
-APPROVED_PROTOCOL_SHA256 = "da128b48e71f95aff1514e65a374ab7b1387e3e9715ed5a72a6c08fd12ebb682"
+#: 2026-10-01 (D117), with addendum A1 added on 2026-10-02 (D120, b23f235e...),
+#: addendum A2 on 2026-10-04 (D125, da128b48...) and addendum A3 on 2026-10-08
+#: (D150), approved by the owner before any A3 request. A protocol that hashes to
+#: anything else is not the approved protocol, and nothing runs. Each run line in the
+#: log records the hash it ran under: the first 15 requests ran under the original,
+#: the rest of the spike under DEV-2's, A1 under b23f235e..., A2 under da128b48...,
+#: and A3 under this one.
+APPROVED_PROTOCOL_SHA256 = "7f9ee36501c99f9357b2561eb851d4f92378f0ee893608094526e25e2603d8de"
 ORIGINAL_PROTOCOL_SHA256 = "6a2809025626b29b96119cd4d06639fd3341cd325c74c121e82ba5e9e8677a34"
 
 #: Addendum A2's OpenAlex page sizes (D125), largest first.
@@ -494,6 +496,9 @@ class Budget:
             ("api", "arxiv_api", "a1"): protocol["addenda"]["A1"]["budget"]["max"]["queries"],
             # And addendum A2's (D125), apart from the spike's OpenAlex searches.
             ("api", "openalex", "a2"): protocol["addenda"]["A2"]["budget"]["max"]["searches"],
+            # And addendum A3's (D150), one per source, apart from everything above.
+            ("api", "openalex", "a3"): protocol["addenda"]["A3"]["budget"]["max"]["openalex_searches"],
+            ("api", "arxiv_api", "a3"): protocol["addenda"]["A3"]["budget"]["max"]["arxiv_queries"],
         }
         self._arxiv_probe = b["arxiv_org_pdfs"]["max"]["probe_requests"]
         self._other_probe = b["other_pdf_hosts"]["max"]["probe_requests_per_host"]

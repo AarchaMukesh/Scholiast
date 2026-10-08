@@ -1,5 +1,5 @@
 {
- "protocol_sha256": "da128b48e71f95aff1514e65a374ab7b1387e3e9715ed5a72a6c08fd12ebb682",
+ "protocol_sha256": "7f9ee36501c99f9357b2561eb851d4f92378f0ee893608094526e25e2603d8de",
  "s2_mode": "keyless",
  "note": "S2 paper ids are replaced by s2h: hashes (D116: S2 data stays local). Each run line records the protocol hash that run used.",
  "records": [
@@ -8491,6 +8491,1711 @@
    "event": "run_end",
    "command": "addendum-a2",
    "at": "2026-10-04T06:29:11.527+00:00",
+   "stopped_hosts": {}
+  },
+  {
+   "event": "run",
+   "command": "addendum-a3",
+   "protocol_sha256": "7f9ee36501c99f9357b2561eb851d4f92378f0ee893608094526e25e2603d8de",
+   "s2_mode": "keyless",
+   "at": "2026-10-08T10:28:12.210+00:00"
+  },
+  {
+   "event": "preflight",
+   "host": "api.openalex.org",
+   "addresses": [
+    "104.20.26.229",
+    "172.66.159.136",
+    "2606:4700:83b4:dec5:4bfd:59f:c3a9:3c5f"
+   ],
+   "allowed": true,
+   "at": "2026-10-08T10:28:12.232+00:00"
+  },
+  {
+   "event": "preflight",
+   "host": "api.semanticscholar.org",
+   "addresses": [
+    "18.67.161.114",
+    "18.67.161.31",
+    "18.67.161.35",
+    "18.67.161.44"
+   ],
+   "allowed": true,
+   "at": "2026-10-08T10:28:12.264+00:00"
+  },
+  {
+   "event": "preflight",
+   "host": "export.arxiv.org",
+   "addresses": [
+    "151.101.159.42"
+   ],
+   "allowed": true,
+   "at": "2026-10-08T10:28:12.272+00:00"
+  },
+  {
+   "pass": "A3",
+   "session": 5,
+   "kind": "search",
+   "source": "openalex",
+   "query_id": "t02-natural_language",
+   "topic": "t02",
+   "phrasing": "natural_language",
+   "per_page": 25,
+   "event": "request",
+   "rid": "A3/t02-natural_language/openalex",
+   "host": "api.openalex.org",
+   "method": "GET",
+   "url": "https://api.openalex.org/works?search=how+can+large+language+models+be+fine-tuned+cheaply+with+low-rank+adapters&per_page=25&select=id%2Cdoi%2Ctitle%2Cdisplay_name%2Cpublication_year%2Cpublication_date%2Cids%2Ctype%2Cauthorships%2Cprimary_location%2Clocations%2Cbest_oa_location%2Copen_access%2Ccited_by_count%2Cabstract_inverted_index%2Crelevance_score",
+   "t_start": 1791455293.1181195,
+   "budget_keys": [
+    [
+     "api",
+     "openalex",
+     "a3"
+    ]
+   ],
+   "t_end": 1791455294.7675636,
+   "latency_s": 1.6489,
+   "headers_s": 0.8422,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 247160,
+   "headers": {
+    "content-type": "application/json",
+    "x-ratelimit-cost-usd": "0.001",
+    "x-ratelimit-credits-used": "10",
+    "x-ratelimit-limit": "10000",
+    "x-ratelimit-limit-usd": "1",
+    "x-ratelimit-onetime-remaining": "0",
+    "x-ratelimit-prepaid-remaining-usd": "0",
+    "x-ratelimit-remaining": "9990",
+    "x-ratelimit-remaining-usd": "0.999",
+    "x-ratelimit-reset": "48706",
+    "content-encoding": "gzip"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-08T10:28:13.118+00:00",
+   "t_end_iso": "2026-10-08T10:28:14.767+00:00"
+  },
+  {
+   "pass": "A3",
+   "session": 5,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t02-natural_language",
+   "topic": "t02",
+   "phrasing": "natural_language",
+   "per_page": 50,
+   "event": "request",
+   "rid": "A3/t02-natural_language/arxiv",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Alarge+AND+all%3Alanguage+AND+all%3Amodels+AND+all%3Afine+AND+all%3Atuned+AND+all%3Acheaply+AND+all%3Alow+AND+all%3Arank+AND+all%3Aadapters&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1791455295.2640555,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a3"
+    ]
+   ],
+   "t_end": 1791455295.9392135,
+   "latency_s": 0.6755,
+   "headers_s": 0.6747,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 8137,
+   "headers": {
+    "content-length": "8137",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-08T10:28:15.264+00:00",
+   "t_end_iso": "2026-10-08T10:28:15.939+00:00"
+  },
+  {
+   "pass": "A3",
+   "session": 5,
+   "kind": "search",
+   "source": "openalex",
+   "query_id": "t05-keyword",
+   "topic": "t05",
+   "phrasing": "keyword",
+   "per_page": 25,
+   "event": "request",
+   "rid": "A3/t05-keyword/openalex",
+   "host": "api.openalex.org",
+   "method": "GET",
+   "url": "https://api.openalex.org/works?search=state+space+models+long+sequence+modeling&per_page=25&select=id%2Cdoi%2Ctitle%2Cdisplay_name%2Cpublication_year%2Cpublication_date%2Cids%2Ctype%2Cauthorships%2Cprimary_location%2Clocations%2Cbest_oa_location%2Copen_access%2Ccited_by_count%2Cabstract_inverted_index%2Crelevance_score",
+   "t_start": 1791455296.1174896,
+   "budget_keys": [
+    [
+     "api",
+     "openalex",
+     "a3"
+    ]
+   ],
+   "t_end": 1791455298.1967933,
+   "latency_s": 2.0793,
+   "headers_s": 1.2769,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 244649,
+   "headers": {
+    "content-type": "application/json",
+    "x-ratelimit-cost-usd": "0.001",
+    "x-ratelimit-credits-used": "10",
+    "x-ratelimit-limit": "10000",
+    "x-ratelimit-limit-usd": "1",
+    "x-ratelimit-onetime-remaining": "0",
+    "x-ratelimit-prepaid-remaining-usd": "0",
+    "x-ratelimit-remaining": "9980",
+    "x-ratelimit-remaining-usd": "0.998",
+    "x-ratelimit-reset": "48703",
+    "content-encoding": "gzip"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-08T10:28:16.117+00:00",
+   "t_end_iso": "2026-10-08T10:28:18.196+00:00"
+  },
+  {
+   "pass": "A3",
+   "session": 5,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t05-keyword",
+   "topic": "t05",
+   "phrasing": "keyword",
+   "per_page": 50,
+   "event": "request",
+   "rid": "A3/t05-keyword/arxiv",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Astate+AND+all%3Aspace+AND+all%3Amodels+AND+all%3Along+AND+all%3Asequence+AND+all%3Amodeling&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1791455299.2834463,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a3"
+    ]
+   ],
+   "t_end": 1791455300.3116457,
+   "latency_s": 1.0276,
+   "headers_s": 1.0196,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 118652,
+   "headers": {
+    "content-length": "118652",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-08T10:28:19.283+00:00",
+   "t_end_iso": "2026-10-08T10:28:20.311+00:00"
+  },
+  {
+   "pass": "A3",
+   "session": 5,
+   "kind": "search",
+   "source": "openalex",
+   "query_id": "t01-keyword",
+   "topic": "t01",
+   "phrasing": "keyword",
+   "per_page": 25,
+   "event": "request",
+   "rid": "A3/t01-keyword/openalex",
+   "host": "api.openalex.org",
+   "method": "GET",
+   "url": "https://api.openalex.org/works?search=retrieval-augmented+generation+long+documents&per_page=25&select=id%2Cdoi%2Ctitle%2Cdisplay_name%2Cpublication_year%2Cpublication_date%2Cids%2Ctype%2Cauthorships%2Cprimary_location%2Clocations%2Cbest_oa_location%2Copen_access%2Ccited_by_count%2Cabstract_inverted_index%2Crelevance_score",
+   "t_start": 1791455300.4916184,
+   "budget_keys": [
+    [
+     "api",
+     "openalex",
+     "a3"
+    ]
+   ],
+   "t_end": 1791455302.0959015,
+   "latency_s": 1.6032,
+   "headers_s": 0.9764,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 224509,
+   "headers": {
+    "content-type": "application/json",
+    "x-ratelimit-cost-usd": "0.001",
+    "x-ratelimit-credits-used": "10",
+    "x-ratelimit-limit": "10000",
+    "x-ratelimit-limit-usd": "1",
+    "x-ratelimit-onetime-remaining": "0",
+    "x-ratelimit-prepaid-remaining-usd": "0",
+    "x-ratelimit-remaining": "9970",
+    "x-ratelimit-remaining-usd": "0.997",
+    "x-ratelimit-reset": "48699",
+    "content-encoding": "gzip"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-08T10:28:20.491+00:00",
+   "t_end_iso": "2026-10-08T10:28:22.095+00:00"
+  },
+  {
+   "pass": "A3",
+   "session": 5,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t01-keyword",
+   "topic": "t01",
+   "phrasing": "keyword",
+   "per_page": 50,
+   "event": "request",
+   "rid": "A3/t01-keyword/arxiv",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Aretrieval+AND+all%3Aaugmented+AND+all%3Ageneration+AND+all%3Along+AND+all%3Adocuments&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1791455303.6539118,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a3"
+    ]
+   ],
+   "t_end": 1791455304.7167156,
+   "latency_s": 1.0623,
+   "headers_s": 1.0518,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 118258,
+   "headers": {
+    "content-length": "118258",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-08T10:28:23.653+00:00",
+   "t_end_iso": "2026-10-08T10:28:24.716+00:00"
+  },
+  {
+   "pass": "A3",
+   "session": 5,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t04-keyword",
+   "topic": "t04",
+   "phrasing": "keyword",
+   "per_page": 50,
+   "event": "request",
+   "rid": "A3/t04-keyword/arxiv",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Ahallucination+AND+all%3Adetection+AND+all%3Alarge+AND+all%3Alanguage+AND+all%3Amodels&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1791455308.0512614,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a3"
+    ]
+   ],
+   "t_end": 1791455309.4765959,
+   "latency_s": 1.4246,
+   "headers_s": 1.3976,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 120846,
+   "headers": {
+    "content-length": "120846",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-08T10:28:28.051+00:00",
+   "t_end_iso": "2026-10-08T10:28:29.476+00:00"
+  },
+  {
+   "pass": "A3",
+   "session": 5,
+   "kind": "search",
+   "source": "openalex",
+   "query_id": "t04-keyword",
+   "topic": "t04",
+   "phrasing": "keyword",
+   "per_page": 25,
+   "event": "request",
+   "rid": "A3/t04-keyword/openalex",
+   "host": "api.openalex.org",
+   "method": "GET",
+   "url": "https://api.openalex.org/works?search=hallucination+detection+large+language+models&per_page=25&select=id%2Cdoi%2Ctitle%2Cdisplay_name%2Cpublication_year%2Cpublication_date%2Cids%2Ctype%2Cauthorships%2Cprimary_location%2Clocations%2Cbest_oa_location%2Copen_access%2Ccited_by_count%2Cabstract_inverted_index%2Crelevance_score",
+   "t_start": 1791455309.6534789,
+   "budget_keys": [
+    [
+     "api",
+     "openalex",
+     "a3"
+    ]
+   ],
+   "t_end": 1791455310.9271953,
+   "latency_s": 1.2737,
+   "headers_s": 0.4706,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 229304,
+   "headers": {
+    "content-type": "application/json",
+    "x-ratelimit-cost-usd": "0.001",
+    "x-ratelimit-credits-used": "10",
+    "x-ratelimit-limit": "10000",
+    "x-ratelimit-limit-usd": "1",
+    "x-ratelimit-onetime-remaining": "0",
+    "x-ratelimit-prepaid-remaining-usd": "0",
+    "x-ratelimit-remaining": "9960",
+    "x-ratelimit-remaining-usd": "0.996",
+    "x-ratelimit-reset": "48690",
+    "content-encoding": "gzip"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-08T10:28:29.653+00:00",
+   "t_end_iso": "2026-10-08T10:28:30.927+00:00"
+  },
+  {
+   "pass": "A3",
+   "session": 5,
+   "kind": "search",
+   "source": "openalex",
+   "query_id": "t03-keyword",
+   "topic": "t03",
+   "phrasing": "keyword",
+   "per_page": 25,
+   "event": "request",
+   "rid": "A3/t03-keyword/openalex",
+   "host": "api.openalex.org",
+   "method": "GET",
+   "url": "https://api.openalex.org/works?search=dense+passage+retrieval+open-domain+question+answering&per_page=25&select=id%2Cdoi%2Ctitle%2Cdisplay_name%2Cpublication_year%2Cpublication_date%2Cids%2Ctype%2Cauthorships%2Cprimary_location%2Clocations%2Cbest_oa_location%2Copen_access%2Ccited_by_count%2Cabstract_inverted_index%2Crelevance_score",
+   "t_start": 1791455311.1132069,
+   "budget_keys": [
+    [
+     "api",
+     "openalex",
+     "a3"
+    ]
+   ],
+   "t_end": 1791455313.025089,
+   "latency_s": 1.9109,
+   "headers_s": 1.1083,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 243976,
+   "headers": {
+    "content-type": "application/json",
+    "x-ratelimit-cost-usd": "0.001",
+    "x-ratelimit-credits-used": "10",
+    "x-ratelimit-limit": "10000",
+    "x-ratelimit-limit-usd": "1",
+    "x-ratelimit-onetime-remaining": "0",
+    "x-ratelimit-prepaid-remaining-usd": "0",
+    "x-ratelimit-remaining": "9950",
+    "x-ratelimit-remaining-usd": "0.995",
+    "x-ratelimit-reset": "48688",
+    "content-encoding": "gzip"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-08T10:28:31.113+00:00",
+   "t_end_iso": "2026-10-08T10:28:33.025+00:00"
+  },
+  {
+   "pass": "A3",
+   "session": 5,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t03-keyword",
+   "topic": "t03",
+   "phrasing": "keyword",
+   "per_page": 50,
+   "event": "request",
+   "rid": "A3/t03-keyword/arxiv",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Adense+AND+all%3Apassage+AND+all%3Aretrieval+AND+all%3Aopen+AND+all%3Adomain+AND+all%3Aquestion+AND+all%3Aanswering&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1791455313.2183657,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a3"
+    ]
+   ],
+   "t_end": 1791455314.1044483,
+   "latency_s": 0.8852,
+   "headers_s": 0.8783,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 111028,
+   "headers": {
+    "content-length": "111028",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-08T10:28:33.218+00:00",
+   "t_end_iso": "2026-10-08T10:28:34.104+00:00"
+  },
+  {
+   "pass": "A3",
+   "session": 5,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t06-keyword",
+   "topic": "t06",
+   "phrasing": "keyword",
+   "per_page": 50,
+   "event": "request",
+   "rid": "A3/t06-keyword/arxiv",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Agraph+AND+all%3Aneural+AND+all%3Anetworks+AND+all%3Amolecular+AND+all%3Aproperty+AND+all%3Aprediction&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1791455317.4401546,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a3"
+    ]
+   ],
+   "t_end": 1791455318.3939524,
+   "latency_s": 0.9539,
+   "headers_s": 0.9293,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 116943,
+   "headers": {
+    "content-length": "116943",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-08T10:28:37.440+00:00",
+   "t_end_iso": "2026-10-08T10:28:38.393+00:00"
+  },
+  {
+   "pass": "A3",
+   "session": 5,
+   "kind": "search",
+   "source": "openalex",
+   "query_id": "t06-keyword",
+   "topic": "t06",
+   "phrasing": "keyword",
+   "per_page": 25,
+   "event": "request",
+   "rid": "A3/t06-keyword/openalex",
+   "host": "api.openalex.org",
+   "method": "GET",
+   "url": "https://api.openalex.org/works?search=graph+neural+networks+molecular+property+prediction&per_page=25&select=id%2Cdoi%2Ctitle%2Cdisplay_name%2Cpublication_year%2Cpublication_date%2Cids%2Ctype%2Cauthorships%2Cprimary_location%2Clocations%2Cbest_oa_location%2Copen_access%2Ccited_by_count%2Cabstract_inverted_index%2Crelevance_score",
+   "t_start": 1791455318.5800626,
+   "budget_keys": [
+    [
+     "api",
+     "openalex",
+     "a3"
+    ]
+   ],
+   "t_end": 1791455319.9296334,
+   "latency_s": 1.3487,
+   "headers_s": 0.5604,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 295291,
+   "headers": {
+    "content-type": "application/json",
+    "x-ratelimit-cost-usd": "0.001",
+    "x-ratelimit-credits-used": "10",
+    "x-ratelimit-limit": "10000",
+    "x-ratelimit-limit-usd": "1",
+    "x-ratelimit-onetime-remaining": "0",
+    "x-ratelimit-prepaid-remaining-usd": "0",
+    "x-ratelimit-remaining": "9940",
+    "x-ratelimit-remaining-usd": "0.994",
+    "x-ratelimit-reset": "48681",
+    "content-encoding": "gzip"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-08T10:28:38.580+00:00",
+   "t_end_iso": "2026-10-08T10:28:39.929+00:00"
+  },
+  {
+   "pass": "A3",
+   "session": 5,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t08-keyword",
+   "topic": "t08",
+   "phrasing": "keyword",
+   "per_page": 50,
+   "event": "request",
+   "rid": "A3/t08-keyword/arxiv",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Adenoising+AND+all%3Adiffusion+AND+all%3Amodels+AND+all%3Aimage+AND+all%3Ageneration&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1791455321.731733,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a3"
+    ]
+   ],
+   "t_end": 1791455322.6987028,
+   "latency_s": 0.9663,
+   "headers_s": 0.9356,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 122014,
+   "headers": {
+    "content-length": "122014",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-08T10:28:41.731+00:00",
+   "t_end_iso": "2026-10-08T10:28:42.698+00:00"
+  },
+  {
+   "pass": "A3",
+   "session": 5,
+   "kind": "search",
+   "source": "openalex",
+   "query_id": "t08-keyword",
+   "topic": "t08",
+   "phrasing": "keyword",
+   "per_page": 25,
+   "event": "request",
+   "rid": "A3/t08-keyword/openalex",
+   "host": "api.openalex.org",
+   "method": "GET",
+   "url": "https://api.openalex.org/works?search=denoising+diffusion+models+image+generation&per_page=25&select=id%2Cdoi%2Ctitle%2Cdisplay_name%2Cpublication_year%2Cpublication_date%2Cids%2Ctype%2Cauthorships%2Cprimary_location%2Clocations%2Cbest_oa_location%2Copen_access%2Ccited_by_count%2Cabstract_inverted_index%2Crelevance_score",
+   "t_start": 1791455322.8868861,
+   "budget_keys": [
+    [
+     "api",
+     "openalex",
+     "a3"
+    ]
+   ],
+   "t_end": 1791455324.1537008,
+   "latency_s": 1.2661,
+   "headers_s": 0.4607,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 292360,
+   "headers": {
+    "content-type": "application/json",
+    "x-ratelimit-cost-usd": "0.001",
+    "x-ratelimit-credits-used": "10",
+    "x-ratelimit-limit": "10000",
+    "x-ratelimit-limit-usd": "1",
+    "x-ratelimit-onetime-remaining": "0",
+    "x-ratelimit-prepaid-remaining-usd": "0",
+    "x-ratelimit-remaining": "9930",
+    "x-ratelimit-remaining-usd": "0.993",
+    "x-ratelimit-reset": "48677",
+    "content-encoding": "gzip"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-08T10:28:42.886+00:00",
+   "t_end_iso": "2026-10-08T10:28:44.153+00:00"
+  },
+  {
+   "pass": "A3",
+   "session": 5,
+   "kind": "search",
+   "source": "openalex",
+   "query_id": "t07-natural_language",
+   "topic": "t07",
+   "phrasing": "natural_language",
+   "per_page": 25,
+   "event": "request",
+   "rid": "A3/t07-natural_language/openalex",
+   "host": "api.openalex.org",
+   "method": "GET",
+   "url": "https://api.openalex.org/works?search=how+does+knowledge+distillation+compress+neural+networks&per_page=25&select=id%2Cdoi%2Ctitle%2Cdisplay_name%2Cpublication_year%2Cpublication_date%2Cids%2Ctype%2Cauthorships%2Cprimary_location%2Clocations%2Cbest_oa_location%2Copen_access%2Ccited_by_count%2Cabstract_inverted_index%2Crelevance_score",
+   "t_start": 1791455324.3382735,
+   "budget_keys": [
+    [
+     "api",
+     "openalex",
+     "a3"
+    ]
+   ],
+   "t_end": 1791455326.0761285,
+   "latency_s": 1.7377,
+   "headers_s": 0.9308,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 266484,
+   "headers": {
+    "content-type": "application/json",
+    "x-ratelimit-cost-usd": "0.001",
+    "x-ratelimit-credits-used": "10",
+    "x-ratelimit-limit": "10000",
+    "x-ratelimit-limit-usd": "1",
+    "x-ratelimit-onetime-remaining": "0",
+    "x-ratelimit-prepaid-remaining-usd": "0",
+    "x-ratelimit-remaining": "9920",
+    "x-ratelimit-remaining-usd": "0.992",
+    "x-ratelimit-reset": "48675",
+    "content-encoding": "gzip"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-08T10:28:44.338+00:00",
+   "t_end_iso": "2026-10-08T10:28:46.076+00:00"
+  },
+  {
+   "pass": "A3",
+   "session": 5,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t07-natural_language",
+   "topic": "t07",
+   "phrasing": "natural_language",
+   "per_page": 50,
+   "event": "request",
+   "rid": "A3/t07-natural_language/arxiv",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Aknowledge+AND+all%3Adistillation+AND+all%3Acompress+AND+all%3Aneural+AND+all%3Anetworks&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1791455326.2538822,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a3"
+    ]
+   ],
+   "t_end": 1791455327.2937222,
+   "latency_s": 1.0394,
+   "headers_s": 1.0309,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 119459,
+   "headers": {
+    "content-length": "119459",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-08T10:28:46.253+00:00",
+   "t_end_iso": "2026-10-08T10:28:47.293+00:00"
+  },
+  {
+   "pass": "A3",
+   "session": 5,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t09-natural_language",
+   "topic": "t09",
+   "phrasing": "natural_language",
+   "per_page": 50,
+   "event": "request",
+   "rid": "A3/t09-natural_language/arxiv",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Acontrastive+AND+all%3Alearning+AND+all%3Aused+AND+all%3Atrain+AND+all%3Asentence+AND+all%3Aembeddings&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1791455330.642576,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a3"
+    ]
+   ],
+   "t_end": 1791455331.6042483,
+   "latency_s": 0.9618,
+   "headers_s": 0.9383,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 113822,
+   "headers": {
+    "content-length": "113822",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-08T10:28:50.642+00:00",
+   "t_end_iso": "2026-10-08T10:28:51.604+00:00"
+  },
+  {
+   "pass": "A3",
+   "session": 5,
+   "kind": "search",
+   "source": "openalex",
+   "query_id": "t09-natural_language",
+   "topic": "t09",
+   "phrasing": "natural_language",
+   "per_page": 25,
+   "event": "request",
+   "rid": "A3/t09-natural_language/openalex",
+   "host": "api.openalex.org",
+   "method": "GET",
+   "url": "https://api.openalex.org/works?search=how+is+contrastive+learning+used+to+train+sentence+embeddings&per_page=25&select=id%2Cdoi%2Ctitle%2Cdisplay_name%2Cpublication_year%2Cpublication_date%2Cids%2Ctype%2Cauthorships%2Cprimary_location%2Clocations%2Cbest_oa_location%2Copen_access%2Ccited_by_count%2Cabstract_inverted_index%2Crelevance_score",
+   "t_start": 1791455331.7846372,
+   "budget_keys": [
+    [
+     "api",
+     "openalex",
+     "a3"
+    ]
+   ],
+   "t_end": 1791455333.1161296,
+   "latency_s": 1.3308,
+   "headers_s": 0.8478,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 234379,
+   "headers": {
+    "content-type": "application/json",
+    "x-ratelimit-cost-usd": "0.001",
+    "x-ratelimit-credits-used": "10",
+    "x-ratelimit-limit": "10000",
+    "x-ratelimit-limit-usd": "1",
+    "x-ratelimit-onetime-remaining": "0",
+    "x-ratelimit-prepaid-remaining-usd": "0",
+    "x-ratelimit-remaining": "9910",
+    "x-ratelimit-remaining-usd": "0.991",
+    "x-ratelimit-reset": "48668",
+    "content-encoding": "gzip"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-08T10:28:51.784+00:00",
+   "t_end_iso": "2026-10-08T10:28:53.116+00:00"
+  },
+  {
+   "pass": "A3",
+   "session": 5,
+   "kind": "search",
+   "source": "openalex",
+   "query_id": "t05-natural_language",
+   "topic": "t05",
+   "phrasing": "natural_language",
+   "per_page": 25,
+   "event": "request",
+   "rid": "A3/t05-natural_language/openalex",
+   "host": "api.openalex.org",
+   "method": "GET",
+   "url": "https://api.openalex.org/works?search=can+state+space+models+replace+attention+for+long+sequences&per_page=25&select=id%2Cdoi%2Ctitle%2Cdisplay_name%2Cpublication_year%2Cpublication_date%2Cids%2Ctype%2Cauthorships%2Cprimary_location%2Clocations%2Cbest_oa_location%2Copen_access%2Ccited_by_count%2Cabstract_inverted_index%2Crelevance_score",
+   "t_start": 1791455333.3027647,
+   "budget_keys": [
+    [
+     "api",
+     "openalex",
+     "a3"
+    ]
+   ],
+   "t_end": 1791455335.332687,
+   "latency_s": 2.0297,
+   "headers_s": 1.228,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 276675,
+   "headers": {
+    "content-type": "application/json",
+    "x-ratelimit-cost-usd": "0.001",
+    "x-ratelimit-credits-used": "10",
+    "x-ratelimit-limit": "10000",
+    "x-ratelimit-limit-usd": "1",
+    "x-ratelimit-onetime-remaining": "0",
+    "x-ratelimit-prepaid-remaining-usd": "0",
+    "x-ratelimit-remaining": "9900",
+    "x-ratelimit-remaining-usd": "0.99",
+    "x-ratelimit-reset": "48666",
+    "content-encoding": "gzip"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-08T10:28:53.302+00:00",
+   "t_end_iso": "2026-10-08T10:28:55.332+00:00"
+  },
+  {
+   "pass": "A3",
+   "session": 5,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t05-natural_language",
+   "topic": "t05",
+   "phrasing": "natural_language",
+   "per_page": 50,
+   "event": "request",
+   "rid": "A3/t05-natural_language/arxiv",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Astate+AND+all%3Aspace+AND+all%3Amodels+AND+all%3Areplace+AND+all%3Aattention+AND+all%3Along+AND+all%3Asequences&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1791455335.5250983,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a3"
+    ]
+   ],
+   "t_end": 1791455337.0698316,
+   "latency_s": 1.5444,
+   "headers_s": 1.5373,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 71672,
+   "headers": {
+    "content-length": "71672",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-08T10:28:55.525+00:00",
+   "t_end_iso": "2026-10-08T10:28:57.069+00:00"
+  },
+  {
+   "pass": "A3",
+   "session": 5,
+   "kind": "search",
+   "source": "openalex",
+   "query_id": "t10-natural_language",
+   "topic": "t10",
+   "phrasing": "natural_language",
+   "per_page": 25,
+   "event": "request",
+   "rid": "A3/t10-natural_language/openalex",
+   "host": "api.openalex.org",
+   "method": "GET",
+   "url": "https://api.openalex.org/works?search=does+chain-of-thought+prompting+improve+reasoning+in+language+models&per_page=25&select=id%2Cdoi%2Ctitle%2Cdisplay_name%2Cpublication_year%2Cpublication_date%2Cids%2Ctype%2Cauthorships%2Cprimary_location%2Clocations%2Cbest_oa_location%2Copen_access%2Ccited_by_count%2Cabstract_inverted_index%2Crelevance_score",
+   "t_start": 1791455337.2563543,
+   "budget_keys": [
+    [
+     "api",
+     "openalex",
+     "a3"
+    ]
+   ],
+   "t_end": 1791455339.2039862,
+   "latency_s": 1.9468,
+   "headers_s": 1.1408,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 277986,
+   "headers": {
+    "content-type": "application/json",
+    "x-ratelimit-cost-usd": "0.001",
+    "x-ratelimit-credits-used": "10",
+    "x-ratelimit-limit": "10000",
+    "x-ratelimit-limit-usd": "1",
+    "x-ratelimit-onetime-remaining": "0",
+    "x-ratelimit-prepaid-remaining-usd": "0",
+    "x-ratelimit-remaining": "9890",
+    "x-ratelimit-remaining-usd": "0.989",
+    "x-ratelimit-reset": "48662",
+    "content-encoding": "gzip"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-08T10:28:57.256+00:00",
+   "t_end_iso": "2026-10-08T10:28:59.203+00:00"
+  },
+  {
+   "pass": "A3",
+   "session": 5,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t10-natural_language",
+   "topic": "t10",
+   "phrasing": "natural_language",
+   "per_page": 50,
+   "event": "request",
+   "rid": "A3/t10-natural_language/arxiv",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Achain+AND+all%3Athought+AND+all%3Aprompting+AND+all%3Aimprove+AND+all%3Areasoning+AND+all%3Alanguage+AND+all%3Amodels&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1791455340.4104805,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a3"
+    ]
+   ],
+   "t_end": 1791455341.2898853,
+   "latency_s": 0.879,
+   "headers_s": 0.8701,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 115089,
+   "headers": {
+    "content-length": "115089",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-08T10:29:00.410+00:00",
+   "t_end_iso": "2026-10-08T10:29:01.289+00:00"
+  },
+  {
+   "pass": "A3",
+   "session": 5,
+   "kind": "search",
+   "source": "openalex",
+   "query_id": "t01-natural_language",
+   "topic": "t01",
+   "phrasing": "natural_language",
+   "per_page": 25,
+   "event": "request",
+   "rid": "A3/t01-natural_language/openalex",
+   "host": "api.openalex.org",
+   "method": "GET",
+   "url": "https://api.openalex.org/works?search=how+can+retrieval-augmented+generation+work+over+long+documents&per_page=25&select=id%2Cdoi%2Ctitle%2Cdisplay_name%2Cpublication_year%2Cpublication_date%2Cids%2Ctype%2Cauthorships%2Cprimary_location%2Clocations%2Cbest_oa_location%2Copen_access%2Ccited_by_count%2Cabstract_inverted_index%2Crelevance_score",
+   "t_start": 1791455341.469957,
+   "budget_keys": [
+    [
+     "api",
+     "openalex",
+     "a3"
+    ]
+   ],
+   "t_end": 1791455342.9324896,
+   "latency_s": 1.4622,
+   "headers_s": 0.6585,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 275551,
+   "headers": {
+    "content-type": "application/json",
+    "x-ratelimit-cost-usd": "0.001",
+    "x-ratelimit-credits-used": "10",
+    "x-ratelimit-limit": "10000",
+    "x-ratelimit-limit-usd": "1",
+    "x-ratelimit-onetime-remaining": "0",
+    "x-ratelimit-prepaid-remaining-usd": "0",
+    "x-ratelimit-remaining": "9880",
+    "x-ratelimit-remaining-usd": "0.988",
+    "x-ratelimit-reset": "48658",
+    "content-encoding": "gzip"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-08T10:29:01.469+00:00",
+   "t_end_iso": "2026-10-08T10:29:02.932+00:00"
+  },
+  {
+   "pass": "A3",
+   "session": 5,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t01-natural_language",
+   "topic": "t01",
+   "phrasing": "natural_language",
+   "per_page": 50,
+   "event": "request",
+   "rid": "A3/t01-natural_language/arxiv",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Aretrieval+AND+all%3Aaugmented+AND+all%3Ageneration+AND+all%3Awork+AND+all%3Along+AND+all%3Adocuments&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1791455344.618989,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a3"
+    ]
+   ],
+   "t_end": 1791455345.6164603,
+   "latency_s": 0.9971,
+   "headers_s": 0.9666,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 123313,
+   "headers": {
+    "content-length": "123313",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-08T10:29:04.618+00:00",
+   "t_end_iso": "2026-10-08T10:29:05.616+00:00"
+  },
+  {
+   "pass": "A3",
+   "session": 5,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t07-keyword",
+   "topic": "t07",
+   "phrasing": "keyword",
+   "per_page": 50,
+   "event": "request",
+   "rid": "A3/t07-keyword/arxiv",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Aknowledge+AND+all%3Adistillation+AND+all%3Amodel+AND+all%3Acompression&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1791455348.9640775,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a3"
+    ]
+   ],
+   "t_end": 1791455349.628493,
+   "latency_s": 0.6646,
+   "headers_s": 0.6545,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 116347,
+   "headers": {
+    "content-length": "116347",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-08T10:29:08.964+00:00",
+   "t_end_iso": "2026-10-08T10:29:09.628+00:00"
+  },
+  {
+   "pass": "A3",
+   "session": 5,
+   "kind": "search",
+   "source": "openalex",
+   "query_id": "t07-keyword",
+   "topic": "t07",
+   "phrasing": "keyword",
+   "per_page": 25,
+   "event": "request",
+   "rid": "A3/t07-keyword/openalex",
+   "host": "api.openalex.org",
+   "method": "GET",
+   "url": "https://api.openalex.org/works?search=knowledge+distillation+model+compression&per_page=25&select=id%2Cdoi%2Ctitle%2Cdisplay_name%2Cpublication_year%2Cpublication_date%2Cids%2Ctype%2Cauthorships%2Cprimary_location%2Clocations%2Cbest_oa_location%2Copen_access%2Ccited_by_count%2Cabstract_inverted_index%2Crelevance_score",
+   "t_start": 1791455349.8119602,
+   "budget_keys": [
+    [
+     "api",
+     "openalex",
+     "a3"
+    ]
+   ],
+   "t_end": 1791455351.078896,
+   "latency_s": 1.2667,
+   "headers_s": 0.4642,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 223746,
+   "headers": {
+    "content-type": "application/json",
+    "x-ratelimit-cost-usd": "0.001",
+    "x-ratelimit-credits-used": "10",
+    "x-ratelimit-limit": "10000",
+    "x-ratelimit-limit-usd": "1",
+    "x-ratelimit-onetime-remaining": "0",
+    "x-ratelimit-prepaid-remaining-usd": "0",
+    "x-ratelimit-remaining": "9870",
+    "x-ratelimit-remaining-usd": "0.987",
+    "x-ratelimit-reset": "48650",
+    "content-encoding": "gzip"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-08T10:29:09.811+00:00",
+   "t_end_iso": "2026-10-08T10:29:11.078+00:00"
+  },
+  {
+   "pass": "A3",
+   "session": 5,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t09-keyword",
+   "topic": "t09",
+   "phrasing": "keyword",
+   "per_page": 50,
+   "event": "request",
+   "rid": "A3/t09-keyword/arxiv",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Acontrastive+AND+all%3Alearning+AND+all%3Asentence+AND+all%3Aembeddings&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1791455352.96871,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a3"
+    ]
+   ],
+   "t_end": 1791455354.197814,
+   "latency_s": 1.2283,
+   "headers_s": 1.2084,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 108382,
+   "headers": {
+    "content-length": "108382",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-08T10:29:12.968+00:00",
+   "t_end_iso": "2026-10-08T10:29:14.197+00:00"
+  },
+  {
+   "pass": "A3",
+   "session": 5,
+   "kind": "search",
+   "source": "openalex",
+   "query_id": "t09-keyword",
+   "topic": "t09",
+   "phrasing": "keyword",
+   "per_page": 25,
+   "event": "request",
+   "rid": "A3/t09-keyword/openalex",
+   "host": "api.openalex.org",
+   "method": "GET",
+   "url": "https://api.openalex.org/works?search=contrastive+learning+sentence+embeddings&per_page=25&select=id%2Cdoi%2Ctitle%2Cdisplay_name%2Cpublication_year%2Cpublication_date%2Cids%2Ctype%2Cauthorships%2Cprimary_location%2Clocations%2Cbest_oa_location%2Copen_access%2Ccited_by_count%2Cabstract_inverted_index%2Crelevance_score",
+   "t_start": 1791455354.3798707,
+   "budget_keys": [
+    [
+     "api",
+     "openalex",
+     "a3"
+    ]
+   ],
+   "t_end": 1791455356.3725724,
+   "latency_s": 1.993,
+   "headers_s": 0.511,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 235169,
+   "headers": {
+    "content-type": "application/json",
+    "x-ratelimit-cost-usd": "0.001",
+    "x-ratelimit-credits-used": "10",
+    "x-ratelimit-limit": "10000",
+    "x-ratelimit-limit-usd": "1",
+    "x-ratelimit-onetime-remaining": "0",
+    "x-ratelimit-prepaid-remaining-usd": "0",
+    "x-ratelimit-remaining": "9860",
+    "x-ratelimit-remaining-usd": "0.986",
+    "x-ratelimit-reset": "48645",
+    "content-encoding": "gzip"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-08T10:29:14.379+00:00",
+   "t_end_iso": "2026-10-08T10:29:16.372+00:00"
+  },
+  {
+   "pass": "A3",
+   "session": 5,
+   "kind": "search",
+   "source": "openalex",
+   "query_id": "t03-natural_language",
+   "topic": "t03",
+   "phrasing": "natural_language",
+   "per_page": 25,
+   "event": "request",
+   "rid": "A3/t03-natural_language/openalex",
+   "host": "api.openalex.org",
+   "method": "GET",
+   "url": "https://api.openalex.org/works?search=what+dense+retrieval+methods+work+for+open-domain+question+answering&per_page=25&select=id%2Cdoi%2Ctitle%2Cdisplay_name%2Cpublication_year%2Cpublication_date%2Cids%2Ctype%2Cauthorships%2Cprimary_location%2Clocations%2Cbest_oa_location%2Copen_access%2Ccited_by_count%2Cabstract_inverted_index%2Crelevance_score",
+   "t_start": 1791455356.5545468,
+   "budget_keys": [
+    [
+     "api",
+     "openalex",
+     "a3"
+    ]
+   ],
+   "t_end": 1791455357.9335692,
+   "latency_s": 1.3782,
+   "headers_s": 0.5718,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 262104,
+   "headers": {
+    "content-type": "application/json",
+    "x-ratelimit-cost-usd": "0.001",
+    "x-ratelimit-credits-used": "10",
+    "x-ratelimit-limit": "10000",
+    "x-ratelimit-limit-usd": "1",
+    "x-ratelimit-onetime-remaining": "0",
+    "x-ratelimit-prepaid-remaining-usd": "0",
+    "x-ratelimit-remaining": "9850",
+    "x-ratelimit-remaining-usd": "0.985",
+    "x-ratelimit-reset": "48643",
+    "content-encoding": "gzip"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-08T10:29:16.554+00:00",
+   "t_end_iso": "2026-10-08T10:29:17.933+00:00"
+  },
+  {
+   "pass": "A3",
+   "session": 5,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t03-natural_language",
+   "topic": "t03",
+   "phrasing": "natural_language",
+   "per_page": 50,
+   "event": "request",
+   "rid": "A3/t03-natural_language/arxiv",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Adense+AND+all%3Aretrieval+AND+all%3Amethods+AND+all%3Awork+AND+all%3Aopen+AND+all%3Adomain+AND+all%3Aquestion+AND+all%3Aanswering&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1791455358.1135767,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a3"
+    ]
+   ],
+   "t_end": 1791455358.8832743,
+   "latency_s": 0.7693,
+   "headers_s": 0.7606,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 40434,
+   "headers": {
+    "content-length": "40434",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-08T10:29:18.113+00:00",
+   "t_end_iso": "2026-10-08T10:29:18.883+00:00"
+  },
+  {
+   "pass": "A3",
+   "session": 5,
+   "kind": "search",
+   "source": "openalex",
+   "query_id": "t08-natural_language",
+   "topic": "t08",
+   "phrasing": "natural_language",
+   "per_page": 25,
+   "event": "request",
+   "rid": "A3/t08-natural_language/openalex",
+   "host": "api.openalex.org",
+   "method": "GET",
+   "url": "https://api.openalex.org/works?search=how+do+diffusion+models+generate+images&per_page=25&select=id%2Cdoi%2Ctitle%2Cdisplay_name%2Cpublication_year%2Cpublication_date%2Cids%2Ctype%2Cauthorships%2Cprimary_location%2Clocations%2Cbest_oa_location%2Copen_access%2Ccited_by_count%2Cabstract_inverted_index%2Crelevance_score",
+   "t_start": 1791455359.0654335,
+   "budget_keys": [
+    [
+     "api",
+     "openalex",
+     "a3"
+    ]
+   ],
+   "t_end": 1791455360.9821289,
+   "latency_s": 1.9158,
+   "headers_s": 1.1059,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 311745,
+   "headers": {
+    "content-type": "application/json",
+    "x-ratelimit-cost-usd": "0.001",
+    "x-ratelimit-credits-used": "10",
+    "x-ratelimit-limit": "10000",
+    "x-ratelimit-limit-usd": "1",
+    "x-ratelimit-onetime-remaining": "0",
+    "x-ratelimit-prepaid-remaining-usd": "0",
+    "x-ratelimit-remaining": "9840",
+    "x-ratelimit-remaining-usd": "0.984",
+    "x-ratelimit-reset": "48640",
+    "content-encoding": "gzip"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-08T10:29:19.065+00:00",
+   "t_end_iso": "2026-10-08T10:29:20.982+00:00"
+  },
+  {
+   "pass": "A3",
+   "session": 5,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t08-natural_language",
+   "topic": "t08",
+   "phrasing": "natural_language",
+   "per_page": 50,
+   "event": "request",
+   "rid": "A3/t08-natural_language/arxiv",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Adiffusion+AND+all%3Amodels+AND+all%3Agenerate+AND+all%3Aimages&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1791455362.2381458,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a3"
+    ]
+   ],
+   "t_end": 1791455362.9847898,
+   "latency_s": 0.746,
+   "headers_s": 0.7357,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 123132,
+   "headers": {
+    "content-length": "123132",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-08T10:29:22.238+00:00",
+   "t_end_iso": "2026-10-08T10:29:22.984+00:00"
+  },
+  {
+   "pass": "A3",
+   "session": 5,
+   "kind": "search",
+   "source": "openalex",
+   "query_id": "t02-keyword",
+   "topic": "t02",
+   "phrasing": "keyword",
+   "per_page": 25,
+   "event": "request",
+   "rid": "A3/t02-keyword/openalex",
+   "host": "api.openalex.org",
+   "method": "GET",
+   "url": "https://api.openalex.org/works?search=low-rank+adaptation+fine-tuning+large+language+models&per_page=25&select=id%2Cdoi%2Ctitle%2Cdisplay_name%2Cpublication_year%2Cpublication_date%2Cids%2Ctype%2Cauthorships%2Cprimary_location%2Clocations%2Cbest_oa_location%2Copen_access%2Ccited_by_count%2Cabstract_inverted_index%2Crelevance_score",
+   "t_start": 1791455363.1721308,
+   "budget_keys": [
+    [
+     "api",
+     "openalex",
+     "a3"
+    ]
+   ],
+   "t_end": 1791455364.5127904,
+   "latency_s": 1.341,
+   "headers_s": 0.5365,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 216887,
+   "headers": {
+    "content-type": "application/json",
+    "x-ratelimit-cost-usd": "0.001",
+    "x-ratelimit-credits-used": "10",
+    "x-ratelimit-limit": "10000",
+    "x-ratelimit-limit-usd": "1",
+    "x-ratelimit-onetime-remaining": "0",
+    "x-ratelimit-prepaid-remaining-usd": "0",
+    "x-ratelimit-remaining": "9830",
+    "x-ratelimit-remaining-usd": "0.983",
+    "x-ratelimit-reset": "48636",
+    "content-encoding": "gzip"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-08T10:29:23.172+00:00",
+   "t_end_iso": "2026-10-08T10:29:24.512+00:00"
+  },
+  {
+   "pass": "A3",
+   "session": 5,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t02-keyword",
+   "topic": "t02",
+   "phrasing": "keyword",
+   "per_page": 50,
+   "event": "request",
+   "rid": "A3/t02-keyword/arxiv",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Alow+AND+all%3Arank+AND+all%3Aadaptation+AND+all%3Afine+AND+all%3Atuning+AND+all%3Alarge+AND+all%3Alanguage+AND+all%3Amodels&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1791455366.3295386,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a3"
+    ]
+   ],
+   "t_end": 1791455367.4238935,
+   "latency_s": 1.0938,
+   "headers_s": 1.0746,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 114256,
+   "headers": {
+    "content-length": "114256",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-08T10:29:26.329+00:00",
+   "t_end_iso": "2026-10-08T10:29:27.423+00:00"
+  },
+  {
+   "pass": "A3",
+   "session": 5,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t10-keyword",
+   "topic": "t10",
+   "phrasing": "keyword",
+   "per_page": 50,
+   "event": "request",
+   "rid": "A3/t10-keyword/arxiv",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Achain+AND+all%3Athought+AND+all%3Aprompting+AND+all%3Areasoning&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1791455370.7783256,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a3"
+    ]
+   ],
+   "t_end": 1791455371.76001,
+   "latency_s": 0.9811,
+   "headers_s": 0.9653,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 115771,
+   "headers": {
+    "content-length": "115771",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-08T10:29:30.778+00:00",
+   "t_end_iso": "2026-10-08T10:29:31.760+00:00"
+  },
+  {
+   "pass": "A3",
+   "session": 5,
+   "kind": "search",
+   "source": "openalex",
+   "query_id": "t10-keyword",
+   "topic": "t10",
+   "phrasing": "keyword",
+   "per_page": 25,
+   "event": "request",
+   "rid": "A3/t10-keyword/openalex",
+   "host": "api.openalex.org",
+   "method": "GET",
+   "url": "https://api.openalex.org/works?search=chain-of-thought+prompting+reasoning&per_page=25&select=id%2Cdoi%2Ctitle%2Cdisplay_name%2Cpublication_year%2Cpublication_date%2Cids%2Ctype%2Cauthorships%2Cprimary_location%2Clocations%2Cbest_oa_location%2Copen_access%2Ccited_by_count%2Cabstract_inverted_index%2Crelevance_score",
+   "t_start": 1791455371.9340332,
+   "budget_keys": [
+    [
+     "api",
+     "openalex",
+     "a3"
+    ]
+   ],
+   "t_end": 1791455373.2304583,
+   "latency_s": 1.295,
+   "headers_s": 0.494,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 209846,
+   "headers": {
+    "content-type": "application/json",
+    "x-ratelimit-cost-usd": "0.001",
+    "x-ratelimit-credits-used": "10",
+    "x-ratelimit-limit": "10000",
+    "x-ratelimit-limit-usd": "1",
+    "x-ratelimit-onetime-remaining": "0",
+    "x-ratelimit-prepaid-remaining-usd": "0",
+    "x-ratelimit-remaining": "9820",
+    "x-ratelimit-remaining-usd": "0.982",
+    "x-ratelimit-reset": "48628",
+    "content-encoding": "gzip"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-08T10:29:31.934+00:00",
+   "t_end_iso": "2026-10-08T10:29:33.230+00:00"
+  },
+  {
+   "pass": "A3",
+   "session": 5,
+   "kind": "search",
+   "source": "openalex",
+   "query_id": "t06-natural_language",
+   "topic": "t06",
+   "phrasing": "natural_language",
+   "per_page": 25,
+   "event": "request",
+   "rid": "A3/t06-natural_language/openalex",
+   "host": "api.openalex.org",
+   "method": "GET",
+   "url": "https://api.openalex.org/works?search=how+are+graph+neural+networks+used+to+predict+molecular+properties&per_page=25&select=id%2Cdoi%2Ctitle%2Cdisplay_name%2Cpublication_year%2Cpublication_date%2Cids%2Ctype%2Cauthorships%2Cprimary_location%2Clocations%2Cbest_oa_location%2Copen_access%2Ccited_by_count%2Cabstract_inverted_index%2Crelevance_score",
+   "t_start": 1791455373.420328,
+   "budget_keys": [
+    [
+     "api",
+     "openalex",
+     "a3"
+    ]
+   ],
+   "t_end": 1791455375.060267,
+   "latency_s": 1.6394,
+   "headers_s": 0.8335,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 308324,
+   "headers": {
+    "content-type": "application/json",
+    "x-ratelimit-cost-usd": "0.001",
+    "x-ratelimit-credits-used": "10",
+    "x-ratelimit-limit": "10000",
+    "x-ratelimit-limit-usd": "1",
+    "x-ratelimit-onetime-remaining": "0",
+    "x-ratelimit-prepaid-remaining-usd": "0",
+    "x-ratelimit-remaining": "9810",
+    "x-ratelimit-remaining-usd": "0.981",
+    "x-ratelimit-reset": "48626",
+    "content-encoding": "gzip"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-08T10:29:33.420+00:00",
+   "t_end_iso": "2026-10-08T10:29:35.060+00:00"
+  },
+  {
+   "pass": "A3",
+   "session": 5,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t06-natural_language",
+   "topic": "t06",
+   "phrasing": "natural_language",
+   "per_page": 50,
+   "event": "request",
+   "rid": "A3/t06-natural_language/arxiv",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Agraph+AND+all%3Aneural+AND+all%3Anetworks+AND+all%3Aused+AND+all%3Apredict+AND+all%3Amolecular+AND+all%3Aproperties&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1791455375.2402124,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a3"
+    ]
+   ],
+   "t_end": 1791455376.1174095,
+   "latency_s": 0.8767,
+   "headers_s": 0.8646,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 116378,
+   "headers": {
+    "content-length": "116378",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-08T10:29:35.240+00:00",
+   "t_end_iso": "2026-10-08T10:29:36.117+00:00"
+  },
+  {
+   "pass": "A3",
+   "session": 5,
+   "kind": "search",
+   "source": "arxiv",
+   "query_id": "t04-natural_language",
+   "topic": "t04",
+   "phrasing": "natural_language",
+   "per_page": 50,
+   "event": "request",
+   "rid": "A3/t04-natural_language/arxiv",
+   "host": "export.arxiv.org",
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Ahallucinations+AND+all%3Alanguage+AND+all%3Amodel+AND+all%3Aoutputs+AND+all%3Adetected&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "t_start": 1791455379.4649906,
+   "budget_keys": [
+    [
+     "api",
+     "arxiv_api",
+     "a3"
+    ]
+   ],
+   "t_end": 1791455380.3372967,
+   "latency_s": 0.872,
+   "headers_s": 0.8538,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 117780,
+   "headers": {
+    "content-length": "117780",
+    "content-type": "application/atom+xml; charset=utf-8"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-08T10:29:39.464+00:00",
+   "t_end_iso": "2026-10-08T10:29:40.337+00:00"
+  },
+  {
+   "pass": "A3",
+   "session": 5,
+   "kind": "search",
+   "source": "openalex",
+   "query_id": "t04-natural_language",
+   "topic": "t04",
+   "phrasing": "natural_language",
+   "per_page": 25,
+   "event": "request",
+   "rid": "A3/t04-natural_language/openalex",
+   "host": "api.openalex.org",
+   "method": "GET",
+   "url": "https://api.openalex.org/works?search=how+can+hallucinations+in+language+model+outputs+be+detected&per_page=25&select=id%2Cdoi%2Ctitle%2Cdisplay_name%2Cpublication_year%2Cpublication_date%2Cids%2Ctype%2Cauthorships%2Cprimary_location%2Clocations%2Cbest_oa_location%2Copen_access%2Ccited_by_count%2Cabstract_inverted_index%2Crelevance_score",
+   "t_start": 1791455380.5143826,
+   "budget_keys": [
+    [
+     "api",
+     "openalex",
+     "a3"
+    ]
+   ],
+   "t_end": 1791455381.922314,
+   "latency_s": 1.4066,
+   "headers_s": 0.5983,
+   "status": 200,
+   "outcome": "ok",
+   "error": null,
+   "bytes": 300526,
+   "headers": {
+    "content-type": "application/json",
+    "x-ratelimit-cost-usd": "0.001",
+    "x-ratelimit-credits-used": "10",
+    "x-ratelimit-limit": "10000",
+    "x-ratelimit-limit-usd": "1",
+    "x-ratelimit-onetime-remaining": "0",
+    "x-ratelimit-prepaid-remaining-usd": "0",
+    "x-ratelimit-remaining": "9800",
+    "x-ratelimit-remaining-usd": "0.98",
+    "x-ratelimit-reset": "48619",
+    "content-encoding": "gzip"
+   },
+   "client_redirects": 0,
+   "t_start_iso": "2026-10-08T10:29:40.514+00:00",
+   "t_end_iso": "2026-10-08T10:29:41.922+00:00"
+  },
+  {
+   "event": "run_end",
+   "command": "addendum-a3",
+   "at": "2026-10-08T10:29:41.924+00:00",
    "stopped_hosts": {}
   }
  ]

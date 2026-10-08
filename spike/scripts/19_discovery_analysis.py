@@ -6,6 +6,7 @@
     .venv\\Scripts\\python.exe spike\\scripts\\19_discovery_analysis.py finalize
     .venv\\Scripts\\python.exe spike\\scripts\\19_discovery_analysis.py finalize-a1
     .venv\\Scripts\\python.exe spike\\scripts\\19_discovery_analysis.py finalize-a2
+    .venv\\Scripts\\python.exe spike\\scripts\\19_discovery_analysis.py finalize-a3
     .venv\\Scripts\\python.exe spike\\scripts\\19_discovery_analysis.py leakcheck
 
 `selftest` is P0: the address classifier against the protocol's table, URL checks,
@@ -79,6 +80,7 @@ from m4_http import Chain, Ctx, build_ctx, fetch_chain
 from m4_parse import Rec, parse
 from m4_works import build_works, p1_keyword_records, record_keys, search_records
 
+from scholiast.infrastructure.discovery.arxiv import ADAPTER_VERSION as ARXIV_ADAPTER_VERSION
 from scholiast.infrastructure.discovery.openalex import ADAPTER_VERSION, SELECT, OpenAlexSource
 
 SOURCES = ("openalex", "semantic_scholar", "arxiv")
@@ -90,6 +92,10 @@ POOLS_A1_PATH = ROOT / "data" / "eval" / "discovery-pools-arxiv-a1.json.gz"
 POOLS_A1_MANIFEST_PATH = ROOT / "data" / "eval" / "discovery-pools-arxiv-a1.manifest.json"
 POOLS_A2_PATH = ROOT / "data" / "eval" / "discovery-pools-openalex-a2.json.gz"
 POOLS_A2_MANIFEST_PATH = ROOT / "data" / "eval" / "discovery-pools-openalex-a2.manifest.json"
+POOLS_A3_PATH = ROOT / "data" / "eval" / "discovery-pools-a3.json.gz"
+POOLS_A3_MANIFEST_PATH = ROOT / "data" / "eval" / "discovery-pools-a3.manifest.json"
+#: A3's sources and page sizes (D150): what production asks each for.
+A3_LIMITS = {"openalex": 25, "arxiv": 50}
 CURVE_S = (1.0, 1.5, 2.0, 2.5, 3.0)
 
 
@@ -1402,6 +1408,56 @@ def addendum_a2(protocol: dict[str, Any], bodies: list[dict[str, Any]],
     }
 
 
+def addendum_a3(protocol: dict[str, Any], bodies: list[dict[str, Any]],
+                outcomes: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """A3 (D150): what each shipped source returned, how fast, and how far OpenAlex moved since A2.
+
+    Nothing here is a decision input: A3 records phase 8's judging pools.
+    """
+    a3_out = {o["rid"]: o for o in outcomes if o.get("pass") == "A3"}
+    if not a3_out:
+        return None
+    query_ids = [f"{t['id']}-{ph}" for t in protocol["topics"] for ph in ("keyword", "natural_language")]
+    per_source: dict[str, Any] = {}
+    for source in A3_LIMITS:
+        rows = [a3_out.get(f"A3/{q}/{source}") for q in query_ids]
+        ok = [o for o in rows if o is not None and o["outcome"] == "ok"]
+        # Every planned request counts; one that failed or was never sent did not finish.
+        all_s = [o["latency_s"] if o is not None and o["outcome"] == "ok" else float("inf") for o in rows]
+        p95 = nearest_rank(all_s, 95)
+        p50 = nearest_rank(all_s, 50)
+        records = {e["query_id"]: len(parse(source, e["body"]).records)
+                   for e in bodies if e.get("pass") == "A3" and e.get("source") == source
+                   and e.get("status") == 200}
+        per_source[source] = {
+            "requests": len([o for o in rows if o is not None]),
+            "outcomes": dict(Counter(o["outcome"] for o in rows if o is not None)),
+            "p50_s": None if p50 in (None, float("inf")) else p50,
+            "p95_s": None if p95 in (None, float("inf")) else p95,
+            "latency_ok_s": _pct([o["latency_s"] for o in ok]),
+            "within_2s": wilson(sum(1 for x in all_s if x <= A2_DEADLINE_S), len(query_ids)),
+            "records_per_query": records,
+        }
+    a2_pages = {e["query_id"]: [r.source_id for r in parse("openalex", e["body"]).records]
+                for e in bodies if e.get("pass") == "A2" and e.get("per_page") == 25
+                and e.get("status") == 200}
+    a3_pages = {e["query_id"]: [r.source_id for r in parse("openalex", e["body"]).records]
+                for e in bodies if e.get("pass") == "A3" and e.get("source") == "openalex"
+                and e.get("status") == 200}
+    overlap = {q: len(set(a3_pages[q]) & set(a2_pages[q])) for q in query_ids
+               if q in a3_pages and q in a2_pages}
+    cost = sum(float((o.get("headers") or {}).get("x-ratelimit-cost-usd") or 0) for o in a3_out.values()
+               if o.get("source") == "openalex")
+    return {
+        "per_source": per_source,
+        "openalex_overlap_with_a2_25": {"per_query": overlap,
+                                        "median": nearest_rank(sorted(overlap.values()), 50),
+                                        "of": 25},
+        "cost_usd": round(cost, 4),
+        "decision": {"rule": protocol["addenda"]["A3"]["decision_rule"]},
+    }
+
+
 def planned_coverage(protocol: dict[str, Any], api: list[dict[str, Any]]) -> dict[str, Any]:
     decided_rids = decided(api)
     missing = []
@@ -1427,6 +1483,12 @@ def planned_coverage(protocol: dict[str, Any], api: list[dict[str, Any]]) -> dic
                 for size in A2_SIZES:
                     if f"A2/{t['id']}-{ph}/{size}" not in decided_rids:
                         missing.append(f"A2/{t['id']}-{ph}/{size}")
+    if any(r.get("pass") == "A3" for r in api):  # and A3 once its run has started
+        for t in protocol["topics"]:
+            for ph in ("keyword", "natural_language"):
+                for source in A3_LIMITS:
+                    if f"A3/{t['id']}-{ph}/{source}" not in decided_rids:
+                        missing.append(f"A3/{t['id']}-{ph}/{source}")
     return {"missing": missing, "complete": not missing}
 
 
@@ -1490,6 +1552,7 @@ def analyse() -> int:
         "asm2": asm2(protocol, run),
         "addendum_a1": addendum_a1(protocol, bodies, outcomes),
         "addendum_a2": addendum_a2(protocol, bodies, outcomes),
+        "addendum_a3": addendum_a3(protocol, bodies, outcomes),
         "evidence": {"allowlist": allowlist_evidence(run), "licence": licence_evidence(run),
                      "dedup": dedup_evidence(), "stability": stability(bodies), "phrasing": phrasing(bodies)},
     }
@@ -1829,6 +1892,71 @@ def finalize_a2() -> int:
     return 0
 
 
+def finalize_a3() -> int:
+    """A3's tracked outputs (D150): its own pools, and the request log with A3 in it.
+
+    Every earlier pool is verified against the log and not rewritten.
+    """
+    protocol, digest = load_protocol()
+    env = load_env()
+    secrets = Secrets([env.get("OPENALEX_API_KEY", ""), env.get("S2_API_KEY", "")])
+    run = load_run()
+    s2_ids = _s2_ids(run["bodies"])
+    _verify_frozen_pools([e for e in run["bodies"] if e.get("source") in ("openalex", "arxiv")
+                          and e.get("pass") in ASM1_PASSES])
+    _verify_frozen_pools([e for e in run["bodies"] if e.get("pass") == "A1"],
+                         POOLS_A1_PATH, POOLS_A1_MANIFEST_PATH)
+    _verify_frozen_pools([e for e in run["bodies"] if e.get("pass") == "A2"],
+                         POOLS_A2_PATH, POOLS_A2_MANIFEST_PATH)
+    print("the spike's, A1's and A2's pools verified against the log; not rewritten")
+
+    text = json.dumps(_requests_doc(run, digest, s2_ids), indent=1, ensure_ascii=False, default=str)
+    secrets.assert_absent(text, where=str(OUT_REQUESTS))
+    OUT_REQUESTS.write_text(text + "\n", encoding="utf-8")
+    print("wrote", OUT_REQUESTS.relative_to(ROOT))
+
+    entries = sorted((e for e in run["bodies"] if e.get("pass") == "A3"), key=lambda e: e["rid"])
+    if not entries or any(e.get("source") not in A3_LIMITS for e in entries):
+        raise SystemExit("A3 holds no responses, or holds a response from a source A3 did not ask")
+    payload = json.dumps({"protocol_sha256": digest, "entries": entries}, ensure_ascii=False,
+                         sort_keys=True).encode("utf-8")
+    secrets.assert_absent(payload.decode("utf-8"), where=str(POOLS_A3_PATH))
+    with POOLS_A3_PATH.open("wb") as raw, gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0) as gz:
+        gz.write(payload)
+    blob = POOLS_A3_PATH.read_bytes()
+    manifest = {
+        "dataset": "scholiast-m4-discovery-pools-a3",
+        "decision": "D150",
+        "protocol_sha256": digest,
+        "file": POOLS_A3_PATH.name,
+        "sha256": hashlib.sha256(blob).hexdigest(),
+        "bytes": len(blob),
+        "entries": len(entries),
+        "by_source_and_status": dict(Counter(f"{e['source']}/{e['status']}" for e in entries)),
+        "recorded_from": min(e["received_at"] for e in entries),
+        "recorded_to": max(e["received_at"] for e in entries),
+        "licence": "OpenAlex data CC0; arXiv metadata CC0",
+        "request": {
+            "built_by": {"openalex": "scholiast.infrastructure.discovery.openalex.OpenAlexSource.request",
+                         "arxiv": "scholiast.infrastructure.discovery.arxiv.ArxivSource.request"},
+            "openalex_adapter_version": ADAPTER_VERSION,
+            "arxiv_adapter_version": ARXIV_ADAPTER_VERSION,
+            "select": SELECT,
+            "limits": A3_LIMITS,
+        },
+        "addendum": protocol["addenda"]["A3"],
+        "caveat": protocol["pools_caveat"],
+    }
+    POOLS_A3_MANIFEST_PATH.write_text(json.dumps(manifest, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    reloaded = json.loads(gzip.decompress(POOLS_A3_PATH.read_bytes()))
+    assert hashlib.sha256(POOLS_A3_PATH.read_bytes()).hexdigest() == manifest["sha256"]
+    assert len(reloaded["entries"]) == len(entries)
+    bad = [e["rid"] for e in reloaded["entries"] if e["status"] == 200 and parse(e["source"], e["body"]).error]
+    print(f"wrote {POOLS_A3_PATH.relative_to(ROOT)} ({len(blob)} bytes, {len(entries)} entries); "
+          f"reload verified; unparseable 200s: {bad or 'none'}")
+    return 0
+
+
 def _rid_public(rid: str, key_public: Any) -> str:
     parts = rid.split("/")
     if len(parts) >= 3 and parts[0] in ("P3", "P4"):
@@ -1904,10 +2032,11 @@ def leakcheck() -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("command", choices=["selftest", "check", "analyse", "finalize", "finalize-a1",
-                                            "finalize-a2", "leakcheck"])
+                                            "finalize-a2", "finalize-a3", "leakcheck"])
     command = parser.parse_args().command
     return {"selftest": selftest, "check": check, "analyse": analyse, "finalize": finalize,
-            "finalize-a1": finalize_a1, "finalize-a2": finalize_a2, "leakcheck": leakcheck}[command]()
+            "finalize-a1": finalize_a1, "finalize-a2": finalize_a2, "finalize-a3": finalize_a3,
+            "leakcheck": leakcheck}[command]()
 
 
 if __name__ == "__main__":

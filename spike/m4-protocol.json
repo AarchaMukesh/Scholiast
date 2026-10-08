@@ -4,7 +4,7 @@
   "decision": "D116",
   "prepared": "2026-09-30",
   "amended": {"on": "2026-10-01", "by": "DEV-2, approved by the owner during session 1 (D117)", "original_sha256": "6a2809025626b29b96119cd4d06639fd3341cd325c74c121e82ba5e9e8677a34"},
-  "addended": {"on": "2026-10-04", "by": "addendum A2, approved by the owner before any A2 request (D125); addendum A1 on 2026-10-02 (D120)", "previous_sha256": "b23f235ea5314c6a3a2db73f48fbce80060c549c840577e166926021a850dd79"},
+  "addended": {"on": "2026-10-08", "by": "addendum A3, approved by the owner before any A3 request (D150); addendum A2 on 2026-10-04 (D125); addendum A1 on 2026-10-02 (D120)", "previous_sha256": "da128b48e71f95aff1514e65a374ab7b1387e3e9715ed5a72a6c08fd12ebb682"},
   "purpose": "Measure ASM-1 (each academic source is fast, complete and permissive enough to serve a 3 s discovery search) and ASM-2 (the share of discovered papers with a retrievable open-access PDF) before any M4 production code exists, and record frozen candidate pools for phases 2, 7 and 8.",
   "hashing": "protocol_sha256 is the SHA-256 of the UTF-8 bytes of json.dumps(protocol, sort_keys=True, separators=(',', ':'), ensure_ascii=False). Canonical JSON rather than raw bytes, because core.autocrlf=true rewrites line endings on checkout, so a raw-byte hash taken on Windows would not reproduce on a Linux checkout. Every results file records it.",
   "rules": {
@@ -372,6 +372,21 @@
       "decision_rule": "Ship the largest per_page in {50, 25, 15} whose p95 latency is <= 2.0 s AND whose keyword-phrasing anchor recall within its own page is >= 50%. If no size passes both, none is chosen and the owner decides.",
       "outputs": "Responses to data/eval/discovery-pools-openalex-a2.json.gz with a manifest (OpenAlex data, CC0); numbers under addendum_a2 in spike/results/19_discovery_analysis.json; a section in SPIKE-FINDINGS-M4.md. The spike's committed pools are not changed.",
       "does_not_establish": ["20 requests a size make p95 the 19th-ranked value; a size that passes narrowly may not pass on another day.", "One day, from the development machine's network; a deployment elsewhere sees different network latency.", "The latency of a whole search: dedup and ranking (phases 7 and 8) must fit the remaining 1.0 s, and phase 10's live run measures the whole request.", "Anchor recall counts 20 famous papers and is blind to precision; a smaller page may drop useful papers that are not anchors."]
+    },
+    "A3": {
+      "question": "What do the two shipped sources return today for the 20 P1 queries, so phase 8 judges the candidates production would actually rank?",
+      "why": "OpenAlex's ranking changed between the spike and A2 (D126): the frozen pools record a ranking OpenAlex no longer serves, and A2's 25-result pages are from 2026-10-04 and have no arXiv half. D126 requires a re-recording with the shipped request before phase 8 judges anything (D149, D150).",
+      "queries": "The 20 P1 queries: 10 topics x keyword and natural_language. Each is sent once to OpenAlex and once to arXiv, every request, URL and headers, built by the production adapter: scholiast.infrastructure.discovery.openalex.OpenAlexSource.request(text, limit=25) (D125's shipped page size) and scholiast.infrastructure.discovery.arxiv.ArxivSource().request(text, limit=50) (D120's AND construction, the shipped page size). 40 requests.",
+      "order": "Seeded with stream '<seed>/A3': the 20 queries are shuffled, and within each query the order of the two sources is shuffled. A query's two requests run one after the other, each waiting for its own host's pacing gap.",
+      "connection": "A new HTTP client, and so a new connection, for every request, as the production adapters open one per search. Bodies are decoded as the client receives them, as in P1.",
+      "pacing": "pacing['api.openalex.org'] and pacing['export.arxiv.org'], as P1: OpenAlex 1 s from the previous request start, arXiv 3 s from the previous response end and one connection. Retry-After and the host-stop rule apply as in pacing.",
+      "timeouts": "timeouts_s.api_connect and api_total, as P1: the tail is observed, not cut at D122's 2.0 s.",
+      "budget": {"max": {"openalex_searches": 20, "arxiv_queries": 20}, "planned": {"openalex_searches": 20, "arxiv_queries": 20}},
+      "no_repeats": "As rules: a failure is an outcome, and no A3 request is repeated. A query whose request to one source failed is judged on the source that answered.",
+      "measure": "Reported, not decision inputs: per source, latency from request issued to last body byte (nearest-rank p50 and p95, a failed request counted as slower than any success) and the share answered within 2.0 s; per query, the overlap in OpenAlex work ids between A3's 25-result page and A2's 25-result page for the same query (drift since 2026-10-04); cost from x-ratelimit-cost-usd.",
+      "decision_rule": "None. A3 records the judging pools; it chooses nothing.",
+      "outputs": "Responses to data/eval/discovery-pools-a3.json.gz with a manifest (OpenAlex and arXiv metadata, CC0); numbers under addendum_a3 in spike/results/19_discovery_analysis.json. The spike's committed pools, A1's and A2's are not changed.",
+      "does_not_establish": ["One day's ranking from each source: OpenAlex changed its ranking once without notice (D126), and phase 10's live run sees its own day.", "Anything about retrieval quality: phase 8 judges and reorders what the sources returned, so a relevant paper neither source returned is invisible to it.", "The latency of a whole search: phase 10's live run measures the whole request."]
     }
   },
   "outputs": [

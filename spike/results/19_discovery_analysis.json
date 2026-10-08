@@ -1,13 +1,14 @@
 {
- "protocol_sha256": "da128b48e71f95aff1514e65a374ab7b1387e3e9715ed5a72a6c08fd12ebb682",
+ "protocol_sha256": "7f9ee36501c99f9357b2561eb851d4f92378f0ee893608094526e25e2603d8de",
  "protocol_original_sha256": "6a2809025626b29b96119cd4d06639fd3341cd325c74c121e82ba5e9e8677a34",
  "protocol_hashes_in_run_logs": [
   "6a2809025626b29b96119cd4d06639fd3341cd325c74c121e82ba5e9e8677a34",
   "6f46de9af888c2998f9c3faf61d8c902692e8e688db012aef307a098df820884",
+  "7f9ee36501c99f9357b2561eb851d4f92378f0ee893608094526e25e2603d8de",
   "b23f235ea5314c6a3a2db73f48fbce80060c549c840577e166926021a850dd79",
   "da128b48e71f95aff1514e65a374ab7b1387e3e9715ed5a72a6c08fd12ebb682"
  ],
- "generated_at": "2026-10-04T06:29:34.779+00:00",
+ "generated_at": "2026-10-08T10:30:04.916+00:00",
  "s2_mode": "keyless",
  "deviations": {
   "events": [
@@ -111,7 +112,7 @@
   "complete": true
  },
  "log_check": {
-  "sent_requests": 454,
+  "sent_requests": 494,
   "violations": [
    "pacing: export.arxiv.org A1/t08-natural_language/OR has no end time; gap unverifiable"
   ],
@@ -3869,6 +3870,128 @@
    "n_anchors": 20,
    "chosen_per_page": null,
    "owner_decides": true
+  }
+ },
+ "addendum_a3": {
+  "per_source": {
+   "openalex": {
+    "requests": 20,
+    "outcomes": {
+     "ok": 20
+    },
+    "p50_s": 1.4622,
+    "p95_s": 2.0297,
+    "latency_ok_s": {
+     "n": 20,
+     "p50": 1.4622,
+     "p90": 1.993,
+     "p95": 2.0297,
+     "max": 2.0793
+    },
+    "within_2s": {
+     "k": 18,
+     "n": 20,
+     "rate": 0.9,
+     "lo": 0.699,
+     "hi": 0.9721
+    },
+    "records_per_query": {
+     "t02-natural_language": 25,
+     "t05-keyword": 25,
+     "t01-keyword": 25,
+     "t04-keyword": 25,
+     "t03-keyword": 25,
+     "t06-keyword": 25,
+     "t08-keyword": 25,
+     "t07-natural_language": 25,
+     "t09-natural_language": 25,
+     "t05-natural_language": 25,
+     "t10-natural_language": 25,
+     "t01-natural_language": 25,
+     "t07-keyword": 25,
+     "t09-keyword": 25,
+     "t03-natural_language": 25,
+     "t08-natural_language": 25,
+     "t02-keyword": 25,
+     "t10-keyword": 25,
+     "t06-natural_language": 25,
+     "t04-natural_language": 25
+    }
+   },
+   "arxiv": {
+    "requests": 20,
+    "outcomes": {
+     "ok": 20
+    },
+    "p50_s": 0.9618,
+    "p95_s": 1.4246,
+    "latency_ok_s": {
+     "n": 20,
+     "p50": 0.9618,
+     "p90": 1.2283,
+     "p95": 1.4246,
+     "max": 1.5444
+    },
+    "within_2s": {
+     "k": 20,
+     "n": 20,
+     "rate": 1.0,
+     "lo": 0.8389,
+     "hi": 1.0
+    },
+    "records_per_query": {
+     "t02-natural_language": 3,
+     "t05-keyword": 50,
+     "t01-keyword": 50,
+     "t04-keyword": 50,
+     "t03-keyword": 50,
+     "t06-keyword": 50,
+     "t08-keyword": 50,
+     "t07-natural_language": 50,
+     "t09-natural_language": 50,
+     "t05-natural_language": 30,
+     "t10-natural_language": 50,
+     "t01-natural_language": 50,
+     "t07-keyword": 50,
+     "t09-keyword": 50,
+     "t03-natural_language": 18,
+     "t08-natural_language": 50,
+     "t02-keyword": 50,
+     "t10-keyword": 50,
+     "t06-natural_language": 50,
+     "t04-natural_language": 50
+    }
+   }
+  },
+  "openalex_overlap_with_a2_25": {
+   "per_query": {
+    "t01-keyword": 23,
+    "t01-natural_language": 24,
+    "t02-keyword": 25,
+    "t02-natural_language": 24,
+    "t03-keyword": 25,
+    "t03-natural_language": 23,
+    "t04-keyword": 24,
+    "t04-natural_language": 25,
+    "t05-keyword": 24,
+    "t05-natural_language": 23,
+    "t06-keyword": 24,
+    "t06-natural_language": 25,
+    "t07-keyword": 24,
+    "t07-natural_language": 25,
+    "t08-keyword": 25,
+    "t08-natural_language": 25,
+    "t09-keyword": 24,
+    "t09-natural_language": 25,
+    "t10-keyword": 23,
+    "t10-natural_language": 25
+   },
+   "median": 24,
+   "of": 25
+  },
+  "cost_usd": 0.02,
+  "decision": {
+   "rule": "None. A3 records the judging pools; it chooses nothing."
   }
  },
  "evidence": {

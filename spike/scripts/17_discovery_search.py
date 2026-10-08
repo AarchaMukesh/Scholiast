@@ -5,6 +5,7 @@
     .venv\\Scripts\\python.exe spike\\scripts\\17_discovery_search.py session2 [--wait]
     .venv\\Scripts\\python.exe spike\\scripts\\17_discovery_search.py addendum-a1
     .venv\\Scripts\\python.exe spike\\scripts\\17_discovery_search.py addendum-a2
+    .venv\\Scripts\\python.exe spike\\scripts\\17_discovery_search.py addendum-a3
 
 `plan` prints every planned API request and sends nothing. `session1` runs P1 (the
 20 search queries, three sources at once per query), then DEV-2's repeats of any
@@ -14,7 +15,9 @@ to start until 6 hours after P1's last request unless told to wait for it.
 `addendum-a1` runs A1 (D120): the 20 P1 queries against arXiv only, each joined with
 AND and with OR. `addendum-a2` runs A2 (D125): the 20 P1 queries against OpenAlex
 only, at 50, 25 and 15 results per page, each request built by the production
-adapter and sent on a new connection.
+adapter and sent on a new connection. `addendum-a3` runs A3 (D150): the 20 P1 queries
+against both shipped sources at their shipped page sizes, each request built by the
+production adapter and sent on a new connection, to record phase 8's judging pools.
 
 Everything is resumable without repeating a request: the run log under
 var/spike/run/ records a `sending` line before every request, and a rerun skips
@@ -53,6 +56,7 @@ from m4_common import (
 from m4_http import Ctx, api_request, build_ctx
 from m4_parse import parse
 
+from scholiast.infrastructure.discovery.arxiv import ArxivSource
 from scholiast.infrastructure.discovery.openalex import OpenAlexSource
 
 SOURCES = ("openalex", "semantic_scholar", "arxiv")
@@ -144,6 +148,39 @@ def a2_plan(protocol: dict[str, Any]) -> list[A2Step]:
 def a2_request(api_key: str, step: A2Step, per_page: int) -> httpx.Request:
     """What the production adapter would send for this query and size (D125): URL and headers."""
     return OpenAlexSource(api_key).request(step.text, limit=per_page)
+
+
+#: A3's sources and the page size production asks each for (D125, D120, D150).
+A3_LIMITS = {"openalex": 25, "arxiv": 50}
+
+
+@dataclass(frozen=True)
+class A3Step:
+    query_id: str
+    topic: str
+    phrasing: str
+    text: str
+    order: tuple[str, ...]
+
+
+def a3_plan(protocol: dict[str, Any]) -> list[A3Step]:
+    """Addendum A3's order (D150): queries shuffled, and the two sources shuffled within each."""
+    rng = random.Random(f"{protocol['seed']}/A3")
+    steps = [(t["id"], ph, t[ph]) for t in protocol["topics"] for ph in ("keyword", "natural_language")]
+    rng.shuffle(steps)
+    out = []
+    for topic_id, phrasing, text in steps:
+        order = list(A3_LIMITS)
+        rng.shuffle(order)
+        out.append(A3Step(f"{topic_id}-{phrasing}", topic_id, phrasing, text, tuple(order)))
+    return out
+
+
+def a3_request(api_key: str, step: A3Step, source: str) -> httpx.Request:
+    """What production would send for this query to this source (D150): URL and headers."""
+    if source == "openalex":
+        return OpenAlexSource(api_key).request(step.text, limit=A3_LIMITS[source])
+    return ArxivSource().request(step.text, limit=A3_LIMITS[source])
 
 
 def search_request(protocol: dict[str, Any], source: str, text: str, select: str) -> dict[str, Any]:
@@ -400,6 +437,41 @@ async def run_a2(ctx: Ctx, api_key: str, bodies: RunLog) -> None:
         print(f"A2 {number:2d}/20 {step.query_id}", flush=True)
 
 
+async def run_a3(ctx: Ctx, api_key: str, bodies: RunLog) -> None:
+    """Addendum A3 (D150): each query once to each shipped source, paced as P1's were."""
+    t = ctx.protocol["timeouts_s"]
+    timeout = httpx.Timeout(float(t["api_total"]), connect=float(t["api_connect"]))
+    budget = {"openalex": ("api", "openalex", "a3"), "arxiv": ("api", "arxiv_api", "a3")}
+    for number, step in enumerate(a3_plan(ctx.protocol), 1):
+        for source in step.order:
+            rid = f"A3/{step.query_id}/{source}"
+            if rid in ctx.done:
+                continue
+            # As run_a1: wait out the gap, then look for the stop file.
+            while (delay := ctx.pacer.earliest(API_HOST[source]) - wall()) > 0:
+                await asyncio.sleep(delay)
+            if STOP_FILE.exists():
+                print(f"{STOP_FILE} exists: paused before {rid}", flush=True)
+                return
+            req = a3_request(api_key, step, source)
+            # A new client per request, as A2: production opens one per search (D119).
+            headers = {name: value for name, value in req.headers.items()
+                       if name.lower() in ("authorization", "user-agent")}
+            async with httpx.AsyncClient(timeout=timeout, follow_redirects=False, headers=headers,
+                                         limits=httpx.Limits(max_connections=1)) as client:
+                result = await api_request(
+                    ctx, client, rid=rid, host=API_HOST[source],
+                    budget_keys=[budget[source]], method=req.method, url=str(req.url),
+                    meta={"pass": "A3", "session": 5, "kind": "search", "source": source,
+                          "query_id": step.query_id, "topic": step.topic, "phrasing": step.phrasing,
+                          "per_page": A3_LIMITS[source]},
+                    total_timeout=float(t["api_total"]),
+                )
+            if result is not None:
+                store_body(bodies, result[0], result[1])
+        print(f"A3 {number:2d}/20 {step.query_id}", flush=True)
+
+
 def keyword_ids(bodies: list[dict[str, Any]], source: str) -> list[str]:
     ids: set[str] = set()
     for entry in bodies:
@@ -485,6 +557,9 @@ async def main_async(args: argparse.Namespace) -> int:
             for per_page in a2.sizes:
                 # The key only fills the header, which is not printed.
                 print("A2", a2.query_id, per_page, a2_request("plan-only", a2, per_page).url)
+        for a3 in a3_plan(protocol):
+            for source in a3.order:
+                print("A3", a3.query_id, source, a3_request("plan-only", a3, source).url)
         return 0
 
     env = load_env()
@@ -495,7 +570,8 @@ async def main_async(args: argparse.Namespace) -> int:
     secrets = Secrets([key, env.get("S2_API_KEY", "")])
     log = RunLog("api", secrets)
     bodies = RunLog("bodies", secrets)
-    session = {"session1": 1, "session2": 2, "addendum-a1": 3, "addendum-a2": 4}[args.command]
+    session = {"session1": 1, "session2": 2, "addendum-a1": 3, "addendum-a2": 4,
+               "addendum-a3": 5}[args.command]
     ctx = build_ctx(protocol, log, session=session)
     state = State(protocol, log.records(), read_jsonl(bodies.path))
     log.append({"event": "run", "command": args.command, "protocol_sha256": digest,
@@ -531,6 +607,8 @@ async def main_async(args: argparse.Namespace) -> int:
             await run_a1(ctx, clients["arxiv"], bodies)
         elif args.command == "addendum-a2":
             await run_a2(ctx, key, bodies)
+        elif args.command == "addendum-a3":
+            await run_a3(ctx, key, bodies)
         else:
             await run_steps(ctx, clients, bodies, state, plan(protocol, "P5"), "P5", 2)
     finally:
@@ -545,7 +623,8 @@ async def main_async(args: argparse.Namespace) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["plan", "session1", "session2", "addendum-a1", "addendum-a2"])
+    parser.add_argument("command", choices=["plan", "session1", "session2", "addendum-a1", "addendum-a2",
+                                            "addendum-a3"])
     parser.add_argument("--wait", action="store_true", help="session2: wait for the 6 h gap")
     return asyncio.run(main_async(parser.parse_args()))
 
