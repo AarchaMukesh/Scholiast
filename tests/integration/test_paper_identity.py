@@ -22,6 +22,7 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from testcontainers.community.postgres import PostgresContainer
 
+from scholiast.application.ports.queue import JobPriority
 from scholiast.application.ports.tenancy import WORKER_CLAIM_REASON, SystemContext, TenantContext
 from scholiast.domain.paper import Paper, PaperOrigin, PaperVisibility
 from scholiast.domain.workspace import PaperState
@@ -32,7 +33,7 @@ pytestmark = [pytest.mark.integration]
 
 ROOT = Path(__file__).resolve().parents[2]
 UNUSABLE_HASH = "not-a-real-argon2-hash"
-HEAD = "7c1d4e9a2f60"
+HEAD = "b52e8d3f7a19"
 BEFORE = "e83c5f1a2b64"
 
 
@@ -242,7 +243,10 @@ class TestAJobCarriesTheLinksItWillFetch:
             scope, workspace = await _tenant(session)
             paper = await _held(session, scope, workspace, _discovered(scope))
             job_id = await PostgresQueue(session, scope).enqueue(
-                workspace_id=workspace, paper_id=paper.id, source_links=links
+                priority=JobPriority.INTERACTIVE,
+                workspace_id=workspace,
+                paper_id=paper.id,
+                source_links=links,
             )
             await session.commit()
 
@@ -258,7 +262,7 @@ class TestAJobCarriesTheLinksItWillFetch:
                 session, scope, workspace, _discovered(scope, content_hash="e" * 64)
             )
             job_id = await PostgresQueue(session, scope).enqueue(
-                workspace_id=workspace, paper_id=paper.id
+                priority=JobPriority.INTERACTIVE, workspace_id=workspace, paper_id=paper.id
             )
             await session.commit()
             stored = (

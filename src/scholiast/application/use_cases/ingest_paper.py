@@ -52,7 +52,7 @@ from scholiast.application.ports.parsing import (
     DocumentUnparseable,
     ParsedDocument,
 )
-from scholiast.application.ports.queue import DEFAULT_LEASE_SECONDS, Queue
+from scholiast.application.ports.queue import DEFAULT_LEASE_SECONDS, JobPriority, Queue
 from scholiast.application.ports.repositories import (
     ChunkRepository,
     PaperRepository,
@@ -164,7 +164,7 @@ class IngestPaperUseCase:
             # Classified where it happened (D134): a refused or missing link is
             # SOURCE_UNAVAILABLE, not the TRANSIENT the catch-all below would make
             # it, which would spend three paced requests rediscovering a 404.
-            return _failed(paper_id, exc.failure_class, exc.detail)
+            return _failed(paper_id, exc.failure_class, exc.detail, retry_after=exc.retry_after)
         except ObjectNotFound as exc:
             # The blob the job points at is gone. Not retryable in any useful
             # sense — the bytes are not coming back — and distinct enough from a
@@ -353,7 +353,9 @@ class IngestPaperUseCase:
                 FailureClass.TRANSIENT, f"the fetch did not finish within {deadline:g} s"
             ) from exc
         except FetchFailed as exc:
-            raise _FetchStageFailed(exc.failure_class, _attempts_detail(exc.attempts)) from exc
+            raise _FetchStageFailed(
+                exc.failure_class, _attempts_detail(exc.attempts), retry_after=exc.retry_after
+            ) from exc
         try:
             # The fetcher already checked the size and the magic bytes; this is
             # the upload path's own gate, so a fetched PDF passes the same one.
@@ -410,7 +412,13 @@ class IngestPaperUseCase:
             workspace.remove_paper(placeholder.id)
             await self._papers.remove_from_workspace(workspace_id, placeholder.id)
             await attach_existing(
-                workspace, existing, papers=self._papers, chunks=self._chunks, queue=self._queue
+                workspace,
+                existing,
+                papers=self._papers,
+                chunks=self._chunks,
+                queue=self._queue,
+                # Only a discovered paper's fetch can merge, so its job is backfill.
+                priority=JobPriority.BACKFILL,
             )
         # Completed before the purge: if the placeholder goes, its jobs go with it
         # (ON DELETE CASCADE), and if it stays, this one must not be redelivered.
@@ -457,10 +465,14 @@ class IngestPaperUseCase:
 class _FetchStageFailed(Exception):
     """A classified FETCHING failure, raised where it is understood and recorded by `execute`."""
 
-    def __init__(self, failure_class: FailureClass, detail: str) -> None:
+    def __init__(
+        self, failure_class: FailureClass, detail: str, *, retry_after: float | None = None
+    ) -> None:
         super().__init__(f"{failure_class.value}: {detail}")
         self.failure_class = failure_class
         self.detail = detail
+        #: The longest wait a refusing host stated (D142).
+        self.retry_after = retry_after
 
 
 def _attempts_detail(attempts: Sequence[FetchAttempt]) -> str:
@@ -475,9 +487,14 @@ def _attempts_detail(attempts: Sequence[FetchAttempt]) -> str:
     return "links tried: " + ", ".join(attempt.outcome for attempt in attempts)
 
 
-def _failed(paper_id: str, failure_class: FailureClass, detail: str) -> IngestionOutcome:
+def _failed(
+    paper_id: str, failure_class: FailureClass, detail: str, *, retry_after: float | None = None
+) -> IngestionOutcome:
     return IngestionOutcome(
-        paper_id=paper_id, failure=IngestionFailure(failure_class=failure_class, detail=detail)
+        paper_id=paper_id,
+        failure=IngestionFailure(
+            failure_class=failure_class, detail=detail, retry_after=retry_after
+        ),
     )
 
 

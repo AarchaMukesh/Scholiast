@@ -30,10 +30,13 @@ class FetchAttempt:
 
     url: str
     #: `fetched`, or why not: `refused:<rule>`, `status:<code>`, `not_pdf`,
-    #: `too_large`, `encoded`, `timeout`, `error`, `too_many_redirects`.
+    #: `too_large`, `encoded`, `timeout`, `error`, `too_many_redirects`, or
+    #: `deferred` (not tried: the host's stated wait has not passed, D142).
     outcome: str
     #: Redirects followed before the outcome.
     redirects: int = 0
+    #: Seconds the host said to wait, from a 429's or 503's Retry-After (D142).
+    retry_after: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,6 +57,16 @@ class FetchFailed(Exception):
         )
         self.failure_class = failure_class
         self.attempts = attempts
+
+    @property
+    def retry_after(self) -> float | None:
+        """The longest wait any host stated, or None if none did (D142).
+
+        The longest, because a retry tries every link again, and going back to a
+        host before its stated time is the request it asked not to receive.
+        """
+        stated = [a.retry_after for a in self.attempts if a.retry_after is not None]
+        return max(stated, default=None)
 
 
 @runtime_checkable

@@ -40,6 +40,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from scholiast.application.ports.llm import TokenUsage
+from scholiast.application.ports.queue import JobPriority
 
 CONTENT_TYPE = "text/plain; version=0.0.4; charset=utf-8"
 
@@ -137,8 +138,11 @@ QUEUE_DEPTH = Gauge(
 
 OLDEST_JOB_AGE = Gauge(
     "scholiast_ingestion_oldest_job_age_seconds",
-    "Age of the oldest claimable job. The queue-is-not-draining alarm: depth "
-    "alone cannot distinguish a busy queue from a stalled one.",
+    "Age of the oldest claimable job, per priority. The queue-is-not-draining "
+    "alarm: depth alone cannot distinguish a busy queue from a stalled one, and "
+    "one number for both priorities would hide a starved backfill lane behind a "
+    "draining upload lane (D139). A job waiting out a host's Retry-After counts.",
+    ("priority",),
     registry=REGISTRY,
 )
 
@@ -247,12 +251,13 @@ async def refresh_work_gauges(sessions: SessionFactory) -> None:
         oldest = (
             await session.execute(
                 text(
-                    "SELECT COALESCE(MAX(EXTRACT(EPOCH FROM (now() - created_at))), 0) AS age "
+                    "SELECT priority, MAX(EXTRACT(EPOCH FROM (now() - created_at))) AS age "
                     "FROM ingestion_jobs WHERE state IN "
-                    "('queued', 'fetching', 'parsing', 'chunking', 'embedding')"
+                    "('queued', 'fetching', 'parsing', 'chunking', 'embedding') "
+                    "GROUP BY priority"
                 )
             )
-        ).scalar_one()
+        ).all()
         papers = (
             await session.execute(
                 text("SELECT state, count(*) AS n FROM workspace_papers GROUP BY state")
@@ -270,7 +275,11 @@ async def refresh_work_gauges(sessions: SessionFactory) -> None:
     QUEUE_DEPTH.clear()
     for row in jobs:
         QUEUE_DEPTH.labels(state=row.state).set(row.n)
-    OLDEST_JOB_AGE.set(float(oldest or 0.0))
+    # Every priority is reported, at zero when it has nothing waiting, so a
+    # dashboard never mistakes an absent series for a healthy one.
+    ages = {row.priority: float(row.age or 0.0) for row in oldest}
+    for priority in JobPriority:
+        OLDEST_JOB_AGE.labels(priority=priority.label).set(ages.get(int(priority), 0.0))
     PAPERS_BY_STATE.clear()
     for row in papers:
         PAPERS_BY_STATE.labels(state=row.state).set(row.n)

@@ -47,6 +47,7 @@ from scholiast.application.ports.accounts import AccountRepository, SessionRepos
 from scholiast.application.ports.dispatch import JobDispatcher
 from scholiast.application.ports.llm import LLMProvider
 from scholiast.application.ports.ml import Embedder
+from scholiast.application.ports.queue import JobPriority
 from scholiast.application.ports.security import (
     AuthenticationFailed,
     PasswordHasher,
@@ -138,15 +139,23 @@ async def _dispatch_committed_jobs(request: Request, session: AsyncSession) -> N
     it. The result is still not raised — logging it is the useful thing available
     here, and failing the request is not.
     """
-    jobs = pending.drain(session, pending.PENDING_DISPATCH)
+    jobs = [
+        (job_id, JobPriority.INTERACTIVE)
+        for job_id in pending.drain(session, pending.PENDING_DISPATCH)
+    ] + [
+        (job_id, JobPriority.BACKFILL)
+        for job_id in pending.drain(session, pending.PENDING_BACKFILL_DISPATCH)
+    ]
     deletions = pending.drain(session, pending.PENDING_DELETION_DISPATCH)
     if not jobs and not deletions:
         return
     dispatcher: JobDispatcher = request.app.state.dispatcher
-    for job_id in jobs:
-        published = await dispatcher.dispatch(job_id)
+    for job_id, priority in jobs:
+        published = await dispatcher.dispatch(job_id, priority=priority)
         if dispatcher.publishes and not published:
-            log.warning("dispatch.not_published", job_id=job_id, kind="ingestion")
+            log.warning(
+                "dispatch.not_published", job_id=job_id, kind="ingestion", priority=priority.label
+            )
     for workspace_id in deletions:
         published = await dispatcher.dispatch_deletion(workspace_id)
         if dispatcher.publishes and not published:

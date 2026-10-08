@@ -312,3 +312,22 @@ class TestAClassificationSurvivesAPoisonedSession:
         assert failure is not None
         assert failure.failure_class is FailureClass.TRANSIENT
         assert "ZeroDivisionError" in failure.detail
+
+
+class TestARetryableClassSpeaksAfterRetryingHasStopped:
+    """D143: a membership carries a class only once it is terminal.
+
+    A retry clears it, and a paper being retried shows QUEUED with no message, so
+    a retryable class's message is read on a FAILED paper whose attempts ran out.
+    "Retrying automatically" there was false every time it was shown.
+    """
+
+    @pytest.mark.parametrize(
+        "failure_class", [c for c in FailureClass if c.retryable], ids=lambda c: c.value
+    )
+    def test_it_never_claims_to_be_retrying(self, failure_class: FailureClass) -> None:
+        message = failure_class.user_message.lower()
+        assert "retrying automatically" not in message
+        assert "retrying with" not in message
+        # There is no retry route: what the user can do is add it again.
+        assert "add it again" in message

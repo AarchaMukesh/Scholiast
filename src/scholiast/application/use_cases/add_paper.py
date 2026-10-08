@@ -49,7 +49,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from scholiast.application.ports.queue import Queue
+from scholiast.application.ports.queue import JobPriority, Queue
 from scholiast.application.ports.repositories import (
     ChunkRepository,
     PaperRepository,
@@ -110,7 +110,12 @@ class AddPaperUseCase:
         existing = await self._papers.find_by_content_hash(content_hash)
         if existing is not None:
             return await attach_existing(
-                workspace, existing, papers=self._papers, chunks=self._chunks, queue=self._queue
+                workspace,
+                existing,
+                papers=self._papers,
+                chunks=self._chunks,
+                queue=self._queue,
+                priority=JobPriority.INTERACTIVE,
             )
 
         paper = Paper(
@@ -130,7 +135,10 @@ class AddPaperUseCase:
         # starts in; the repository only writes what it was told.
         membership = workspace.add_paper(stored.id, now=datetime.now(UTC))
         await self._papers.add_to_workspace(workspace_id, stored.id, membership.state)
-        job_id = await self._queue.enqueue(workspace_id=workspace_id, paper_id=stored.id)
+        # A user is watching an upload: it is claimed before discovered papers (D139).
+        job_id = await self._queue.enqueue(
+            workspace_id=workspace_id, paper_id=stored.id, priority=JobPriority.INTERACTIVE
+        )
 
         return AddPaperResult(
             paper_id=stored.id, state=membership.state, job_id=job_id, deduplicated=False
@@ -144,6 +152,7 @@ async def attach_existing(
     papers: PaperRepository,
     chunks: ChunkRepository,
     queue: Queue,
+    priority: JobPriority,
     source_links: Sequence[str] = (),
 ) -> AddPaperResult:
     """Add an already-known paper to this workspace (FR-I7, §5.4.2).
@@ -161,6 +170,7 @@ async def attach_existing(
 
     `source_links` reach the job only for a paper still awaiting its PDF: its
     job has to fetch (D134), and for any other paper links are irrelevant.
+    `priority` is the caller's: an upload's, or a discovered add's (D139).
     """
     member = next(
         (
@@ -188,6 +198,7 @@ async def attach_existing(
         job_id = await queue.enqueue(
             workspace_id=workspace.id,
             paper_id=paper.id,
+            priority=priority,
             source_links=source_links if paper.content_hash is None else (),
         )
     return AddPaperResult(

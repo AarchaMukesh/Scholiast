@@ -84,6 +84,11 @@ class Settings(BaseSettings):
     #: whole index and object store (D102), so the cost is paid whether or not
     #: there is residue. Shorter means faster convergence and more scanning.
     reconcile_interval_seconds: float = 300.0
+    #: D141. How often beat wakes an ingestion worker in the Celery topology. A
+    #: judgement, not a measurement: the longest extra wait for a retry or a
+    #: crash redelivery nothing announced, against D48's 5-10 s backoff and
+    #: NFR-P6's 90 s. The in-process poller ignores it.
+    ingest_sweep_seconds: float = Field(default=30.0, gt=0.0)
 
     # -- rate limiting and the ops surface (NFR-SEC7, D112-D114) -----------
     #: Off switch for the limiter. Present so a load test can measure the system

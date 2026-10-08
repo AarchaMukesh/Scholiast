@@ -43,6 +43,7 @@ from scholiast.domain.errors import FailureClass
 from scholiast.domain.fetch_policy import check_fetch_url, host_allowlist, is_public_address
 from scholiast.domain.upload import MAX_PDF_BYTES, PDF_MAGIC
 from scholiast.infrastructure.discovery import USER_AGENT
+from scholiast.infrastructure.retry_after import retry_after_seconds
 from scholiast.infrastructure.tls import tls_context
 
 MAX_REDIRECTS = 5
@@ -50,7 +51,9 @@ _REDIRECTS = frozenset({301, 302, 303, 307, 308})
 
 #: Outcomes a retry may fix. Everything else but `too_large` means the link will not
 #: give a PDF however often it is asked.
-_TRANSIENT_PREFIXES = ("status:429", "status:5", "timeout", "error")
+#: `deferred` is a link not tried because its host said when to come back, and
+#: that time has not come (D142): the retry is the remedy, at the host's time.
+_TRANSIENT_PREFIXES = ("status:429", "status:5", "timeout", "error", "deferred")
 
 Resolver = Callable[[str], Awaitable[list[str]]]
 log = structlog.get_logger(__name__)
@@ -80,6 +83,28 @@ class HostPacer:
         self._sleep = sleep
         self._locks: dict[str, asyncio.Lock] = {}
         self._free_at: dict[str, float] = {}
+        #: When each host said it would take requests again (D142).
+        self._deferred_until: dict[str, float] = {}
+
+    def defer(self, host: str, seconds: float) -> None:
+        """Note that `host` asked for nothing more for `seconds` (D142)."""
+        until = self._clock() + max(0.0, seconds)
+        self._deferred_until[host] = max(self._deferred_until.get(host, float("-inf")), until)
+
+    def deferred(self, host: str) -> float | None:
+        """How much longer `host`'s own stated wait outlasts its gap, or None.
+
+        None when the host asked for nothing, or for less than its gap already
+        imposes: the slot's ordinary wait covers that, and a stated time can
+        only ever lengthen a wait, never shorten one. Otherwise the caller must
+        not wait here (D142): a serial worker waiting out a host's stated time
+        would hold every upload behind it.
+        """
+        until = self._deferred_until.get(host)
+        now = self._clock()
+        if until is None or until <= max(now, self._free_at.get(host, float("-inf"))):
+            return None
+        return until - now
 
     @contextlib.asynccontextmanager
     async def slot(self, host: str) -> AsyncIterator[None]:
@@ -97,6 +122,14 @@ class HostPacer:
 @dataclass(frozen=True, slots=True)
 class _Redirect:
     location: str
+
+
+@dataclass(frozen=True, slots=True)
+class _Throttled:
+    """A 429 or 503: the host is refusing for now, and may have said for how long."""
+
+    status: int
+    retry_after: float | None
 
 
 def _classify(attempts: Sequence[FetchAttempt]) -> FailureClass:
@@ -152,6 +185,12 @@ class GuardedPdfFetcher:
             verdict = check_fetch_url(url, self._allowed)
             if not verdict.allowed or verdict.url is None or verdict.host is None:
                 return FetchAttempt(link, f"refused:{verdict.refusal}", redirects), None, None
+            remaining = self._pacer.deferred(verdict.host)
+            if remaining is not None:
+                # The host said when to come back and that is not yet (D142):
+                # nothing is sent, and the job is retried at the host's time
+                # rather than holding the worker until then.
+                return FetchAttempt(link, "deferred", redirects, retry_after=remaining), None, None
             try:
                 addresses = await self._resolver(verdict.host)
             except OSError:
@@ -160,6 +199,18 @@ class GuardedPdfFetcher:
                 return FetchAttempt(link, "refused:address", redirects), None, None
             async with self._pacer.slot(verdict.host):
                 result = await self._request(verdict.url, verdict.host, addresses[0])
+            if isinstance(result, _Throttled):
+                if result.retry_after is not None:
+                    # Every later link to this host, from any job in this
+                    # process, is deferred until then (D142).
+                    self._pacer.defer(verdict.host, result.retry_after)
+                return (
+                    FetchAttempt(
+                        link, f"status:{result.status}", redirects, retry_after=result.retry_after
+                    ),
+                    None,
+                    None,
+                )
             if isinstance(result, _Redirect):
                 # Resolved against the checked hostname URL, never the IP one, so a
                 # relative Location stays on the host that sent it.
@@ -170,7 +221,9 @@ class GuardedPdfFetcher:
             return FetchAttempt(link, result, redirects), None, None
         return FetchAttempt(link, "too_many_redirects", self._max_redirects), None, None
 
-    async def _request(self, url: str, host: str, address: str) -> _Redirect | bytes | str:
+    async def _request(
+        self, url: str, host: str, address: str
+    ) -> _Redirect | _Throttled | bytes | str:
         """One hop, connected to `address`: a redirect, the PDF, or a failure outcome."""
         target = httpx.URL(url).copy_with(host=address)
         headers = {
@@ -203,8 +256,10 @@ class GuardedPdfFetcher:
         except httpx.HTTPError as exc:
             return f"error:{type(exc).__name__}"
 
-    async def _read(self, response: httpx.Response) -> _Redirect | bytes | str:
+    async def _read(self, response: httpx.Response) -> _Redirect | _Throttled | bytes | str:
         status = response.status_code
+        if status in (429, 503):
+            return _Throttled(status, retry_after_seconds(response))
         if status in _REDIRECTS:
             location = response.headers.get("location")
             return _Redirect(location) if location else f"status:{status}"

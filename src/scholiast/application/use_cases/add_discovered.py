@@ -45,7 +45,7 @@ from scholiast.application.ports.discovery import (
     SourceFailure,
     SourceUnavailable,
 )
-from scholiast.application.ports.queue import Queue
+from scholiast.application.ports.queue import JobPriority, Queue
 from scholiast.application.ports.repositories import (
     ChunkRepository,
     PaperRepository,
@@ -200,7 +200,11 @@ class AddDiscoveredPapersUseCase:
                 membership = workspace.add_paper(stored.id, now=now)
                 await self._papers.add_to_workspace(workspace.id, stored.id, membership.state)
                 job_id = await self._queue.enqueue(
-                    workspace_id=workspace.id, paper_id=stored.id, source_links=item.links
+                    workspace_id=workspace.id,
+                    paper_id=stored.id,
+                    # Discovered papers are backfill: an upload goes first (D139).
+                    priority=JobPriority.BACKFILL,
+                    source_links=item.links,
                 )
                 result = AddPaperResult(
                     paper_id=stored.id, state=membership.state, job_id=job_id, deduplicated=False
@@ -212,6 +216,7 @@ class AddDiscoveredPapersUseCase:
                     papers=self._papers,
                     chunks=self._chunks,
                     queue=self._queue,
+                    priority=JobPriority.BACKFILL,
                     source_links=item.links,
                 )
             added.append(AddedPaper(item.ref, result))

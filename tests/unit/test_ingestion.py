@@ -23,6 +23,7 @@ import pytest
 from scholiast.application.ports.fetch import FetchAttempt, FetchedPdf, FetchFailed
 from scholiast.application.ports.ml import TextRole
 from scholiast.application.ports.parsing import DocumentUnparseable, ParsedDocument
+from scholiast.application.ports.queue import JobPriority
 from scholiast.application.ports.storage import ObjectNotFound, source_key
 from scholiast.application.ports.vector import VectorRecord
 from scholiast.application.use_cases.add_paper import AddPaperUseCase
@@ -248,16 +249,23 @@ class FakeQueue:
         self._journal = journal
         self.enqueued: list[tuple[str, str]] = []
         self.links: list[tuple[str, ...]] = []
+        self.priorities: list[JobPriority] = []
         self.stages: list[PaperState] = []
         self.leases: list[float] = []
         self.completed: list[str] = []
 
     async def enqueue(
-        self, *, workspace_id: str, paper_id: str, source_links: Sequence[str] = ()
+        self,
+        *,
+        workspace_id: str,
+        paper_id: str,
+        priority: JobPriority,
+        source_links: Sequence[str] = (),
     ) -> str:
         self._journal.record("queue.enqueue")
         self.enqueued.append((workspace_id, paper_id))
         self.links.append(tuple(source_links))
+        self.priorities.append(priority)
         return f"job-{len(self.enqueued)}"
 
     async def claim(self, *, limit: int = 1, lease_seconds: float = 300.0) -> list[object]:
@@ -283,6 +291,7 @@ class FakeQueue:
         failure_class: FailureClass,
         detail: str,
         max_attempts: int = 3,
+        retry_after: float | None = None,
     ) -> PaperState:
         return PaperState.FAILED
 
@@ -622,6 +631,8 @@ class TestANewUploadBecomesOneJob:
         assert journal.index_of("papers.add") < journal.index_of("queue.enqueue")
         assert store.objects[source_key(result.paper_id)] == PDF
         assert queue.enqueued == [(WORKSPACE, result.paper_id)]
+        # A user is watching an upload: it is claimed before discovered papers.
+        assert queue.priorities == [JobPriority.INTERACTIVE]
         assert result.state is PaperState.QUEUED
         assert result.job_id is not None
         assert result.deduplicated is False
@@ -1248,6 +1259,25 @@ class TestAPaperAwaitingItsPdfIsFetchedFirst:
 
         assert outcome.failure is not None
         assert outcome.failure.failure_class is FailureClass.TRANSIENT
+        assert outcome.failure.retry_after is None, "a wait nobody stated was invented"
+
+    async def test_a_hosts_stated_wait_reaches_the_queue(self) -> None:
+        # D142: the longest wait any refusing host stated, so no host is asked
+        # again before its time.
+        failed = FetchFailed(
+            FailureClass.TRANSIENT,
+            (
+                FetchAttempt(LINK, "status:429", retry_after=40.0),
+                FetchAttempt("https://www.aclweb.org/a.pdf", "status:503", retry_after=90.0),
+                FetchAttempt("https://aclanthology.org/b.pdf", "status:503"),
+            ),
+        )
+        world = make_fetching(fetcher=FakeFetcher(failed))
+
+        outcome = await ingest(world.use_case, world.paper.id, links=(LINK,))
+
+        assert outcome.failure is not None
+        assert outcome.failure.retry_after == 90.0
 
     async def test_a_fetch_still_running_at_half_the_lease_is_cut_off_and_retried(
         self,
@@ -1350,6 +1380,7 @@ class TestAFetchedPdfTheOwnerAlreadyHasIsMerged:
         assert (WORKSPACE, theirs.id, PaperState.QUEUED) in world.papers.memberships
         assert world.queue.enqueued == [(WORKSPACE, theirs.id)]
         assert world.queue.links == [()], "a paper with its PDF was given links to fetch"
+        assert world.queue.priorities == [JobPriority.BACKFILL]
 
     async def test_the_job_completes_before_the_placeholder_and_its_jobs_are_deleted(
         self,

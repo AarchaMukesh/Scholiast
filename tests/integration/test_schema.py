@@ -616,3 +616,42 @@ class TestAPaperBeforeItsPdf:
         second = await _discovered(conn, owner=bob, doi="10.1/x")
         assert first != second
         await conn.rollback()
+
+
+class TestAJobsPriorityIsOneTheClaimKnows:
+    """D139's CHECK, attempted. Alembic compares no CHECK constraints (CLAUDE.md)."""
+
+    async def _job(self, conn: AsyncConnection, priority: int | None) -> None:
+        owner = await _user(conn, f"{uuid.uuid4()}@example.com")
+        workspace = uuid.uuid4()
+        await conn.execute(
+            text(
+                "INSERT INTO workspaces (id, owner_id, name, state) "
+                "VALUES (:id, :owner, 'W', 'active')"
+            ),
+            {"id": workspace, "owner": owner},
+        )
+        paper = await _paper(conn, visibility="private", content_hash="job-paper", owner_id=owner)
+        columns = "id, workspace_id, paper_id, state" + (
+            ", priority" if priority is not None else ""
+        )
+        values = ":id, :ws, :paper, 'queued'" + (", :priority" if priority is not None else "")
+        await conn.execute(
+            text(f"INSERT INTO ingestion_jobs ({columns}) VALUES ({values})"),  # noqa: S608 - fixed text
+            {"id": uuid.uuid4(), "ws": workspace, "paper": paper, "priority": priority},
+        )
+
+    async def test_a_priority_the_claim_does_not_know_is_rejected(
+        self, conn: AsyncConnection
+    ) -> None:
+        with pytest.raises(IntegrityError, match="ck_ingestion_jobs_priority"):
+            await self._job(conn, 5)
+        await conn.rollback()
+
+    async def test_a_job_written_without_one_is_interactive(self, conn: AsyncConnection) -> None:
+        # Every job in flight at migration time was an upload, and a forgotten
+        # value must err toward not being deprioritised.
+        await self._job(conn, None)
+        priority = (await conn.execute(text("SELECT priority FROM ingestion_jobs"))).scalar_one()
+        assert priority == 10
+        await conn.rollback()

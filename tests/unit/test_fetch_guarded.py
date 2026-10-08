@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator, Callable
+from datetime import UTC, datetime, timedelta
+from email.utils import format_datetime
 
 import httpx
 import pytest
@@ -500,3 +502,157 @@ class TestHostsArePaced:
 
         with pytest.raises(ValidationError):
             Settings(fetch_arxiv_min_gap_seconds=1.0)
+
+
+class TestAHostThatSaysWhenIsBelieved:
+    """D142: a 429 or 503 with Retry-After is a stated time, not a guess to beat."""
+
+    @pytest.mark.parametrize("status", [429, 503])
+    async def test_the_stated_wait_is_kept_with_the_attempt(self, status: int) -> None:
+        def throttled(_: httpx.Request) -> httpx.Response:
+            return httpx.Response(status, headers={"retry-after": "120"})
+
+        with pytest.raises(FetchFailed) as caught:
+            await fetcher(Network(throttled)).fetch(["https://arxiv.org/pdf/1"])
+
+        [attempt] = caught.value.attempts
+        assert attempt.outcome == f"status:{status}"
+        assert attempt.retry_after == 120.0
+        assert caught.value.failure_class is FailureClass.TRANSIENT
+        assert caught.value.retry_after == 120.0
+
+    async def test_the_http_date_form_is_read_too(self) -> None:
+        # RFC 9110 allows either form; a proxy that rewrites one must not erase it.
+        when = format_datetime(datetime.now(UTC) + timedelta(seconds=300), usegmt=True)
+
+        def throttled(_: httpx.Request) -> httpx.Response:
+            return httpx.Response(503, headers={"retry-after": when})
+
+        with pytest.raises(FetchFailed) as caught:
+            await fetcher(Network(throttled)).fetch(["https://arxiv.org/pdf/1"])
+
+        assert caught.value.retry_after == pytest.approx(300.0, abs=5.0)
+
+    async def test_a_refusal_that_states_nothing_states_nothing(self) -> None:
+        def throttled(_: httpx.Request) -> httpx.Response:
+            return httpx.Response(503)
+
+        with pytest.raises(FetchFailed) as caught:
+            await fetcher(Network(throttled)).fetch(["https://arxiv.org/pdf/1"])
+
+        assert caught.value.attempts[0].retry_after is None
+        assert caught.value.retry_after is None, "a wait nobody stated was invented"
+
+    async def test_this_process_asks_the_host_nothing_more_until_then(self) -> None:
+        time = FakeTime()
+        pacer = HostPacer(
+            default_gap=5.0, gaps={"arxiv.org": 15.0}, clock=time.clock, sleep=time.sleep
+        )
+        network = Network(lambda _: httpx.Response(429, headers={"retry-after": "60"}))
+        guarded = GuardedPdfFetcher(
+            allowed_hosts=ALLOWED,
+            pacer=pacer,
+            resolver=standard_dns(),
+            transport=network.transport(),
+        )
+
+        with pytest.raises(FetchFailed):
+            await guarded.fetch(["https://arxiv.org/pdf/1"])
+        with pytest.raises(FetchFailed) as caught:
+            await guarded.fetch(["https://arxiv.org/pdf/2"])
+
+        assert len(network.requests) == 1, "arXiv was asked again before the time it stated"
+        [attempt] = caught.value.attempts
+        assert attempt.outcome == "deferred"
+        assert attempt.retry_after == pytest.approx(60.0)
+        assert caught.value.failure_class is FailureClass.TRANSIENT
+
+    async def test_a_deferred_host_holds_nothing_up(self) -> None:
+        # The serial worker must not wait out a host's stated time: every upload
+        # would queue behind it (D142, amended).
+        time = FakeTime()
+        pacer = HostPacer(
+            default_gap=5.0, gaps={"arxiv.org": 15.0}, clock=time.clock, sleep=time.sleep
+        )
+        pacer.defer("arxiv.org", 600.0)
+        guarded = GuardedPdfFetcher(
+            allowed_hosts=ALLOWED,
+            pacer=pacer,
+            resolver=standard_dns(),
+            transport=Network(pdf).transport(),
+        )
+
+        with pytest.raises(FetchFailed):
+            await guarded.fetch(["https://arxiv.org/pdf/1"])
+
+        assert time.slept == [], "the fetch waited out the host's time instead of returning"
+
+    async def test_a_deferred_host_does_not_stop_another_hosts_link(self) -> None:
+        time = FakeTime()
+        pacer = HostPacer(default_gap=0.0, clock=time.clock, sleep=time.sleep)
+        pacer.defer("arxiv.org", 600.0)
+        network = Network(pdf)
+        guarded = GuardedPdfFetcher(
+            allowed_hosts=ALLOWED,
+            pacer=pacer,
+            resolver=standard_dns(),
+            transport=network.transport(),
+        )
+
+        fetched = await guarded.fetch(
+            ["https://arxiv.org/pdf/1", "https://aclanthology.org/2020.emnlp-main.550.pdf"]
+        )
+
+        assert fetched.link == "https://aclanthology.org/2020.emnlp-main.550.pdf"
+        assert [r.headers["host"] for r in network.requests] == ["aclanthology.org"]
+        assert fetched.attempts[0].outcome == "deferred"
+
+    def test_a_later_shorter_wait_never_cuts_an_earlier_longer_one(self) -> None:
+        # Two links, two refusals: the host's longest stated time stands.
+        time = FakeTime()
+        pacer = HostPacer(default_gap=0.0, clock=time.clock, sleep=time.sleep)
+        pacer.defer("arxiv.org", 600.0)
+        pacer.defer("arxiv.org", 5.0)
+
+        assert pacer.deferred("arxiv.org") == pytest.approx(600.0)
+
+    async def test_once_the_stated_time_passes_the_host_is_asked_again(self) -> None:
+        time = FakeTime()
+        pacer = HostPacer(default_gap=5.0, clock=time.clock, sleep=time.sleep)
+        pacer.defer("arxiv.org", 60.0)
+        network = Network(pdf)
+        guarded = GuardedPdfFetcher(
+            allowed_hosts=ALLOWED,
+            pacer=pacer,
+            resolver=standard_dns(),
+            transport=network.transport(),
+        )
+
+        time.now += 60.0
+        await guarded.fetch(["https://arxiv.org/pdf/1"])
+
+        assert len(network.requests) == 1
+
+    async def test_a_stated_wait_shorter_than_the_gap_never_shortens_it(self) -> None:
+        time = FakeTime()
+        pacer = HostPacer(
+            default_gap=5.0, gaps={"arxiv.org": 15.0}, clock=time.clock, sleep=time.sleep
+        )
+        answers = iter(
+            [
+                httpx.Response(429, headers={"retry-after": "1"}),
+                httpx.Response(200, content=streamed(PDF)),
+            ]
+        )
+        guarded = GuardedPdfFetcher(
+            allowed_hosts=ALLOWED,
+            pacer=pacer,
+            resolver=standard_dns(),
+            transport=Network(lambda _: next(answers)).transport(),
+        )
+
+        with pytest.raises(FetchFailed):
+            await guarded.fetch(["https://arxiv.org/pdf/1"])
+        await guarded.fetch(["https://arxiv.org/pdf/1"])
+
+        assert time.slept == [15.0], "arXiv's robots.txt gap was cut short"

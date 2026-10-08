@@ -2,18 +2,23 @@
 
 Run with:
 
-    celery -A scholiast.workers.tasks worker -Q ingest,maintenance -c 1
+    celery -A scholiast.workers.tasks worker -Q ingest,backfill,maintenance -c 1
     celery -A scholiast.workers.tasks beat
+
+The `-Q` list is `celery_app.WORKER_QUEUES`, and a test keeps the two equal: a
+queue left off it is a queue whose messages nothing reads (D140).
 
 **One beat, however many workers** (D100). Beat is a scheduler, not a consumer:
 a second one does not share the schedule, it duplicates it, so every sweep would
 run twice. Workers scale freely because the queue is what distributes their
 work.
 
-**In dev, one worker consumes both queues**, which means a long cascade still
+**In dev, one worker consumes every queue**, which means a long cascade still
 occupies the slot an upload wants — the separation declared in `celery_app` is
 structural until a deployment gives maintenance its own worker (M6). Said here
 rather than left to be discovered, because the routing makes it look solved.
+Between uploads and discovered papers the separation is real but is the
+claim's (D139): whichever queue a wake-up came from, an upload runs first.
 
 **The task is a wake-up, not a work order.** Its argument is a job id, and it
 does not use it to find work: it calls `IngestionWorker.run_once()`, which claims
@@ -22,9 +27,12 @@ buys three things at once. A duplicate delivery cannot double-process a paper,
 because the claim is the serialisation point and the second claimer finds the row
 gone. A redelivery after a crash needs no correlation between message and row,
 because the lease already expired and the row is due again. And a message lost
-entirely costs latency rather than work, because the sweep still finds the row.
-The id travels for logs and tracing, which is why it is logged and not branched
-on.
+entirely costs latency rather than work, because beat's ingestion sweep finds
+the row within `ingest_sweep_seconds` (D141). The id travels for logs and
+tracing, which is why it is logged and not branched on.
+
+**One wake-up drains everything due** (D141), so a sweep clears a backlog of
+retries at once rather than one per pass.
 
 **One event loop per process, not one per task.** Celery's process model is
 synchronous and would ordinarily wrap each task in `asyncio.run`, but the
@@ -153,7 +161,9 @@ def _process_context() -> _ProcessContext:
         worker, maintenance, index = _build(settings)
         loop.run_until_complete(index.ensure_ready())
         _context = _ProcessContext(loop=loop, worker=worker, maintenance=maintenance, index=index)
-        log.info("worker.process_ready", queue=app.conf.task_default_queue)
+        # The DEFAULT queue: the queues this process consumes are its `-Q` list,
+        # which Celery holds and this module does not (D140).
+        log.info("worker.process_ready", default_queue=app.conf.task_default_queue)
     return _context
 
 
@@ -161,14 +171,15 @@ def _process_context() -> _ProcessContext:
 # callable wrapping a typed one. Narrow suppression rather than relaxing the
 # rule for the package: the task body below stays fully checked.
 @app.task(name=INGEST_TASK, bind=True, acks_late=True, ignore_result=True)  # type: ignore[untyped-decorator]
-def ingest_paper(self: Any, job_id: str) -> int:  # noqa: ARG001 - bind gives retry context
-    """Claim and run whatever is due. Returns how many jobs ran.
+def ingest_paper(self: Any, job_id: str | None = None) -> int:  # noqa: ARG001 - bind gives retry context
+    """Claim and run everything due. Returns how many jobs ran.
 
-    The return value is for tests and Flower; nothing waits on it (there is no
-    result backend, D95).
+    `job_id` is the job whose enqueue sent this wake-up, for the log; beat's
+    sweep sends none (D141). The return value is for tests and Flower; nothing
+    waits on it (there is no result backend, D95).
     """
     context = _process_context()
-    ran = context.loop.run_until_complete(context.worker.run_once())
+    ran = context.loop.run_until_complete(context.worker.drain())
     log.info("worker.task_finished", dispatched_for=job_id, jobs_run=ran)
     return ran
 

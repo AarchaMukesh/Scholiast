@@ -17,6 +17,7 @@ from types import SimpleNamespace
 import pytest
 
 from scholiast.application.ports.discovery import SourceFailure, SourceUnavailable
+from scholiast.application.ports.queue import JobPriority
 from scholiast.application.use_cases.add_discovered import (
     AddDiscoveredPapersUseCase,
     AddRefusal,
@@ -146,11 +147,18 @@ class FakeChunks:
 class FakeQueue:
     def __init__(self) -> None:
         self.jobs: list[tuple[str, str, tuple[str, ...]]] = []
+        self.priorities: list[JobPriority] = []
 
     async def enqueue(
-        self, *, workspace_id: str, paper_id: str, source_links: Sequence[str] = ()
+        self,
+        *,
+        workspace_id: str,
+        paper_id: str,
+        priority: JobPriority,
+        source_links: Sequence[str] = (),
     ) -> str:
         self.jobs.append((workspace_id, paper_id, tuple(source_links)))
+        self.priorities.append(priority)
         return f"job-{len(self.jobs)}"
 
 
@@ -355,6 +363,8 @@ class TestANewDiscoveredPaper:
         assert paper.content_hash is None and paper.parse_status is ParseStatus.PENDING
         assert paper.origin is PaperOrigin.DISCOVERY
         assert added.result.state is PaperState.QUEUED and added.result.deduplicated is False
+        # Discovered papers are backfill: an upload is claimed first (D139).
+        assert world.queue.priorities == [JobPriority.BACKFILL]
 
     async def test_its_metadata_is_the_sources_record_not_the_clients(self) -> None:
         world = World(sources=[FakeSource("arxiv", record())])
@@ -502,6 +512,8 @@ class TestReAddingByIdentifierDoesNoWork:
 
         assert added.result.paper_id == pending.id
         assert world.queue.jobs == [(WORKSPACE, pending.id, (ARXIV_PDF,))]
+        # Joined through a discovered add, so its job is backfill too.
+        assert world.queue.priorities == [JobPriority.BACKFILL]
 
     async def test_a_paper_awaiting_its_pdf_with_nothing_to_fetch_it_from_is_refused(
         self,

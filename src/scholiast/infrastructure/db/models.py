@@ -42,6 +42,7 @@ from sqlalchemy import (
     Index,
     Integer,
     Numeric,
+    SmallInteger,
     String,
     Text,
     func,
@@ -50,6 +51,7 @@ from sqlalchemy import text as sa_text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+from scholiast.application.ports.queue import JobPriority
 from scholiast.domain.errors import FailureClass
 from scholiast.domain.paper import (
     ChunkRole,
@@ -500,6 +502,11 @@ class IngestionJob(Base):
     #: On the job, not the paper: input to this unit of work, irrelevant once the
     #: paper has its PDF. NULL for uploads, which have their bytes already.
     source_links: Mapped[list[str] | None] = mapped_column(JSONB, nullable=True)
+    #: What the claim orders by first (D139): an upload before a discovered paper.
+    #: Defaults to interactive so a row written without it is never deprioritised.
+    priority: Mapped[int] = mapped_column(
+        SmallInteger, nullable=False, server_default=sa_text(str(int(JobPriority.INTERACTIVE)))
+    )
     #: The lease. A crashed worker's job becomes visible again rather than being
     #: lost, which is the at-least-once half of AD-5.
     visible_at: Mapped[datetime] = mapped_column(
@@ -512,5 +519,9 @@ class IngestionJob(Base):
 
     __table_args__ = (
         CheckConstraint(_one_of("state", PaperState), name="ck_ingestion_jobs_state"),
+        CheckConstraint(
+            "priority IN (" + ", ".join(str(int(p)) for p in sorted(JobPriority)) + ")",
+            name="ck_ingestion_jobs_priority",
+        ),
         Index("ix_ingestion_jobs_claim", "state", "visible_at"),
     )

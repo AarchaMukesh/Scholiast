@@ -56,7 +56,12 @@ _USER_MESSAGES: dict[FailureClass, str] = {
     FailureClass.SOURCE_UNAVAILABLE: (
         "This paper's full text isn't openly available. Upload the PDF to continue."
     ),
-    FailureClass.TRANSIENT: "Something went wrong on our side. Retrying automatically.",
+    # D143: a membership carries a class only once it is terminal (a retry clears
+    # it), so the retryable classes speak after retrying has stopped.
+    FailureClass.TRANSIENT: (
+        "Something went wrong on our side, and retrying didn't fix it. "
+        "Remove the paper and add it again later."
+    ),
     FailureClass.UNPARSEABLE: (
         "This PDF couldn't be read — it may be password-protected or corrupted."
     ),
@@ -65,7 +70,10 @@ _USER_MESSAGES: dict[FailureClass, str] = {
         "Text recognition isn't supported yet, so it can't be indexed."
     ),
     FailureClass.TOO_LARGE: "This file is too large. The limit is 50 MB.",
-    FailureClass.RESOURCE_EXHAUSTED: "Busy right now — retrying with a smaller batch.",
+    FailureClass.RESOURCE_EXHAUSTED: (
+        "The system was too busy to process this paper, and retrying didn't help. "
+        "Remove it and add it again later."
+    ),
 }
 
 
@@ -149,6 +157,9 @@ class IngestionFailure:
 
     failure_class: FailureClass
     detail: str
+    #: Seconds the failing service said to wait before trying again, when it said
+    #: (D142). None means it said nothing, not "retry immediately".
+    retry_after: float | None = None
 
     @property
     def retryable(self) -> bool:

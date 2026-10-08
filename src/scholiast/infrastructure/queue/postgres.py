@@ -9,11 +9,15 @@ What it buys in M1 is the property doc 8 asks for and a broker cannot give: the
 paper row, the membership row and the job row commit in **one transaction**, so
 §5.4.2's "commit the job before enqueueing" has no window left to lose work in.
 
-Three details are deliberate.
+Four details are deliberate.
 
 **`state` is the pipeline stage, not a generic "in-flight".** The column's CHECK
 is already `PaperState`, so a claimed job says *where* a paper is — which is what
 `GET /v1/jobs/{id}` and the ops view report (FR-I3, FR-O5).
+
+**The claim orders by priority, then by `visible_at`** (D139). Under D95 the claim
+is what decides which job runs, whichever queue the wake-up arrived on, so this
+ORDER BY is the whole of "uploads before discovered papers".
 
 **`attempts` counts deliveries, incremented on claim rather than on failure.**
 A worker that is OOM-killed mid-job never reports anything, so a counter that
@@ -41,7 +45,9 @@ from scholiast.application.ports.queue import (
     DEFAULT_LEASE_SECONDS,
     DEFAULT_MAX_ATTEMPTS,
     DEFAULT_RETRY_BASE_SECONDS,
+    MAX_RETRY_AFTER_SECONDS,
     RETRY_JITTER_RATIO,
+    JobPriority,
     QueuedJob,
 )
 from scholiast.application.ports.tenancy import Scope, TenantIsolationViolation
@@ -102,7 +108,12 @@ class PostgresQueue:
         self._scope = scope
 
     async def enqueue(
-        self, *, workspace_id: str, paper_id: str, source_links: Sequence[str] = ()
+        self,
+        *,
+        workspace_id: str,
+        paper_id: str,
+        priority: JobPriority,
+        source_links: Sequence[str] = (),
     ) -> str:
         await self._require_owned_workspace(workspace_id)
         row = models.IngestionJob(
@@ -121,6 +132,7 @@ class PostgresQueue:
             # describe logging; None outside a request is the truth.
             correlation_id=current_correlation_id(),
             source_links=list(source_links) or None,
+            priority=int(priority),
         )
         self._session.add(row)
         await self._session.flush()
@@ -130,7 +142,12 @@ class PostgresQueue:
         # §5.4.2 exists to avoid. `session.info` is the channel because the unit
         # of work belongs to the caller: this adapter knows the job id, and only
         # the composition root knows when the transaction ended.
-        pending.record(self._session, pending.PENDING_DISPATCH, str(row.id))
+        key = (
+            pending.PENDING_BACKFILL_DISPATCH
+            if priority is JobPriority.BACKFILL
+            else pending.PENDING_DISPATCH
+        )
+        pending.record(self._session, key, str(row.id))
         return str(row.id)
 
     async def claim(
@@ -149,9 +166,11 @@ class PostgresQueue:
                 models.IngestionJob.state.in_([s.value for s in CLAIMABLE]),
                 models.IngestionJob.visible_at <= func.now(),
             )
-            # Oldest lease first, so a redelivered job is not starved behind a
-            # steady arrival of new ones.
-            .order_by(models.IngestionJob.visible_at)
+            # Interactive before backfill (D139), then oldest lease first, so a
+            # redelivered job is not starved behind a steady arrival of new ones
+            # OF ITS PRIORITY. Strict on purpose: a discovered paper waits while
+            # uploads are due, and OLDEST_JOB_AGE{priority} shows how long.
+            .order_by(models.IngestionJob.priority.desc(), models.IngestionJob.visible_at)
             .limit(limit)
             # The whole mechanism: a row another worker has claimed in a
             # concurrent transaction is skipped rather than waited on, so two
@@ -177,10 +196,11 @@ class PostgresQueue:
                     # arrive with the work rather than be fetched afterwards.
                     models.IngestionJob.correlation_id,
                     models.IngestionJob.source_links,
+                    models.IngestionJob.priority,
                 )
             )
         ).all()
-        return [
+        jobs = [
             QueuedJob(
                 id=str(row.id),
                 workspace_id=str(row.workspace_id),
@@ -189,9 +209,15 @@ class PostgresQueue:
                 attempts=row.attempts,
                 correlation_id=row.correlation_id,
                 source_links=tuple(row.source_links or ()),
+                priority=JobPriority(row.priority),
             )
             for row in rows
         ]
+        # `UPDATE ... RETURNING` promises no order, whatever the subquery's ORDER
+        # BY said, so a batch would otherwise run a discovered paper before an
+        # upload it was claimed with (D139). Within a priority they were all due
+        # and claimed together, so their relative order carries nothing.
+        return sorted(jobs, key=lambda job: -job.priority)
 
     async def heartbeat(
         self, job_id: str, *, state: PaperState, lease_seconds: float = DEFAULT_LEASE_SECONDS
@@ -212,6 +238,7 @@ class PostgresQueue:
         failure_class: FailureClass,
         detail: str,
         max_attempts: int = DEFAULT_MAX_ATTEMPTS,
+        retry_after: float | None = None,
     ) -> PaperState:
         job = await self._session.scalar(select(models.IngestionJob).where(self._scoped(job_id)))
         if job is None:
@@ -220,12 +247,21 @@ class PostgresQueue:
             # update — the job row's absence does not change what happened.
             return terminal_state_for(failure_class)
 
-        if failure_class.retryable and job.attempts < max_attempts:
+        # D142: a wait the failing service stated is honoured, up to an hour.
+        # Longer than that and the paper fails now rather than sitting parked.
+        too_long = retry_after is not None and retry_after > MAX_RETRY_AFTER_SECONDS
+        if too_long:
+            detail = (
+                f"{detail}; asked to wait {retry_after:.0f} s, longer than the "
+                f"{MAX_RETRY_AFTER_SECONDS:.0f} s a retry may wait"
+            )
+        if failure_class.retryable and job.attempts < max_attempts and not too_long:
+            delay = max(retry_delay(job.attempts), retry_after or 0.0)
             await self._apply(
                 job_id,
                 {
                     "state": PaperState.QUEUED.value,
-                    "visible_at": _seconds(retry_delay(job.attempts)),
+                    "visible_at": _seconds(delay),
                     "last_error": detail[:MAX_ERROR_CHARS],
                 },
             )

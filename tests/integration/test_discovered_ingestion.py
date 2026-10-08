@@ -296,6 +296,8 @@ class TestADiscoveredArxivPaperReachesIndexed:
         assert stored_hash == hashlib.sha256(PDF).hexdigest()
         assert await h.store.get(source_key(added.paper_id)) == PDF
         assert await h.index.count(paper_ids=[added.paper_id]) > 0
+        # A discovered paper's job is backfill: an upload is claimed first (D139).
+        assert await h.scalar("SELECT priority FROM ingestion_jobs") == 0
 
     async def test_the_sources_title_is_kept_and_is_the_one_embedded(
         self, sessions: async_sessionmaker[AsyncSession], tmp_path: Path
@@ -423,3 +425,32 @@ class TestAPdfTheUserAlreadyUploadedIsNotIngestedTwice:
             )
             == 0
         )
+
+
+class TestAThrottledFetchWaitsAsLongAsTheHostSaid:
+    async def test_the_hosts_stated_wait_reaches_the_job_row(
+        self, sessions: async_sessionmaker[AsyncSession], tmp_path: Path
+    ) -> None:
+        # D142, end to end: fetcher -> FETCHING -> worker -> queue. Each half is
+        # tested alone elsewhere; this is the test that fails if the worker stops
+        # handing the wait to the queue.
+        throttled = FetchFailed(
+            FailureClass.TRANSIENT, (FetchAttempt(LINK, "status:429", retry_after=600.0),)
+        )
+        h = await _harness(sessions, tmp_path, RecordingFetcher(throttled))
+        added = await h.add()
+
+        await h.drain()
+
+        async with h.sessions() as session:
+            state, attempts, wait = (
+                await session.execute(
+                    text(
+                        "SELECT state, attempts, extract(epoch FROM visible_at - now()) "
+                        "FROM ingestion_jobs WHERE paper_id = :p"
+                    ),
+                    {"p": uuid.UUID(added.paper_id)},
+                )
+            ).one()
+        assert (state, attempts) == ("queued", 1)
+        assert 590 < float(wait) <= 600, "retried on D48's backoff instead of the host's word"

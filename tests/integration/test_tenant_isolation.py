@@ -33,6 +33,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from testcontainers.community.postgres import PostgresContainer
 
+from scholiast.application.ports.queue import JobPriority
 from scholiast.application.ports.tenancy import (
     SWEEPER_REASON,
     WORKER_CLAIM_REASON,
@@ -606,7 +607,9 @@ class TestQueueIsolation:
         theirs = PostgresQueue(session, world.bob.scope)
         with pytest.raises(TenantIsolationViolation):
             await theirs.enqueue(
-                workspace_id=world.alice.workspace_id, paper_id=world.alice.private_paper_id
+                priority=JobPriority.INTERACTIVE,
+                workspace_id=world.alice.workspace_id,
+                paper_id=world.alice.private_paper_id,
             )
 
     async def test_a_non_owner_cannot_complete_another_tenants_job(
@@ -614,7 +617,9 @@ class TestQueueIsolation:
     ) -> None:
         mine = PostgresQueue(session, world.alice.scope)
         job_id = await mine.enqueue(
-            workspace_id=world.alice.workspace_id, paper_id=world.alice.private_paper_id
+            priority=JobPriority.INTERACTIVE,
+            workspace_id=world.alice.workspace_id,
+            paper_id=world.alice.private_paper_id,
         )
         await session.flush()
 
@@ -627,7 +632,9 @@ class TestQueueIsolation:
     ) -> None:
         mine = PostgresQueue(session, world.alice.scope)
         job_id = await mine.enqueue(
-            workspace_id=world.alice.workspace_id, paper_id=world.alice.private_paper_id
+            priority=JobPriority.INTERACTIVE,
+            workspace_id=world.alice.workspace_id,
+            paper_id=world.alice.private_paper_id,
         )
         await session.flush()
 
@@ -652,7 +659,9 @@ class TestQueueIsolation:
         """
         mine = PostgresQueue(session, world.alice.scope)
         job_id = await mine.enqueue(
-            workspace_id=world.alice.workspace_id, paper_id=world.alice.private_paper_id
+            priority=JobPriority.INTERACTIVE,
+            workspace_id=world.alice.workspace_id,
+            paper_id=world.alice.private_paper_id,
         )
         assert await mine.heartbeat(job_id, state=PaperState.PARSING)
         await session.flush()
@@ -675,7 +684,9 @@ class TestQueueIsolation:
     ) -> None:
         mine = PostgresQueue(session, world.alice.scope)
         job_id = await mine.enqueue(
-            workspace_id=world.alice.workspace_id, paper_id=world.alice.private_paper_id
+            priority=JobPriority.INTERACTIVE,
+            workspace_id=world.alice.workspace_id,
+            paper_id=world.alice.private_paper_id,
         )
         assert await mine.heartbeat(job_id, state=PaperState.PARSING)
         await session.flush()
@@ -698,7 +709,9 @@ class TestQueueIsolation:
         # keeps a deletion from turning into an ingestion loop.
         mine = PostgresQueue(session, world.alice.scope)
         job_id = await mine.enqueue(
-            workspace_id=world.alice.workspace_id, paper_id=world.alice.private_paper_id
+            priority=JobPriority.INTERACTIVE,
+            workspace_id=world.alice.workspace_id,
+            paper_id=world.alice.private_paper_id,
         )
         assert await SqlWorkspaceRepository(session, world.alice.scope).soft_delete(
             world.alice.workspace_id
@@ -722,7 +735,9 @@ class TestQueueIsolation:
         mine = PostgresQueue(session, world.alice.scope)
         with pytest.raises(TenantIsolationViolation):
             await mine.enqueue(
-                workspace_id=world.alice.workspace_id, paper_id=world.alice.private_paper_id
+                priority=JobPriority.INTERACTIVE,
+                workspace_id=world.alice.workspace_id,
+                paper_id=world.alice.private_paper_id,
             )
 
     async def test_the_worker_scope_reaches_any_job(
@@ -733,7 +748,9 @@ class TestQueueIsolation:
         # under SystemContext, which passes unfiltered by design.
         mine = PostgresQueue(session, world.alice.scope)
         job_id = await mine.enqueue(
-            workspace_id=world.alice.workspace_id, paper_id=world.alice.private_paper_id
+            priority=JobPriority.INTERACTIVE,
+            workspace_id=world.alice.workspace_id,
+            paper_id=world.alice.private_paper_id,
         )
         await session.flush()
 

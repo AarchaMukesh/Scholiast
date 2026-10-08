@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -104,6 +105,7 @@ class IngestionWorker:
         config: WorkerConfig | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         fetcher: PdfFetcher | None = None,
+        timer: Callable[[], float] = time.monotonic,
     ) -> None:
         self._sessions = sessions
         self._store = store
@@ -117,6 +119,8 @@ class IngestionWorker:
         self._fetcher = fetcher
         self._config = config or WorkerConfig()
         self._clock = clock
+        #: Monotonic seconds, for `drain`'s budget; injectable so a test can move it.
+        self._timer = timer
         self._stopping = asyncio.Event()
 
     # -- loop --------------------------------------------------------------
@@ -146,6 +150,28 @@ class IngestionWorker:
         for job in jobs:
             await self._process(job)
         return len(jobs)
+
+    async def drain(self) -> int:
+        """Claim and run due jobs until none is due. Returns how many ran (D141).
+
+        What a Celery wake-up does, so one wake-up, from an enqueue or from beat's
+        sweep, clears every due job rather than one: a backlog of retries would
+        otherwise drain at one per sweep. **No new job starts once half the lease
+        has passed.** Redis re-delivers an unacknowledged message after its
+        visibility timeout, which is the lease (celery_app), and a drain that
+        outran it would hand its own wake-up to another worker. Harmless, since
+        the claim serialises, but noise; stopping early costs nothing, because
+        the next wake-up drains whatever is left.
+        """
+        started = self._timer()
+        budget = self._config.lease_seconds / 2
+        ran = 0
+        while self._timer() - started < budget:
+            claimed = await self.run_once()
+            if not claimed:
+                break
+            ran += claimed
+        return ran
 
     # -- one job -----------------------------------------------------------
 
@@ -362,7 +388,11 @@ class IngestionWorker:
         if failure is None:  # pragma: no cover - `succeeded` is False, so there is one
             return
         landed = await queue.fail(
-            job.id, failure_class=failure.failure_class, detail=failure.detail
+            job.id,
+            failure_class=failure.failure_class,
+            detail=failure.detail,
+            # D142: a host's stated wait, honoured up to an hour.
+            retry_after=failure.retry_after,
         )
         await papers.set_membership_state(
             job.workspace_id,

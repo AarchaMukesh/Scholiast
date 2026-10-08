@@ -55,6 +55,7 @@ from scholiast.api.app import create_app
 from scholiast.application.ports.discovery import SourcePage
 from scholiast.application.ports.llm import GenerationChunk
 from scholiast.application.ports.ml import TextRole
+from scholiast.application.ports.queue import JobPriority
 from scholiast.application.ports.tenancy import TenantContext
 from scholiast.application.ports.vector import EmptyRetrievalScope, VectorRecord
 from scholiast.application.use_cases.discover_papers import ConfiguredSource
@@ -483,7 +484,7 @@ async def _seed(
     )
 
     job_id = await PostgresQueue(session, scope).enqueue(
-        workspace_id=workspace.id, paper_id=paper.id
+        priority=JobPriority.INTERACTIVE, workspace_id=workspace.id, paper_id=paper.id
     )
     await session.commit()
     return (
