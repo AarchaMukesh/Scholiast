@@ -537,6 +537,9 @@ def discover_use_case(request: Request) -> DiscoverPapersUseCase:
         # Absent means uncached, which is correct, not broken: a cache can only
         # ever turn a source call into a miss (D127).
         cache=getattr(request.app.state, "discovery_cache", None),
+        # The add endpoint's allowlist, so the record each work offers is one add
+        # will accept (D147).
+        allowed_hosts=host_allowlist(settings.fetch_allowed_hosts),
         deadline_seconds=settings.discovery_deadline_seconds,
     )
 

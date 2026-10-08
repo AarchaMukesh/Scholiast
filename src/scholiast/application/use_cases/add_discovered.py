@@ -52,9 +52,9 @@ from scholiast.application.ports.repositories import (
     WorkspaceRepository,
 )
 from scholiast.application.use_cases.add_paper import AddPaperResult, attach_existing
-from scholiast.domain.discovery import LinkKind, PaperCandidate, paper_identity
+from scholiast.domain.discovery import PaperCandidate, paper_identity
 from scholiast.domain.errors import WorkspaceNotAvailable
-from scholiast.domain.fetch_policy import check_fetch_url
+from scholiast.domain.fetch_policy import fetchable_pdf_links
 from scholiast.domain.paper import Paper, PaperOrigin, PaperVisibility
 from scholiast.domain.workspace import Workspace
 
@@ -335,17 +335,7 @@ class AddDiscoveredPapersUseCase:
         return None
 
     def _fetchable(self, record: PaperCandidate) -> tuple[str, ...]:
-        """The record's PDF links that D115's guard would request, best first (D137).
-
-        Landing pages are left off: the spike never found a PDF behind one, and each
-        try would spend a host's pacing slot. The links are kept as the source gave
-        them; the fetcher re-checks every hop of every one.
-        """
-        return tuple(
-            link.url
-            for link in record.oa_links
-            if link.kind is LinkKind.PDF and check_fetch_url(link.url, self._allowed_hosts).allowed
-        )
+        return fetchable_pdf_links(record, self._allowed_hosts)
 
     def _new_paper(self, record: PaperCandidate, *, doi: str | None, arxiv_id: str | None) -> Paper:
         return Paper(

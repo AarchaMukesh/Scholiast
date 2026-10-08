@@ -25,9 +25,13 @@ again any source that failed. The cache is isolated like a source: if it raises,
 the search carries on as a miss.
 
 **The order is the sources' own, interleaved** (D122): each source's first result,
-then each one's second. Duplicates across sources stay until phase 7 merges them,
-and phase 8 replaces the order with a ranking. Nothing here is written anywhere:
-discovery results are not papers until they are added (§5.4.1).
+then each one's second, until phase 8 replaces it with a ranking.
+
+**Records of one paper become one work** (FR-D3, D145-D148): the interleaved
+records are grouped by `dedup.works`, and each work sits where its earliest record
+sat. Each work names one record to add, preferring one the fetcher may follow, by
+the same allowlist the add endpoint enforces (D147). Nothing here is written
+anywhere: discovery results are not papers until they are added (§5.4.1).
 """
 
 from __future__ import annotations
@@ -47,6 +51,7 @@ from scholiast.application.ports.discovery import (
     SourcePage,
     SourceUnavailable,
 )
+from scholiast.domain.dedup import DiscoveredWork, works
 from scholiast.domain.discovery import (
     PaperCandidate,
     UnsearchableQuery,
@@ -54,6 +59,7 @@ from scholiast.domain.discovery import (
     is_searchable,
     normalise_query,
 )
+from scholiast.domain.fetch_policy import fetchable_pdf_links
 
 #: D122: the sources' share of NFR-P1's 3.0 s.
 DEFAULT_DEADLINE_SECONDS = 2.0
@@ -104,8 +110,12 @@ class SourceOutcome:
 
 @dataclass(frozen=True, slots=True)
 class DiscoveryResult:
+    #: Every source's records, interleaved (D122), duplicates included.
     candidates: tuple[PaperCandidate, ...]
     sources: tuple[SourceOutcome, ...]
+    #: The same records as works, one per paper, in order of first appearance (D147).
+    #: Required: a default of none would make "not grouped" read as "found nothing".
+    works: tuple[DiscoveredWork, ...]
 
     @property
     def partial(self) -> bool:
@@ -131,12 +141,17 @@ class DiscoverPapersUseCase:
         sources: Sequence[ConfiguredSource],
         *,
         cache: DiscoveryCache | None = None,
+        allowed_hosts: frozenset[str] = frozenset(),
         deadline_seconds: float = DEFAULT_DEADLINE_SECONDS,
         clock: Callable[[], float] = time.perf_counter,
         now: Callable[[], datetime] = lambda: datetime.now(UTC),
     ) -> None:
         self._sources = tuple(sources)
         self._cache = cache
+        #: The fetcher's allowlist, so a work offers for adding a record the add
+        #: endpoint will accept (D147). Empty means no record counts as fetchable,
+        #: and each work offers its first record.
+        self._allowed_hosts = allowed_hosts
         self._deadline = deadline_seconds
         self._clock = clock
         self._now = now
@@ -161,9 +176,14 @@ class DiscoverPapersUseCase:
             raise UnsearchableQuery(str(unsearchable[0].error))
         if not any(o.status is SourceStatus.OK for o in outcomes):
             raise NoSourceAnswered(tuple(outcomes))
+        candidates = interleave([o.candidates for o in outcomes])
         return DiscoveryResult(
-            candidates=interleave([o.candidates for o in outcomes]),
+            candidates=candidates,
             sources=tuple(outcomes),
+            works=works(
+                candidates,
+                fetchable=lambda record: bool(fetchable_pdf_links(record, self._allowed_hosts)),
+            ),
         )
 
     async def _ask(

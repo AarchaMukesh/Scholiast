@@ -33,6 +33,8 @@ from dataclasses import dataclass
 from enum import StrEnum, unique
 from urllib.parse import urlsplit, urlunsplit
 
+from scholiast.domain.discovery import LinkKind, PaperCandidate
+
 #: RFC 6052's well-known NAT64 prefix, which carries IPv4 in its last 32 bits: a
 #: gateway that translates `64:ff9b::a9fe:a9fe` reaches 169.254.169.254.
 _NAT64 = ipaddress.ip_network("64:ff9b::/96")
@@ -154,3 +156,20 @@ def check_fetch_url(url: str, allowed_hosts: frozenset[str]) -> UrlVerdict:
         return _refused(Refusal.HOST_NOT_ALLOWED)
     https = urlunsplit(("https", host, parts.path or "/", parts.query, ""))
     return UrlVerdict(url=https, host=host, upgraded=scheme == "http")
+
+
+def fetchable_pdf_links(record: PaperCandidate, allowed_hosts: frozenset[str]) -> tuple[str, ...]:
+    """The record's PDF links that D115's guard would request, best first (D137).
+
+    Landing pages are left off: the spike never found a PDF behind one, and each
+    try would spend a host's pacing slot. The links are kept as the source gave
+    them; the fetcher re-checks every hop of every one. One function, because the
+    add endpoint refuses a record without such a link and search chooses which
+    record of a work to offer for adding by the same test (D147): if the two
+    disagreed, search could offer a record that add then refused.
+    """
+    return tuple(
+        link.url
+        for link in record.oa_links
+        if link.kind is LinkKind.PDF and check_fetch_url(link.url, allowed_hosts).allowed
+    )

@@ -1,0 +1,18 @@
+{
+ "dataset": "scholiast-m4-dedup-fixture",
+ "decision": "D146",
+ "file": "dedup-fixture.json",
+ "sha256": "5a884a342aadf42ff61376f25eb525fb66da90117a91cc66ab39c0c47380ead5",
+ "bytes": 94719,
+ "pairs": 379,
+ "by_split_and_label": {
+  "held_out/different": 143,
+  "held_out/same": 55,
+  "train/different": 131,
+  "train/same": 50
+ },
+ "frozen": "2026-10-08, before the matcher was written",
+ "licence": "CC0 (derived from arXiv and OpenAlex metadata)",
+ "labels_frozen_sha256": "3aa8b15e9fb78a3b389d4e4f4db8e565ce7dc6487eff7aabcedf0cf88e6c1bb8",
+ "reviewed": "2026-10-08: owner agreed with all 40 sampled labels and resolved both unsure pairs as same"
+}

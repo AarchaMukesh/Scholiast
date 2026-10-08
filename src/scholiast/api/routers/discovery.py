@@ -24,30 +24,32 @@ from scholiast.application.use_cases.discover_papers import (
     SourceOutcome,
     SourceStatus,
 )
-from scholiast.domain.discovery import PaperCandidate
+from scholiast.domain.dedup import DiscoveredWork
 from scholiast.infrastructure.observability import metrics
 
 router = APIRouter(prefix="/v1/discovery", tags=["discovery"])
 log = structlog.get_logger(__name__)
 
 
-def _candidate(candidate: PaperCandidate) -> schemas.CandidateOut:
-    return schemas.CandidateOut(
-        source=candidate.source,
-        source_id=candidate.source_id,
-        source_rank=candidate.rank,
-        title=candidate.title,
-        authors=list(candidate.authors),
-        year=candidate.year,
-        published=candidate.published,
-        venue=candidate.venue,
-        abstract=candidate.abstract,
-        citation_count=candidate.citation_count,
-        doi=candidate.doi,
-        arxiv_id=candidate.arxiv_id,
+def _work(work: DiscoveredWork) -> schemas.WorkOut:
+    return schemas.WorkOut(
+        members=[
+            schemas.WorkMemberOut(source=m.source, source_id=m.source_id, source_rank=m.rank)
+            for m in work.members
+        ],
+        add=schemas.PaperRefOut(source=work.add.source, source_id=work.add.source_id),
+        title=work.title,
+        authors=list(work.authors),
+        year=work.year,
+        published=work.published,
+        venue=work.venue,
+        abstract=work.abstract,
+        citation_count=work.citation_count,
+        doi=work.doi,
+        arxiv_id=work.arxiv_id,
         open_access=[
             schemas.OpenAccessLinkOut(url=link.url, kind=link.kind.value, licence=link.licence)
-            for link in candidate.oa_links
+            for link in work.oa_links
         ],
     )
 
@@ -102,7 +104,7 @@ async def search(
         raise
     _observe(result.sources)
     return schemas.DiscoveryResults(
-        results=[_candidate(c) for c in result.candidates],
+        results=[_work(w) for w in result.works],
         source_status=[_source_status(o) for o in result.sources],
         partial=result.partial,
     )

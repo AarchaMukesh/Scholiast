@@ -241,13 +241,35 @@ class OpenAccessLinkOut(BaseModel):
     licence: str | None = None
 
 
-class CandidateOut(BaseModel):
-    """One source's record of one paper (FR-D1). Not deduplicated until phase 7."""
+class WorkMemberOut(BaseModel):
+    """One source's record of a work: where that source put it."""
 
     source: str
     source_id: str
     #: The position in that source's own results, 1-based.
     source_rank: int
+
+
+class PaperRefOut(BaseModel):
+    """A record to send to the add endpoint as it is: `{"papers": [<this>]}`."""
+
+    source: str
+    source_id: str
+
+
+class WorkOut(BaseModel):
+    """One paper, however many sources returned it (FR-D1, FR-D3, D147).
+
+    Title, authors, venue and published date are the `add` record's, so what is shown
+    is what will be added. The rest is merged across `members`: a publisher DOI, the
+    arXiv id, the earliest year, the longest abstract, the largest citation count and
+    every open-access link once.
+    """
+
+    #: Every source record of this paper, in the search's interleaved order.
+    members: list[WorkMemberOut]
+    #: The record to add this paper by: one the fetcher can follow, if any is.
+    add: PaperRefOut
     title: str
     authors: list[str]
     year: int | None = None
@@ -278,12 +300,13 @@ class SourceStatusOut(BaseModel):
 
 
 class DiscoveryResults(BaseModel):
-    results: list[CandidateOut]
+    #: One entry per paper, not per source record (FR-D3).
+    results: list[WorkOut]
     source_status: list[SourceStatusOut]
     #: True whenever any source did not answer (FR-D6).
     partial: bool
     #: How `results` is ordered. Until phase 8 ranks, it is each source's own order,
-    #: interleaved, and the same paper can appear once per source (D122).
+    #: interleaved, with each paper where its earliest record was (D122, D147).
     ordering: Literal["source_rank"] = "source_rank"
 
 

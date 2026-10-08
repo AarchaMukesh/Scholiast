@@ -41,6 +41,8 @@ from scholiast.eval.contention import (
     measure_condition,
     verify_same_retrieval,
 )
+from scholiast.eval.dedup import DedupReport, run_dedup
+from scholiast.eval.dedup import render as _render_dedup
 from scholiast.eval.dret import DRet, Query, build_dret, verify_core, verify_split
 from scholiast.eval.fusion import FusionFit, fit_dense_weight, training_queries
 from scholiast.eval.harness import (
@@ -1345,6 +1347,15 @@ def main(argv: list[str] | None = None) -> int:
             "The evaluation queries are never used for fitting."
         ),
     )
+    parser.add_argument(
+        "--dedup",
+        action="store_true",
+        help=(
+            "FR-D3: fit the deduplication thresholds on the D146 fixture's train topics, "
+            "score the shipped rule on its held-out topics with Wilson intervals, list "
+            "every error, and time the grouping (D148). Offline: reads committed data only."
+        ),
+    )
     args = parser.parse_args(argv)
 
     if args.update_baseline and not args.smoke:
@@ -1364,7 +1375,13 @@ def main(argv: list[str] | None = None) -> int:
         print(comparison.render())
         return 0 if comparison.passed else 1
 
-    if args.pdf_check:
+    # Both kinds archive the same way: a timestamp and a JSON body.
+    report: EvalReport | DedupReport
+    if args.dedup:
+        # Discovery, not retrieval: no index, no encoder, its own fixture.
+        report = run_dedup()
+        print(_render_dedup(report))
+    elif args.pdf_check:
         # Two corpora rather than two retrieval configurations, so it has its own
         # runner and its own view.
         report = asyncio.run(run_pdf_check())
@@ -1394,6 +1411,7 @@ def main(argv: list[str] | None = None) -> int:
             (
                 name
                 for name, selected in (
+                    ("dedup", args.dedup),
                     ("pdf-check", args.pdf_check),
                     ("contention", args.contention),
                     ("depths", args.compare_depths),

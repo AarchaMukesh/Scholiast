@@ -182,6 +182,34 @@ def bootstrap_interval(
     )
 
 
+#: The normal quantile for a two-sided 95% interval.
+_Z95 = 1.959963984540054
+
+
+def wilson_interval(successes: int, trials: int) -> Interval:
+    """A proportion with its Wilson 95% score interval (D148).
+
+    For counts, not per-query means: deduplication's precision and recall are
+    proportions of pairs, where a bootstrap over a few dozen pairs is coarse and
+    the normal approximation misbehaves near 1.0, which is exactly where a good
+    matcher's precision sits. Wilson stays inside [0, 1] and is honest at the edge.
+
+    It assumes independent trials. Pairs that share a record are not, so the
+    interval is narrower than the truth; the caller says so where it prints one.
+    """
+    if trials <= 0:
+        raise ValueError("a proportion of zero trials is undefined")
+    if not 0 <= successes <= trials:
+        raise ValueError(f"successes must lie in [0, {trials}], got {successes}")
+    p = successes / trials
+    z2 = _Z95 * _Z95
+    centre = (p + z2 / (2 * trials)) / (1 + z2 / trials)
+    spread = _Z95 * math.sqrt(p * (1 - p) / trials + z2 / (4 * trials * trials)) / (1 + z2 / trials)
+    return Interval(
+        point=p, low=max(0.0, centre - spread), high=min(1.0, centre + spread), n=trials
+    )
+
+
 def paired_bootstrap_delta(
     treatment: Sequence[float],
     baseline: Sequence[float],

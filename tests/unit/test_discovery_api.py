@@ -122,13 +122,13 @@ class TestAPartialResult:
                 "age_seconds": None,
             },
         ]
-        assert [r["source_id"] for r in body["results"]] == ["openalex-1", "openalex-2"]
+        assert [r["add"]["source_id"] for r in body["results"]] == ["openalex-1", "openalex-2"]
 
     def test_every_source_answering_is_not_partial(self) -> None:
         body = build(Fake("openalex"), Fake("arxiv")).post(SEARCH, json={"query": "x y"}).json()
 
         assert body["partial"] is False
-        assert [r["source_id"] for r in body["results"]] == [
+        assert [r["add"]["source_id"] for r in body["results"]] == [
             "openalex-1",
             "arxiv-1",
             "openalex-2",
@@ -154,9 +154,8 @@ class TestAPartialResult:
 
         assert result["results"] == [
             {
-                "source": "arxiv",
-                "source_id": "arxiv-1",
-                "source_rank": 1,
+                "members": [{"source": "arxiv", "source_id": "arxiv-1", "source_rank": 1}],
+                "add": {"source": "arxiv", "source_id": "arxiv-1"},
                 "title": "arxiv paper 1",
                 "authors": ["Vladimir Karpukhin", "Barlas Oguz"],
                 "year": 2020,
@@ -171,6 +170,89 @@ class TestAPartialResult:
                 ],
             }
         ]
+
+
+class TestOnePaperOneEntry:
+    """FR-D3 at the endpoint: one entry per paper, naming every record of it (D147)."""
+
+    @staticmethod
+    def dpr(source: str, **fields: object) -> PaperCandidate:
+        return paper(
+            source,
+            1,
+            title="Dense Passage Retrieval for Open-Domain Question Answering",
+            authors=("Vladimir Karpukhin", "Barlas Oguz"),
+            **fields,
+        )
+
+    def test_a_paper_both_sources_return_is_one_entry_naming_both(self) -> None:
+        published = self.dpr(
+            "openalex",
+            year=2020,
+            doi="10.18653/v1/2020.emnlp-main.550",
+            citation_count=4100,
+            oa_links=(
+                OpenAccessLink("https://aclanthology.org/2020.emnlp-main.550", LinkKind.LANDING),
+            ),
+        )
+        preprint = self.dpr(
+            "arxiv",
+            year=2020,
+            arxiv_id="2004.04906",
+            oa_links=(OpenAccessLink("https://arxiv.org/pdf/2004.04906v3", LinkKind.PDF),),
+        )
+
+        body = (
+            build(Fake("openalex", papers=(published,)), Fake("arxiv", papers=(preprint,)))
+            .post(SEARCH, json={"query": "dpr"})
+            .json()
+        )
+
+        [work] = body["results"]
+        assert work["members"] == [
+            {"source": "openalex", "source_id": "openalex-1", "source_rank": 1},
+            {"source": "arxiv", "source_id": "arxiv-1", "source_rank": 1},
+        ]
+        # The record add can fetch, not merely the first one shown.
+        assert work["add"] == {"source": "arxiv", "source_id": "arxiv-1"}
+        assert (work["doi"], work["arxiv_id"], work["citation_count"]) == (
+            "10.18653/v1/2020.emnlp-main.550",
+            "2004.04906",
+            4100,
+        )
+        assert [link["url"] for link in work["open_access"]] == [
+            "https://aclanthology.org/2020.emnlp-main.550",
+            "https://arxiv.org/pdf/2004.04906v3",
+        ]
+
+    def test_the_offered_record_is_one_the_configured_allowlist_lets_add_fetch(self) -> None:
+        # Search must judge "fetchable" by the allowlist add enforces, or it could
+        # offer a record that add then refuses (D147).
+        on_acl = self.dpr(
+            "openalex",
+            oa_links=(
+                OpenAccessLink("https://aclanthology.org/2020.emnlp-main.550.pdf", LinkKind.PDF),
+            ),
+        )
+        on_arxiv = self.dpr(
+            "arxiv",
+            arxiv_id="2004.04906",
+            oa_links=(OpenAccessLink("https://arxiv.org/pdf/2004.04906v3", LinkKind.PDF),),
+        )
+        only_acl = Settings(fetch_allowed_hosts=["aclanthology.org"])
+
+        body = (
+            build(
+                Fake("arxiv", papers=(on_arxiv,)),
+                Fake("openalex", papers=(on_acl,)),
+                settings=only_acl,
+            )
+            .post(SEARCH, json={"query": "dpr"})
+            .json()
+        )
+
+        [work] = body["results"]
+        assert work["add"] == {"source": "openalex", "source_id": "openalex-1"}
 
 
 class TestNoSourceAnswering:
