@@ -1,16 +1,19 @@
 <!doctype html>
 <!--
-  The M1 interface (D37, CON-11).
+  The Scholiast interface (D37, D154).
 
   Vanilla HTML, one file of CSS, one of JS, no build step. D37 deferred doc 7
-  §7.7's React/Vite/Tailwind stack to M3 deliberately: building it here would
-  spend four or five days scaffolding against an API that M2 and M3 will change,
-  while M1's actual risk was parsing and provenance. M1's own definition is
-  "ugly is fine, broken end-to-end is not".
+  §7.7's React/Vite/Tailwind stack deliberately, and the page has stayed small
+  enough that it still earns its keep.
 
-  Three of §4.7's eight surfaces, which is what M1's deliverable names: the
-  workspace with its upload dropzone, the chat with a streamed answer, and the
-  evidence panel that makes a citation clickable.
+  Two views over one workspace panel: Read (ask questions of your papers, with
+  evidence you can open) and Discover (search the sources, see why each result
+  ranked where it did, add a paper and watch it index). A login view guards both
+  (D154, closing D88).
+
+  No inline script, style or event handler anywhere: the Content-Security-Policy
+  these pages carry (D154) would refuse them, and third-party text from search
+  results must never be able to become markup.
 -->
 <html lang="en">
   <head>
@@ -21,14 +24,37 @@
   </head>
   <body>
     <header>
-      <h1>Scholiast</h1>
-      <p class="sub">
-        Grounded question answering over your own papers. Every citation
-        resolves to a span you can read, checked rather than trusted.
-      </p>
+      <div class="brand">
+        <h1>Scholiast</h1>
+        <p class="sub">
+          Find papers, read them, and ask grounded questions. Every citation
+          resolves to a span you can read; every ranking explains itself.
+        </p>
+      </div>
+      <nav id="nav" class="nav" hidden aria-label="Views">
+        <button id="view-read" type="button" class="tab" aria-pressed="true">Read</button>
+        <button id="view-discover" type="button" class="tab" aria-pressed="false">Discover</button>
+        <button id="logout" type="button" class="quiet">Log out</button>
+      </nav>
     </header>
 
-    <main>
+    <!-- D154: the page is useless without a session, so nothing else shows until
+         there is one. Registration and login share the form. -->
+    <section id="auth" class="auth" hidden aria-labelledby="auth-heading">
+      <h2 id="auth-heading">Sign in</h2>
+      <form id="auth-form">
+        <label for="email">Email</label>
+        <input id="email" type="email" autocomplete="username" required />
+        <label for="password">Password (at least 12 characters to register)</label>
+        <input id="password" type="password" autocomplete="current-password" required />
+        <div class="row">
+          <button id="login" type="submit">Log in</button>
+          <button id="register" type="button" class="quiet">Create account</button>
+        </div>
+      </form>
+    </section>
+
+    <main id="app" hidden data-view="read">
       <section id="library" aria-labelledby="library-heading">
         <h2 id="library-heading">Workspace</h2>
 
@@ -48,7 +74,7 @@
         <ul id="papers" class="papers"></ul>
       </section>
 
-      <section id="chat" aria-labelledby="chat-heading">
+      <section id="chat" class="read-only" aria-labelledby="chat-heading">
         <h2 id="chat-heading">Ask</h2>
         <div id="transcript" class="transcript" aria-live="polite"></div>
 
@@ -68,12 +94,51 @@
         <div id="disclosure" class="disclosure" hidden></div>
       </section>
 
-      <section id="evidence-panel" aria-labelledby="evidence-heading">
+      <section id="evidence-panel" class="read-only" aria-labelledby="evidence-heading">
         <h2 id="evidence-heading">Evidence</h2>
         <p class="hint">
           The passages the answer was built from. Click one to read it in place.
         </p>
         <ol id="evidence" class="evidence"></ol>
+      </section>
+
+      <!-- FR-D1..D8: topic in, ranked and deduplicated papers out, each one able
+           to say why it ranked where it did (FR-D5). -->
+      <section id="discover" class="discover-only" aria-labelledby="discover-heading">
+        <h2 id="discover-heading">Discover</h2>
+        <form id="search-form">
+          <div class="row">
+            <input
+              id="query"
+              type="text"
+              placeholder="A topic or a question, e.g. dense retrieval for open-domain QA"
+              autocomplete="off"
+              maxlength="500"
+              required
+              aria-label="Search query"
+            />
+            <button type="submit">Search</button>
+          </div>
+          <div class="filters">
+            <label>From year <input id="year-from" type="number" min="1000" max="3000" /></label>
+            <label>To year <input id="year-to" type="number" min="1000" max="3000" /></label>
+            <label>Min. citations <input id="min-citations" type="number" min="0" /></label>
+            <label>Venue contains <input id="venue" type="text" maxlength="200" /></label>
+            <label>
+              Sort
+              <select id="sort">
+                <option value="score">Best match</option>
+                <option value="citations">Most cited</option>
+                <option value="year">Newest</option>
+              </select>
+            </label>
+          </div>
+        </form>
+
+        <!-- FR-D6: a source that did not answer is said, not hidden. -->
+        <div id="search-status" class="search-status" aria-live="polite" hidden></div>
+        <ol id="results" class="results"></ol>
+        <p id="ranking-note" class="hint" hidden></p>
       </section>
     </main>
 

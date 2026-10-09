@@ -29,11 +29,11 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
 
 from scholiast.api.errors import register_error_handlers
 from scholiast.api.middleware import ObservabilityMiddleware
 from scholiast.api.routers import auth, chat, discovery, health, papers, workspaces
+from scholiast.api.ui import UIFiles
 from scholiast.application.ports.ml import Precision
 from scholiast.config.settings import Settings, get_settings
 from scholiast.infrastructure.db.engine import build_engine, build_session_factory
@@ -192,6 +192,7 @@ def create_app(
     app.include_router(discovery.router)
 
     if STATIC_DIR.is_dir():
-        # Mounted last and at the root, so it cannot shadow an API route.
-        app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="ui")
+        # Mounted last and at the root, so it cannot shadow an API route. Its files
+        # carry D154's Content-Security-Policy; the API's responses do not.
+        app.mount("/", UIFiles(directory=STATIC_DIR, html=True), name="ui")
     return app
