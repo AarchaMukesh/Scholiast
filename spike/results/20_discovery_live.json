@@ -1,0 +1,4857 @@
+{
+ "addendum": "A4",
+ "protocol_sha256": "1da1a928e78e5064cb075fb663d0989acbb3ab7e788746de5929347f1d14ee10",
+ "ran": {
+  "from": 1791554611.4747207,
+  "to": 1791556179.193269
+ },
+ "verdict": {
+  "criterion_1": "not met as written",
+  "conditions": {
+   "cold_p95_le_3s": false,
+   "cached_p95_le_0_4s": true,
+   "each_source_ok_on_at_least_80_percent": false,
+   "zero_outbound_on_every_counted_repeat": true
+  },
+  "cold": {
+   "n": 29,
+   "p50": 2.281,
+   "p95": "failed",
+   "max": "failed",
+   "failed": 4
+  },
+  "cached": {
+   "n": 12,
+   "p50": 0.03,
+   "p95": 0.042,
+   "max": 0.042,
+   "failed": 0
+  },
+  "completion": {
+   "openalex": {
+    "k": 15,
+    "n": 29,
+    "rate": 0.5172,
+    "lo": 0.3443,
+    "hi": 0.6861
+   },
+   "arxiv": {
+    "k": 22,
+    "n": 29,
+    "rate": 0.7586,
+    "lo": 0.5789,
+    "hi": 0.8778
+   }
+  },
+  "repeats_counted": 12,
+  "repeats_of_partial_searches": 17,
+  "void": [
+   {
+    "query_id": "t08-keyword",
+    "why": "DEV-A4-1: modern standby (Kernel-Power 506, 19:37:51 local) 2 s after the search began; both sources had answered (OpenAlex 1.33 s, arXiv 1.29 s) when the machine froze"
+   }
+  ],
+  "completion_floor": 24
+ },
+ "first_after_start": {
+  "first": {
+   "n": 6,
+   "p50": 2.127,
+   "p95": "failed",
+   "max": "failed",
+   "failed": 2
+  },
+  "rest": {
+   "n": 23,
+   "p50": 2.285,
+   "p95": "failed",
+   "max": "failed",
+   "failed": 2
+  },
+  "first_sources": [
+   {},
+   {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   {
+    "openalex": "timeout",
+    "arxiv": "ok"
+   },
+   {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   {
+    "openalex": "timeout",
+    "arxiv": "ok"
+   },
+   {}
+  ]
+ },
+ "repeats_of_partial_searches": [
+  {
+   "query_id": "t09-reversed_keyword",
+   "latency_s": 1.912,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "outbound": 2
+  },
+  {
+   "query_id": "t06-reversed_keyword",
+   "latency_s": 2.045,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "outbound": 1
+  },
+  {
+   "query_id": "t08-natural_language",
+   "latency_s": 2.025,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "outbound": 2
+  },
+  {
+   "query_id": "t09-natural_language",
+   "latency_s": 2.042,
+   "sources": {
+    "openalex": "timeout",
+    "arxiv": "ok"
+   },
+   "outbound": 1
+  },
+  {
+   "query_id": "t03-reversed_keyword",
+   "latency_s": 2.284,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "outbound": 2
+  },
+  {
+   "query_id": "t03-natural_language",
+   "latency_s": 2.102,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "outbound": 1
+  },
+  {
+   "query_id": "t02-reversed_keyword",
+   "latency_s": 0.37,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "outbound": 1
+  },
+  {
+   "query_id": "t05-keyword",
+   "latency_s": 2.054,
+   "sources": {
+    "openalex": "timeout",
+    "arxiv": "ok"
+   },
+   "outbound": 1
+  },
+  {
+   "query_id": "t05-natural_language",
+   "latency_s": 2.039,
+   "sources": {
+    "openalex": "timeout",
+    "arxiv": "ok"
+   },
+   "outbound": 1
+  },
+  {
+   "query_id": "t01-natural_language",
+   "latency_s": 2.0176,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "outbound": 1
+  },
+  {
+   "query_id": "t07-reversed_keyword",
+   "latency_s": 1.7934,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "outbound": 1
+  },
+  {
+   "query_id": "t01-keyword",
+   "latency_s": 1.5092,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "outbound": 1
+  },
+  {
+   "query_id": "t04-keyword",
+   "latency_s": 0.9044,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "outbound": 1
+  },
+  {
+   "query_id": "t07-natural_language",
+   "latency_s": 2.3457,
+   "sources": {
+    "openalex": "timeout",
+    "arxiv": "ok"
+   },
+   "outbound": 2
+  },
+  {
+   "query_id": "t10-keyword",
+   "latency_s": 1.6615,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "outbound": 1
+  },
+  {
+   "query_id": "t06-keyword",
+   "latency_s": 1.1918,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "outbound": 1
+  },
+  {
+   "query_id": "t04-natural_language",
+   "latency_s": 2.078,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "outbound": 1
+  }
+ ],
+ "starts": [
+  {
+   "kind": "start",
+   "start": "s4b",
+   "kill": null,
+   "t_start": 1791555978.3786879,
+   "t_live": 1791555988.0784624,
+   "startup_s": 9.7,
+   "outbound_while_booting": [
+    "localhost"
+   ],
+   "outbound_count": 4
+  },
+  {
+   "kind": "start",
+   "start": "s5",
+   "kill": null,
+   "t_start": 1791556035.3732035,
+   "t_live": 1791556045.0584235,
+   "startup_s": 9.685,
+   "outbound_while_booting": [
+    "localhost"
+   ],
+   "outbound_count": 4
+  },
+  {
+   "kind": "start",
+   "start": "kill-openalex-refused",
+   "kill": "openalex",
+   "t_start": 1791556119.0526605,
+   "t_live": 1791556128.2553089,
+   "startup_s": 9.203,
+   "outbound_while_booting": [
+    "localhost"
+   ],
+   "outbound_count": 4
+  },
+  {
+   "kind": "start",
+   "start": "kill-openalex-hang",
+   "kill": "openalex",
+   "t_start": 1791556130.8604903,
+   "t_live": 1791556138.4419408,
+   "startup_s": 7.581,
+   "outbound_while_booting": [
+    "localhost"
+   ],
+   "outbound_count": 4
+  },
+  {
+   "kind": "start",
+   "start": "kill-openalex-error",
+   "kill": "openalex",
+   "t_start": 1791556141.080016,
+   "t_live": 1791556148.7136657,
+   "startup_s": 7.634,
+   "outbound_while_booting": [
+    "localhost"
+   ],
+   "outbound_count": 4
+  },
+  {
+   "kind": "start",
+   "start": "kill-arxiv-refused",
+   "kill": "arxiv",
+   "t_start": 1791556149.5704355,
+   "t_live": 1791556157.129478,
+   "startup_s": 7.559,
+   "outbound_while_booting": [
+    "localhost"
+   ],
+   "outbound_count": 4
+  },
+  {
+   "kind": "start",
+   "start": "kill-arxiv-hang",
+   "kill": "arxiv",
+   "t_start": 1791556159.6816437,
+   "t_live": 1791556167.291302,
+   "startup_s": 7.61,
+   "outbound_while_booting": [
+    "localhost"
+   ],
+   "outbound_count": 4
+  },
+  {
+   "kind": "start",
+   "start": "kill-arxiv-error",
+   "kill": "arxiv",
+   "t_start": 1791556169.6701958,
+   "t_live": 1791556177.2985473,
+   "startup_s": 7.628,
+   "outbound_while_booting": [
+    "localhost"
+   ],
+   "outbound_count": 4
+  }
+ ],
+ "kills": [
+  {
+   "killed": "openalex",
+   "how": "refused",
+   "status": 200,
+   "partial": true,
+   "sources": {
+    "openalex": "timeout",
+    "arxiv": "ok"
+   },
+   "latency_s": 2.2154,
+   "results": 50,
+   "as_expected": true
+  },
+  {
+   "killed": "openalex",
+   "how": "hang",
+   "status": 200,
+   "partial": true,
+   "sources": {
+    "openalex": "timeout",
+    "arxiv": "ok"
+   },
+   "latency_s": 2.2523,
+   "results": 50,
+   "as_expected": true
+  },
+  {
+   "killed": "openalex",
+   "how": "error",
+   "status": 200,
+   "partial": true,
+   "sources": {
+    "openalex": "error",
+    "arxiv": "ok"
+   },
+   "latency_s": 0.4726,
+   "results": 50,
+   "as_expected": true
+  },
+  {
+   "killed": "arxiv",
+   "how": "refused",
+   "status": 200,
+   "partial": true,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "timeout"
+   },
+   "latency_s": 2.1659,
+   "results": 23,
+   "as_expected": true
+  },
+  {
+   "killed": "arxiv",
+   "how": "hang",
+   "status": 503,
+   "partial": null,
+   "sources": {},
+   "latency_s": 2.0058,
+   "results": 0,
+   "as_expected": false
+  },
+  {
+   "killed": "arxiv",
+   "how": "error",
+   "status": 200,
+   "partial": true,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "error"
+   },
+   "latency_s": 1.7534,
+   "results": 23,
+   "as_expected": true
+  }
+ ],
+ "anchors": [
+  {
+   "topic": "t01",
+   "title": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks",
+   "today": null,
+   "today_lost": false,
+   "a3_pages": {
+    "openalex": false,
+    "arxiv": false
+   }
+  },
+  {
+   "topic": "t01",
+   "title": "Lost in the Middle: How Language Models Use Long Contexts",
+   "today": null,
+   "today_lost": false,
+   "a3_pages": {
+    "openalex": false,
+    "arxiv": false
+   }
+  },
+  {
+   "topic": "t02",
+   "title": "LoRA: Low-Rank Adaptation of Large Language Models",
+   "today": null,
+   "today_lost": true,
+   "a3_pages": {
+    "openalex": false,
+    "arxiv": true
+   }
+  },
+  {
+   "topic": "t02",
+   "title": "QLoRA: Efficient Finetuning of Quantized LLMs",
+   "today": null,
+   "today_lost": true,
+   "a3_pages": {
+    "openalex": false,
+    "arxiv": false
+   }
+  },
+  {
+   "topic": "t03",
+   "title": "Dense Passage Retrieval for Open-Domain Question Answering",
+   "today": null,
+   "today_lost": true,
+   "a3_pages": {
+    "openalex": true,
+    "arxiv": true
+   }
+  },
+  {
+   "topic": "t03",
+   "title": "Unsupervised Dense Information Retrieval with Contrastive Learning",
+   "today": null,
+   "today_lost": true,
+   "a3_pages": {
+    "openalex": false,
+    "arxiv": false
+   }
+  },
+  {
+   "topic": "t04",
+   "title": "SelfCheckGPT: Zero-Resource Black-Box Hallucination Detection for Generative Large Language Models",
+   "today": {
+    "rank": 22,
+    "rule": "title",
+    "sources": [
+     "openalex"
+    ]
+   },
+   "today_lost": false,
+   "a3_pages": {
+    "openalex": true,
+    "arxiv": false
+   }
+  },
+  {
+   "topic": "t04",
+   "title": "Survey of Hallucination in Natural Language Generation",
+   "today": null,
+   "today_lost": false,
+   "a3_pages": {
+    "openalex": false,
+    "arxiv": false
+   }
+  },
+  {
+   "topic": "t05",
+   "title": "Efficiently Modeling Long Sequences with Structured State Spaces",
+   "today": null,
+   "today_lost": true,
+   "a3_pages": {
+    "openalex": true,
+    "arxiv": true
+   }
+  },
+  {
+   "topic": "t05",
+   "title": "Mamba: Linear-Time Sequence Modeling with Selective State Spaces",
+   "today": null,
+   "today_lost": true,
+   "a3_pages": {
+    "openalex": true,
+    "arxiv": true
+   }
+  },
+  {
+   "topic": "t06",
+   "title": "Neural Message Passing for Quantum Chemistry",
+   "today": null,
+   "today_lost": false,
+   "a3_pages": {
+    "openalex": false,
+    "arxiv": false
+   }
+  },
+  {
+   "topic": "t06",
+   "title": "Strategies for Pre-training Graph Neural Networks",
+   "today": null,
+   "today_lost": false,
+   "a3_pages": {
+    "openalex": false,
+    "arxiv": false
+   }
+  },
+  {
+   "topic": "t07",
+   "title": "Distilling the Knowledge in a Neural Network",
+   "today": null,
+   "today_lost": false,
+   "a3_pages": {
+    "openalex": false,
+    "arxiv": false
+   }
+  },
+  {
+   "topic": "t07",
+   "title": "DistilBERT, a distilled version of BERT: smaller, faster, cheaper and lighter",
+   "today": null,
+   "today_lost": false,
+   "a3_pages": {
+    "openalex": false,
+    "arxiv": false
+   }
+  },
+  {
+   "topic": "t08",
+   "title": "Denoising Diffusion Probabilistic Models",
+   "today": null,
+   "today_lost": true,
+   "a3_pages": {
+    "openalex": false,
+    "arxiv": false
+   }
+  },
+  {
+   "topic": "t08",
+   "title": "High-Resolution Image Synthesis with Latent Diffusion Models",
+   "today": null,
+   "today_lost": true,
+   "a3_pages": {
+    "openalex": false,
+    "arxiv": false
+   }
+  },
+  {
+   "topic": "t09",
+   "title": "SimCSE: Simple Contrastive Learning of Sentence Embeddings",
+   "today": null,
+   "today_lost": true,
+   "a3_pages": {
+    "openalex": true,
+    "arxiv": true
+   }
+  },
+  {
+   "topic": "t09",
+   "title": "Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks",
+   "today": null,
+   "today_lost": true,
+   "a3_pages": {
+    "openalex": false,
+    "arxiv": false
+   }
+  },
+  {
+   "topic": "t10",
+   "title": "Chain-of-Thought Prompting Elicits Reasoning in Large Language Models",
+   "today": {
+    "rank": 4,
+    "rule": "arxiv_id",
+    "sources": [
+     "arxiv"
+    ]
+   },
+   "today_lost": false,
+   "a3_pages": {
+    "openalex": true,
+    "arxiv": true
+   }
+  },
+  {
+   "topic": "t10",
+   "title": "Self-Consistency Improves Chain of Thought Reasoning in Language Models",
+   "today": {
+    "rank": 40,
+    "rule": "arxiv_id",
+    "sources": [
+     "arxiv"
+    ]
+   },
+   "today_lost": false,
+   "a3_pages": {
+    "openalex": false,
+    "arxiv": true
+   }
+  }
+ ],
+ "searches": [
+  {
+   "kind": "cold",
+   "query_id": "t09-reversed_keyword",
+   "topic": "t09",
+   "phrasing": "reversed_keyword",
+   "start": "s1",
+   "t_sent": 1791554611.4747207,
+   "t_done": 1791554613.4853144,
+   "latency_s": 2.027,
+   "status": 503,
+   "partial": null,
+   "sources": {},
+   "results_lost": true,
+   "reconstructed": true,
+   "first_after_start": true,
+   "results": 0,
+   "stages": {
+    "use_case_s": 2.0106,
+    "outside_use_case_s": 0.0164
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "CancelledError",
+     "status": null,
+     "headers_s": null,
+     "last_byte_s": null
+    },
+    "arxiv": {
+     "outcome": "CancelledError",
+     "status": null,
+     "headers_s": null,
+     "last_byte_s": null
+    }
+   }
+  },
+  {
+   "kind": "repeat",
+   "query_id": "t09-reversed_keyword",
+   "topic": "t09",
+   "phrasing": "reversed_keyword",
+   "start": "s1",
+   "t_sent": 1791554617.962249,
+   "t_done": 1791554619.871062,
+   "latency_s": 1.912,
+   "status": 200,
+   "partial": false,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "results_lost": true,
+   "reconstructed": true,
+   "results": 0,
+   "stages": {
+    "use_case_s": 1.9088,
+    "fan_out_s": 1.6659,
+    "ranking_s": 0.2422,
+    "outside_use_case_s": 0.0032
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 0.7008,
+     "last_byte_s": 1.4989
+    },
+    "arxiv": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 0.0236,
+     "last_byte_s": 0.0331
+    }
+   }
+  },
+  {
+   "kind": "cold",
+   "query_id": "t06-reversed_keyword",
+   "topic": "t06",
+   "phrasing": "reversed_keyword",
+   "start": "s1",
+   "t_sent": 1791554624.4622834,
+   "t_done": 1791554626.7406769,
+   "latency_s": 2.281,
+   "status": 200,
+   "partial": true,
+   "sources": {
+    "openalex": "timeout",
+    "arxiv": "ok"
+   },
+   "results_lost": true,
+   "reconstructed": true,
+   "first_after_start": false,
+   "results": 0,
+   "stages": {
+    "use_case_s": 2.2784,
+    "fan_out_s": 1.9909,
+    "ranking_s": 0.2865,
+    "outside_use_case_s": 0.0026
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "CancelledError",
+     "status": 200,
+     "headers_s": 1.1863,
+     "last_byte_s": null
+    },
+    "arxiv": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 0.9361,
+     "last_byte_s": 0.9451
+    }
+   }
+  },
+  {
+   "kind": "repeat",
+   "query_id": "t06-reversed_keyword",
+   "topic": "t06",
+   "phrasing": "reversed_keyword",
+   "start": "s1",
+   "t_sent": 1791554630.9634035,
+   "t_done": 1791554633.0046375,
+   "latency_s": 2.045,
+   "status": 200,
+   "partial": false,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "results_lost": true,
+   "reconstructed": true,
+   "results": 0,
+   "stages": {
+    "use_case_s": 2.0412,
+    "fan_out_s": 1.7601,
+    "ranking_s": 0.2812,
+    "outside_use_case_s": 0.0038
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 0.9523,
+     "last_byte_s": 1.7487
+    }
+   }
+  },
+  {
+   "kind": "cold",
+   "query_id": "t08-reversed_keyword",
+   "topic": "t08",
+   "phrasing": "reversed_keyword",
+   "start": "s1",
+   "t_sent": 1791554637.4641013,
+   "t_done": 1791554639.1963255,
+   "latency_s": 1.735,
+   "status": 200,
+   "partial": false,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "results_lost": true,
+   "reconstructed": true,
+   "first_after_start": false,
+   "results": 0,
+   "stages": {
+    "use_case_s": 1.7322,
+    "fan_out_s": 1.3959,
+    "ranking_s": 0.3364,
+    "outside_use_case_s": 0.0028
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 0.5895,
+     "last_byte_s": 1.3861
+    },
+    "arxiv": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 0.8897,
+     "last_byte_s": 0.9095
+    }
+   }
+  },
+  {
+   "kind": "repeat",
+   "query_id": "t08-reversed_keyword",
+   "topic": "t08",
+   "phrasing": "reversed_keyword",
+   "start": "s1",
+   "t_sent": 1791554643.9651287,
+   "t_done": 1791554643.9925046,
+   "latency_s": 0.032,
+   "status": 200,
+   "partial": false,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "results_lost": true,
+   "reconstructed": true,
+   "results": 0,
+   "stages": {
+    "use_case_s": 0.0274,
+    "fan_out_s": 0.006,
+    "ranking_s": 0.0214,
+    "outside_use_case_s": 0.0046
+   },
+   "source_timings": {}
+  },
+  {
+   "kind": "cold",
+   "query_id": "t09-keyword",
+   "topic": "t09",
+   "phrasing": "keyword",
+   "start": "s1",
+   "t_sent": 1791554650.4673426,
+   "t_done": 1791554652.0609133,
+   "latency_s": 1.598,
+   "status": 200,
+   "partial": false,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "results_lost": true,
+   "reconstructed": true,
+   "first_after_start": false,
+   "results": 0,
+   "stages": {
+    "use_case_s": 1.5936,
+    "fan_out_s": 1.4392,
+    "ranking_s": 0.1533,
+    "outside_use_case_s": 0.0044
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 0.6293,
+     "last_byte_s": 1.4267
+    },
+    "arxiv": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 0.981,
+     "last_byte_s": 1.0001
+    }
+   }
+  },
+  {
+   "kind": "repeat",
+   "query_id": "t09-keyword",
+   "topic": "t09",
+   "phrasing": "keyword",
+   "start": "s1",
+   "t_sent": 1791554656.9671779,
+   "t_done": 1791554657.0045128,
+   "latency_s": 0.042,
+   "status": 200,
+   "partial": false,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "results_lost": true,
+   "reconstructed": true,
+   "results": 0,
+   "stages": {
+    "use_case_s": 0.0373,
+    "fan_out_s": 0.005,
+    "ranking_s": 0.0323,
+    "outside_use_case_s": 0.0047
+   },
+   "source_timings": {}
+  },
+  {
+   "kind": "cold",
+   "query_id": "t04-reversed_keyword",
+   "topic": "t04",
+   "phrasing": "reversed_keyword",
+   "start": "s1",
+   "t_sent": 1791554663.4677236,
+   "t_done": 1791554665.7623153,
+   "latency_s": 2.3,
+   "status": 200,
+   "partial": false,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "results_lost": true,
+   "reconstructed": true,
+   "first_after_start": false,
+   "results": 0,
+   "stages": {
+    "use_case_s": 2.2946,
+    "fan_out_s": 1.8227,
+    "ranking_s": 0.4719,
+    "outside_use_case_s": 0.0054
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 1.0166,
+     "last_byte_s": 1.8136
+    },
+    "arxiv": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 0.8635,
+     "last_byte_s": 0.8757
+    }
+   }
+  },
+  {
+   "kind": "repeat",
+   "query_id": "t04-reversed_keyword",
+   "topic": "t04",
+   "phrasing": "reversed_keyword",
+   "start": "s1",
+   "t_sent": 1791554669.9677427,
+   "t_done": 1791554669.989154,
+   "latency_s": 0.025,
+   "status": 200,
+   "partial": false,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "results_lost": true,
+   "reconstructed": true,
+   "results": 0,
+   "stages": {
+    "use_case_s": 0.0214,
+    "fan_out_s": 0.0048,
+    "ranking_s": 0.0162,
+    "outside_use_case_s": 0.0036
+   },
+   "source_timings": {}
+  },
+  {
+   "kind": "cold",
+   "query_id": "t08-natural_language",
+   "topic": "t08",
+   "phrasing": "natural_language",
+   "start": "s1",
+   "t_sent": 1791554676.4859762,
+   "t_done": 1791554678.50905,
+   "latency_s": 2.045,
+   "status": 503,
+   "partial": null,
+   "sources": {},
+   "results_lost": true,
+   "reconstructed": true,
+   "first_after_start": false,
+   "results": 0,
+   "stages": {
+    "use_case_s": 2.0231,
+    "outside_use_case_s": 0.0219
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "CancelledError",
+     "status": 200,
+     "headers_s": 1.3337,
+     "last_byte_s": null
+    },
+    "arxiv": {
+     "outcome": "CancelledError",
+     "status": 200,
+     "headers_s": 1.2131,
+     "last_byte_s": null
+    }
+   }
+  },
+  {
+   "kind": "repeat",
+   "query_id": "t08-natural_language",
+   "topic": "t08",
+   "phrasing": "natural_language",
+   "start": "s1",
+   "t_sent": 1791554682.9672894,
+   "t_done": 1791554684.989308,
+   "latency_s": 2.025,
+   "status": 200,
+   "partial": false,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "results_lost": true,
+   "reconstructed": true,
+   "results": 0,
+   "stages": {
+    "use_case_s": 2.022,
+    "fan_out_s": 1.6002,
+    "ranking_s": 0.4218,
+    "outside_use_case_s": 0.003
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 0.7465,
+     "last_byte_s": 1.5463
+    },
+    "arxiv": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 0.0917,
+     "last_byte_s": 0.2714
+    }
+   }
+  },
+  {
+   "kind": "cold",
+   "query_id": "t10-natural_language",
+   "topic": "t10",
+   "phrasing": "natural_language",
+   "start": "s2",
+   "t_sent": 1791554695.522424,
+   "t_done": 1791554697.2521515,
+   "latency_s": 1.898,
+   "status": 200,
+   "partial": false,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "results_lost": true,
+   "reconstructed": true,
+   "first_after_start": true,
+   "results": 0,
+   "stages": {
+    "use_case_s": 1.7297,
+    "fan_out_s": 1.4489,
+    "ranking_s": 0.2808,
+    "outside_use_case_s": 0.1683
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 0.631,
+     "last_byte_s": 1.4318
+    },
+    "arxiv": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 1.0451,
+     "last_byte_s": 1.3718
+    }
+   }
+  },
+  {
+   "kind": "repeat",
+   "query_id": "t10-natural_language",
+   "topic": "t10",
+   "phrasing": "natural_language",
+   "start": "s2",
+   "t_sent": 1791554702.0115314,
+   "t_done": 1791554702.0352159,
+   "latency_s": 0.028,
+   "status": 200,
+   "partial": false,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "results_lost": true,
+   "reconstructed": true,
+   "results": 0,
+   "stages": {
+    "use_case_s": 0.0237,
+    "fan_out_s": 0.0052,
+    "ranking_s": 0.0175,
+    "outside_use_case_s": 0.0043
+   },
+   "source_timings": {}
+  },
+  {
+   "kind": "cold",
+   "query_id": "t09-natural_language",
+   "topic": "t09",
+   "phrasing": "natural_language",
+   "start": "s2",
+   "t_sent": 1791554708.5246952,
+   "t_done": 1791554710.914155,
+   "latency_s": 2.406,
+   "status": 200,
+   "partial": true,
+   "sources": {
+    "openalex": "timeout",
+    "arxiv": "ok"
+   },
+   "results_lost": true,
+   "reconstructed": true,
+   "first_after_start": false,
+   "results": 0,
+   "stages": {
+    "use_case_s": 2.3895,
+    "fan_out_s": 2.0187,
+    "ranking_s": 0.3697,
+    "outside_use_case_s": 0.0165
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "CancelledError",
+     "status": 200,
+     "headers_s": 1.8754,
+     "last_byte_s": null
+    },
+    "arxiv": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 1.2308,
+     "last_byte_s": 1.3445
+    }
+   }
+  },
+  {
+   "kind": "repeat",
+   "query_id": "t09-natural_language",
+   "topic": "t09",
+   "phrasing": "natural_language",
+   "start": "s2",
+   "t_sent": 1791554715.0122476,
+   "t_done": 1791554717.0506804,
+   "latency_s": 2.042,
+   "status": 200,
+   "partial": true,
+   "sources": {
+    "openalex": "timeout",
+    "arxiv": "ok"
+   },
+   "results_lost": true,
+   "reconstructed": true,
+   "results": 0,
+   "stages": {
+    "use_case_s": 2.0384,
+    "fan_out_s": 2.0064,
+    "ranking_s": 0.031,
+    "outside_use_case_s": 0.0036
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "CancelledError",
+     "status": 200,
+     "headers_s": 1.3591,
+     "last_byte_s": null
+    }
+   }
+  },
+  {
+   "kind": "cold",
+   "query_id": "t10-reversed_keyword",
+   "topic": "t10",
+   "phrasing": "reversed_keyword",
+   "start": "s2",
+   "t_sent": 1791554721.5121608,
+   "t_done": 1791554723.7202656,
+   "latency_s": 2.211,
+   "status": 200,
+   "partial": false,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "results_lost": true,
+   "reconstructed": true,
+   "first_after_start": false,
+   "results": 0,
+   "stages": {
+    "use_case_s": 2.2081,
+    "fan_out_s": 1.8496,
+    "ranking_s": 0.3585,
+    "outside_use_case_s": 0.0029
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 1.0348,
+     "last_byte_s": 1.8416
+    },
+    "arxiv": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 1.0288,
+     "last_byte_s": 1.1367
+    }
+   }
+  },
+  {
+   "kind": "repeat",
+   "query_id": "t10-reversed_keyword",
+   "topic": "t10",
+   "phrasing": "reversed_keyword",
+   "start": "s2",
+   "t_sent": 1791554728.012676,
+   "t_done": 1791554728.0339127,
+   "latency_s": 0.025,
+   "status": 200,
+   "partial": false,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "results_lost": true,
+   "reconstructed": true,
+   "results": 0,
+   "stages": {
+    "use_case_s": 0.0212,
+    "fan_out_s": 0.0049,
+    "ranking_s": 0.0163,
+    "outside_use_case_s": 0.0038
+   },
+   "source_timings": {}
+  },
+  {
+   "kind": "cold",
+   "query_id": "t02-keyword",
+   "topic": "t02",
+   "phrasing": "keyword",
+   "start": "s2",
+   "t_sent": 1791554734.51407,
+   "t_done": 1791554736.3803904,
+   "latency_s": 1.87,
+   "status": 200,
+   "partial": false,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "results_lost": true,
+   "reconstructed": true,
+   "first_after_start": false,
+   "results": 0,
+   "stages": {
+    "use_case_s": 1.8663,
+    "fan_out_s": 1.5438,
+    "ranking_s": 0.3225,
+    "outside_use_case_s": 0.0037
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 0.7349,
+     "last_byte_s": 1.5328
+    },
+    "arxiv": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 1.3165,
+     "last_byte_s": 1.419
+    }
+   }
+  },
+  {
+   "kind": "repeat",
+   "query_id": "t02-keyword",
+   "topic": "t02",
+   "phrasing": "keyword",
+   "start": "s2",
+   "t_sent": 1791554741.0139217,
+   "t_done": 1791554741.0418527,
+   "latency_s": 0.031,
+   "status": 200,
+   "partial": false,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "results_lost": true,
+   "reconstructed": true,
+   "results": 0,
+   "stages": {
+    "use_case_s": 0.0279,
+    "fan_out_s": 0.005,
+    "ranking_s": 0.0229,
+    "outside_use_case_s": 0.0031
+   },
+   "source_timings": {}
+  },
+  {
+   "kind": "cold",
+   "query_id": "t03-reversed_keyword",
+   "topic": "t03",
+   "phrasing": "reversed_keyword",
+   "start": "s2",
+   "t_sent": 1791554747.5395176,
+   "t_done": 1791554749.5496993,
+   "latency_s": 2.037,
+   "status": 503,
+   "partial": null,
+   "sources": {},
+   "results_lost": true,
+   "reconstructed": true,
+   "first_after_start": false,
+   "results": 0,
+   "stages": {
+    "use_case_s": 2.0102,
+    "outside_use_case_s": 0.0268
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "CancelledError",
+     "status": null,
+     "headers_s": null,
+     "last_byte_s": null
+    },
+    "arxiv": {
+     "outcome": "CancelledError",
+     "status": null,
+     "headers_s": null,
+     "last_byte_s": null
+    }
+   }
+  },
+  {
+   "kind": "repeat",
+   "query_id": "t03-reversed_keyword",
+   "topic": "t03",
+   "phrasing": "reversed_keyword",
+   "start": "s2",
+   "t_sent": 1791554754.0160341,
+   "t_done": 1791554756.2960787,
+   "latency_s": 2.284,
+   "status": 200,
+   "partial": false,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "results_lost": true,
+   "reconstructed": true,
+   "results": 0,
+   "stages": {
+    "use_case_s": 2.28,
+    "fan_out_s": 1.8842,
+    "ranking_s": 0.3959,
+    "outside_use_case_s": 0.004
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 1.077,
+     "last_byte_s": 1.8754
+    },
+    "arxiv": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 0.1153,
+     "last_byte_s": 0.2501
+    }
+   }
+  },
+  {
+   "kind": "cold",
+   "query_id": "t01-reversed_keyword",
+   "topic": "t01",
+   "phrasing": "reversed_keyword",
+   "start": "s2",
+   "t_sent": 1791554760.516911,
+   "t_done": 1791554762.5637531,
+   "latency_s": 2.05,
+   "status": 200,
+   "partial": false,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "results_lost": true,
+   "reconstructed": true,
+   "first_after_start": false,
+   "results": 0,
+   "stages": {
+    "use_case_s": 2.0468,
+    "fan_out_s": 1.6445,
+    "ranking_s": 0.4013,
+    "outside_use_case_s": 0.0032
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 0.8376,
+     "last_byte_s": 1.6344
+    },
+    "arxiv": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 1.0432,
+     "last_byte_s": 1.1477
+    }
+   }
+  },
+  {
+   "kind": "repeat",
+   "query_id": "t01-reversed_keyword",
+   "topic": "t01",
+   "phrasing": "reversed_keyword",
+   "start": "s2",
+   "t_sent": 1791554767.0169866,
+   "t_done": 1791554767.043901,
+   "latency_s": 0.03,
+   "status": 200,
+   "partial": false,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "results_lost": true,
+   "reconstructed": true,
+   "results": 0,
+   "stages": {
+    "use_case_s": 0.0269,
+    "fan_out_s": 0.0054,
+    "ranking_s": 0.0215,
+    "outside_use_case_s": 0.0031
+   },
+   "source_timings": {}
+  },
+  {
+   "kind": "cold",
+   "query_id": "t03-natural_language",
+   "topic": "t03",
+   "phrasing": "natural_language",
+   "start": "s3",
+   "t_sent": 1791554776.671497,
+   "t_done": 1791554778.7827826,
+   "latency_s": 2.127,
+   "status": 200,
+   "partial": true,
+   "sources": {
+    "openalex": "timeout",
+    "arxiv": "ok"
+   },
+   "results_lost": true,
+   "reconstructed": true,
+   "first_after_start": true,
+   "results": 0,
+   "stages": {
+    "use_case_s": 2.1113,
+    "fan_out_s": 2.0224,
+    "ranking_s": 0.0889,
+    "outside_use_case_s": 0.0157
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "CancelledError",
+     "status": null,
+     "headers_s": null,
+     "last_byte_s": null
+    },
+    "arxiv": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 1.0536,
+     "last_byte_s": 1.0941
+    }
+   }
+  },
+  {
+   "kind": "repeat",
+   "query_id": "t03-natural_language",
+   "topic": "t03",
+   "phrasing": "natural_language",
+   "start": "s3",
+   "t_sent": 1791554783.1597586,
+   "t_done": 1791554785.1008775,
+   "latency_s": 2.102,
+   "status": 200,
+   "partial": false,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "results_lost": true,
+   "reconstructed": true,
+   "results": 0,
+   "stages": {
+    "use_case_s": 1.9411,
+    "fan_out_s": 1.8647,
+    "ranking_s": 0.0765,
+    "outside_use_case_s": 0.1609
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 1.0583,
+     "last_byte_s": 1.8553
+    }
+   }
+  },
+  {
+   "kind": "cold",
+   "query_id": "t03-keyword",
+   "topic": "t03",
+   "phrasing": "keyword",
+   "start": "s3",
+   "t_sent": 1791554789.6594172,
+   "t_done": 1791554791.271202,
+   "latency_s": 1.614,
+   "status": 200,
+   "partial": false,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "results_lost": true,
+   "reconstructed": true,
+   "first_after_start": false,
+   "results": 0,
+   "stages": {
+    "use_case_s": 1.6118,
+    "fan_out_s": 1.552,
+    "ranking_s": 0.0598,
+    "outside_use_case_s": 0.0022
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 0.7449,
+     "last_byte_s": 1.5445
+    },
+    "arxiv": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 1.2818,
+     "last_byte_s": 1.4754
+    }
+   }
+  },
+  {
+   "kind": "repeat",
+   "query_id": "t03-keyword",
+   "topic": "t03",
+   "phrasing": "keyword",
+   "start": "s3",
+   "t_sent": 1791554796.1615458,
+   "t_done": 1791554796.1955395,
+   "latency_s": 0.039,
+   "status": 200,
+   "partial": false,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "results_lost": true,
+   "reconstructed": true,
+   "results": 0,
+   "stages": {
+    "use_case_s": 0.034,
+    "fan_out_s": 0.004,
+    "ranking_s": 0.03,
+    "outside_use_case_s": 0.005
+   },
+   "source_timings": {}
+  },
+  {
+   "kind": "cold",
+   "query_id": "t02-reversed_keyword",
+   "topic": "t02",
+   "phrasing": "reversed_keyword",
+   "start": "s3",
+   "t_sent": 1791554802.6829593,
+   "t_done": 1791554804.7858903,
+   "latency_s": 2.128,
+   "status": 200,
+   "partial": true,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "timeout"
+   },
+   "results_lost": true,
+   "reconstructed": true,
+   "first_after_start": false,
+   "results": 0,
+   "stages": {
+    "use_case_s": 2.1029,
+    "fan_out_s": 1.9946,
+    "ranking_s": 0.1083,
+    "outside_use_case_s": 0.0251
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 1.0808,
+     "last_byte_s": 1.8777
+    },
+    "arxiv": {
+     "outcome": "CancelledError",
+     "status": 200,
+     "headers_s": 1.853,
+     "last_byte_s": null
+    }
+   }
+  },
+  {
+   "kind": "repeat",
+   "query_id": "t02-reversed_keyword",
+   "topic": "t02",
+   "phrasing": "reversed_keyword",
+   "start": "s3",
+   "t_sent": 1791554809.1634324,
+   "t_done": 1791554809.5284257,
+   "latency_s": 0.37,
+   "status": 200,
+   "partial": false,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "results_lost": true,
+   "reconstructed": true,
+   "results": 0,
+   "stages": {
+    "use_case_s": 0.365,
+    "fan_out_s": 0.333,
+    "ranking_s": 0.032,
+    "outside_use_case_s": 0.005
+   },
+   "source_timings": {
+    "arxiv": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 0.2601,
+     "last_byte_s": 0.2792
+    }
+   }
+  },
+  {
+   "kind": "cold",
+   "query_id": "t05-keyword",
+   "topic": "t05",
+   "phrasing": "keyword",
+   "start": "s3",
+   "t_sent": 1791554815.6876652,
+   "t_done": 1791554818.1045418,
+   "latency_s": 2.444,
+   "status": 200,
+   "partial": true,
+   "sources": {
+    "openalex": "timeout",
+    "arxiv": "ok"
+   },
+   "results_lost": true,
+   "reconstructed": true,
+   "first_after_start": false,
+   "results": 0,
+   "stages": {
+    "use_case_s": 2.4169,
+    "fan_out_s": 2.0239,
+    "ranking_s": 0.392,
+    "outside_use_case_s": 0.0271
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "CancelledError",
+     "status": 200,
+     "headers_s": 1.4768,
+     "last_byte_s": null
+    },
+    "arxiv": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 1.8808,
+     "last_byte_s": 1.904
+    }
+   }
+  },
+  {
+   "kind": "repeat",
+   "query_id": "t05-keyword",
+   "topic": "t05",
+   "phrasing": "keyword",
+   "start": "s3",
+   "t_sent": 1791554822.16296,
+   "t_done": 1791554824.214979,
+   "latency_s": 2.054,
+   "status": 200,
+   "partial": true,
+   "sources": {
+    "openalex": "timeout",
+    "arxiv": "ok"
+   },
+   "results_lost": true,
+   "reconstructed": true,
+   "results": 0,
+   "stages": {
+    "use_case_s": 2.052,
+    "fan_out_s": 2.0184,
+    "ranking_s": 0.0337,
+    "outside_use_case_s": 0.002
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "CancelledError",
+     "status": null,
+     "headers_s": null,
+     "last_byte_s": null
+    }
+   }
+  },
+  {
+   "kind": "cold",
+   "query_id": "t02-natural_language",
+   "topic": "t02",
+   "phrasing": "natural_language",
+   "start": "s3",
+   "t_sent": 1791554828.6654208,
+   "t_done": 1791554830.8173947,
+   "latency_s": 2.155,
+   "status": 200,
+   "partial": false,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "results_lost": true,
+   "reconstructed": true,
+   "first_after_start": false,
+   "results": 0,
+   "stages": {
+    "use_case_s": 2.152,
+    "fan_out_s": 1.928,
+    "ranking_s": 0.224,
+    "outside_use_case_s": 0.003
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 1.1161,
+     "last_byte_s": 1.9214
+    },
+    "arxiv": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 0.7975,
+     "last_byte_s": 0.7975
+    }
+   }
+  },
+  {
+   "kind": "repeat",
+   "query_id": "t02-natural_language",
+   "topic": "t02",
+   "phrasing": "natural_language",
+   "start": "s3",
+   "t_sent": 1791554835.1654434,
+   "t_done": 1791554835.1964414,
+   "latency_s": 0.034,
+   "status": 200,
+   "partial": false,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "results_lost": true,
+   "reconstructed": true,
+   "results": 0,
+   "stages": {
+    "use_case_s": 0.031,
+    "fan_out_s": 0.002,
+    "ranking_s": 0.029,
+    "outside_use_case_s": 0.003
+   },
+   "source_timings": {}
+  },
+  {
+   "kind": "cold",
+   "query_id": "t05-natural_language",
+   "topic": "t05",
+   "phrasing": "natural_language",
+   "start": "s3",
+   "t_sent": 1791554841.6802502,
+   "t_done": 1791554844.026906,
+   "latency_s": 2.363,
+   "status": 200,
+   "partial": true,
+   "sources": {
+    "openalex": "timeout",
+    "arxiv": "ok"
+   },
+   "results_lost": true,
+   "reconstructed": true,
+   "first_after_start": false,
+   "results": 0,
+   "stages": {
+    "use_case_s": 2.3467,
+    "fan_out_s": 2.008,
+    "ranking_s": 0.3387,
+    "outside_use_case_s": 0.0163
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "CancelledError",
+     "status": 200,
+     "headers_s": 1.3229,
+     "last_byte_s": null
+    },
+    "arxiv": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 0.8781,
+     "last_byte_s": 0.9281
+    }
+   }
+  },
+  {
+   "kind": "repeat",
+   "query_id": "t05-natural_language",
+   "topic": "t05",
+   "phrasing": "natural_language",
+   "start": "s3",
+   "t_sent": 1791554848.1694522,
+   "t_done": 1791554850.2033434,
+   "latency_s": 2.039,
+   "status": 200,
+   "partial": true,
+   "sources": {
+    "openalex": "timeout",
+    "arxiv": "ok"
+   },
+   "results_lost": true,
+   "reconstructed": true,
+   "results": 0,
+   "stages": {
+    "use_case_s": 2.0339,
+    "fan_out_s": 2.0034,
+    "ranking_s": 0.0305,
+    "outside_use_case_s": 0.0051
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "CancelledError",
+     "status": 200,
+     "headers_s": 1.1991,
+     "last_byte_s": null
+    }
+   }
+  },
+  {
+   "kind": "cold",
+   "query_id": "t06-natural_language",
+   "topic": "t06",
+   "phrasing": "natural_language",
+   "start": "s4",
+   "t_sent": 1791554860.3143332,
+   "t_done": 1791554862.3433425,
+   "latency_s": 2.047,
+   "status": 200,
+   "partial": false,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "results_lost": true,
+   "reconstructed": true,
+   "first_after_start": true,
+   "results": 0,
+   "stages": {
+    "use_case_s": 2.029,
+    "fan_out_s": 1.8503,
+    "ranking_s": 0.1787,
+    "outside_use_case_s": 0.018
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 1.0285,
+     "last_byte_s": 1.8313
+    },
+    "arxiv": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 1.2802,
+     "last_byte_s": 1.2968
+    }
+   }
+  },
+  {
+   "kind": "repeat",
+   "query_id": "t06-natural_language",
+   "topic": "t06",
+   "phrasing": "natural_language",
+   "start": "s4",
+   "t_sent": 1791554866.8026597,
+   "t_done": 1791554866.8257432,
+   "latency_s": 0.028,
+   "status": 200,
+   "partial": false,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "results_lost": true,
+   "reconstructed": true,
+   "results": 0,
+   "stages": {
+    "use_case_s": 0.0231,
+    "fan_out_s": 0.0051,
+    "ranking_s": 0.017,
+    "outside_use_case_s": 0.0049
+   },
+   "source_timings": {}
+  },
+  {
+   "kind": "void",
+   "query_id": "t08-keyword",
+   "topic": "t08",
+   "phrasing": "keyword",
+   "start": "s4",
+   "t_sent": 1791554873.3236763,
+   "t_done": null,
+   "latency_s": null,
+   "status": null,
+   "sources": {},
+   "results_lost": true,
+   "reconstructed": true,
+   "why": "DEV-A4-1: modern standby (Kernel-Power 506, 19:37:51 local) 2 s after the search began; both sources had answered (OpenAlex 1.33 s, arXiv 1.29 s) when the machine froze",
+   "results": 0
+  },
+  {
+   "kind": "cold",
+   "query_id": "t01-natural_language",
+   "topic": "t01",
+   "phrasing": "natural_language",
+   "start": "s4b",
+   "t_sent": 1791555988.2991488,
+   "t_done": 1791555990.5155404,
+   "latency_s": 2.2167,
+   "status": 200,
+   "partial": true,
+   "sources": {
+    "openalex": "timeout",
+    "arxiv": "ok"
+   },
+   "cached": {
+    "openalex": false,
+    "arxiv": false
+   },
+   "relevance": "dense",
+   "first_after_start": true,
+   "results": 50,
+   "stages": {
+    "use_case_s": 2.1994,
+    "fan_out_s": 1.982,
+    "ranking_s": 0.2164,
+    "outside_use_case_s": 0.0173
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "CancelledError",
+     "status": 200,
+     "headers_s": 1.5712,
+     "last_byte_s": null
+    },
+    "arxiv": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 0.7726,
+     "last_byte_s": 0.7827
+    }
+   }
+  },
+  {
+   "kind": "repeat",
+   "query_id": "t01-natural_language",
+   "topic": "t01",
+   "phrasing": "natural_language",
+   "start": "s4b",
+   "t_sent": 1791555994.800313,
+   "t_done": 1791555996.8177717,
+   "latency_s": 2.0176,
+   "status": 200,
+   "partial": false,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "cached": {
+    "openalex": false,
+    "arxiv": true
+   },
+   "relevance": "dense",
+   "results": 72,
+   "stages": {
+    "use_case_s": 2.0139,
+    "fan_out_s": 1.8944,
+    "ranking_s": 0.1186,
+    "outside_use_case_s": 0.0037
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 1.0871,
+     "last_byte_s": 1.8854
+    }
+   }
+  },
+  {
+   "kind": "cold",
+   "query_id": "t07-reversed_keyword",
+   "topic": "t07",
+   "phrasing": "reversed_keyword",
+   "start": "s4b",
+   "t_sent": 1791556001.3010676,
+   "t_done": 1791556003.6912954,
+   "latency_s": 2.3901,
+   "status": 200,
+   "partial": true,
+   "sources": {
+    "openalex": "timeout",
+    "arxiv": "ok"
+   },
+   "cached": {
+    "openalex": false,
+    "arxiv": false
+   },
+   "relevance": "dense",
+   "first_after_start": false,
+   "results": 50,
+   "stages": {
+    "use_case_s": 2.3861,
+    "fan_out_s": 2.0107,
+    "ranking_s": 0.3754,
+    "outside_use_case_s": 0.004
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "CancelledError",
+     "status": 200,
+     "headers_s": 1.2765,
+     "last_byte_s": null
+    },
+    "arxiv": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 0.6995,
+     "last_byte_s": 0.7186
+    }
+   }
+  },
+  {
+   "kind": "repeat",
+   "query_id": "t07-reversed_keyword",
+   "topic": "t07",
+   "phrasing": "reversed_keyword",
+   "start": "s4b",
+   "t_sent": 1791556007.8014216,
+   "t_done": 1791556009.5951984,
+   "latency_s": 1.7934,
+   "status": 200,
+   "partial": false,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "cached": {
+    "openalex": false,
+    "arxiv": true
+   },
+   "relevance": "dense",
+   "results": 67,
+   "stages": {
+    "use_case_s": 1.7903,
+    "fan_out_s": 1.5124,
+    "ranking_s": 0.2779,
+    "outside_use_case_s": 0.0031
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 0.8711,
+     "last_byte_s": 1.5044
+    }
+   }
+  },
+  {
+   "kind": "cold",
+   "query_id": "t01-keyword",
+   "topic": "t01",
+   "phrasing": "keyword",
+   "start": "s4b",
+   "t_sent": 1791556014.3017428,
+   "t_done": 1791556016.6661286,
+   "latency_s": 2.3639,
+   "status": 200,
+   "partial": true,
+   "sources": {
+    "openalex": "timeout",
+    "arxiv": "ok"
+   },
+   "cached": {
+    "openalex": false,
+    "arxiv": false
+   },
+   "relevance": "dense",
+   "first_after_start": false,
+   "results": 50,
+   "stages": {
+    "use_case_s": 2.3604,
+    "fan_out_s": 2.0156,
+    "ranking_s": 0.3448,
+    "outside_use_case_s": 0.0035
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "CancelledError",
+     "status": 200,
+     "headers_s": 1.3368,
+     "last_byte_s": null
+    },
+    "arxiv": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 1.1809,
+     "last_byte_s": 1.3404
+    }
+   }
+  },
+  {
+   "kind": "repeat",
+   "query_id": "t01-keyword",
+   "topic": "t01",
+   "phrasing": "keyword",
+   "start": "s4b",
+   "t_sent": 1791556020.802645,
+   "t_done": 1791556022.3120902,
+   "latency_s": 1.5092,
+   "status": 200,
+   "partial": false,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "cached": {
+    "openalex": false,
+    "arxiv": true
+   },
+   "relevance": "dense",
+   "results": 63,
+   "stages": {
+    "use_case_s": 1.5054,
+    "fan_out_s": 1.3389,
+    "ranking_s": 0.1655,
+    "outside_use_case_s": 0.0038
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 0.5298,
+     "last_byte_s": 1.3299
+    }
+   }
+  },
+  {
+   "kind": "cold",
+   "query_id": "t04-keyword",
+   "topic": "t04",
+   "phrasing": "keyword",
+   "start": "s4b",
+   "t_sent": 1791556027.30304,
+   "t_done": 1791556029.6059465,
+   "latency_s": 2.3027,
+   "status": 200,
+   "partial": true,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "timeout"
+   },
+   "cached": {
+    "openalex": false,
+    "arxiv": false
+   },
+   "relevance": "dense",
+   "first_after_start": false,
+   "results": 23,
+   "stages": {
+    "use_case_s": 2.2991,
+    "fan_out_s": 2.0098,
+    "ranking_s": 0.2893,
+    "outside_use_case_s": 0.0036
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 0.9399,
+     "last_byte_s": 1.7324
+    },
+    "arxiv": {
+     "outcome": "CancelledError",
+     "status": 200,
+     "headers_s": 0.8911,
+     "last_byte_s": null
+    }
+   }
+  },
+  {
+   "kind": "repeat",
+   "query_id": "t04-keyword",
+   "topic": "t04",
+   "phrasing": "keyword",
+   "start": "s4b",
+   "t_sent": 1791556033.8039606,
+   "t_done": 1791556034.7082636,
+   "latency_s": 0.9044,
+   "status": 200,
+   "partial": false,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "cached": {
+    "openalex": true,
+    "arxiv": false
+   },
+   "relevance": "dense",
+   "results": 63,
+   "stages": {
+    "use_case_s": 0.9013,
+    "fan_out_s": 0.5834,
+    "ranking_s": 0.3179,
+    "outside_use_case_s": 0.0031
+   },
+   "source_timings": {
+    "arxiv": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 0.0992,
+     "last_byte_s": 0.3729
+    }
+   }
+  },
+  {
+   "kind": "cold",
+   "query_id": "t07-natural_language",
+   "topic": "t07",
+   "phrasing": "natural_language",
+   "start": "s5",
+   "t_sent": 1791556045.2149057,
+   "t_done": 1791556047.2208643,
+   "latency_s": 2.0058,
+   "status": 503,
+   "partial": null,
+   "sources": {},
+   "cached": {},
+   "relevance": null,
+   "first_after_start": true,
+   "results": 0,
+   "stages": {
+    "use_case_s": 1.9904,
+    "outside_use_case_s": 0.0154
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "CancelledError",
+     "status": 200,
+     "headers_s": 1.4842,
+     "last_byte_s": null
+    },
+    "arxiv": {
+     "outcome": "CancelledError",
+     "status": null,
+     "headers_s": null,
+     "last_byte_s": null
+    }
+   }
+  },
+  {
+   "kind": "repeat",
+   "query_id": "t07-natural_language",
+   "topic": "t07",
+   "phrasing": "natural_language",
+   "start": "s5",
+   "t_sent": 1791556051.71571,
+   "t_done": 1791556054.0624113,
+   "latency_s": 2.3457,
+   "status": 200,
+   "partial": true,
+   "sources": {
+    "openalex": "timeout",
+    "arxiv": "ok"
+   },
+   "cached": {
+    "openalex": false,
+    "arxiv": false
+   },
+   "relevance": "dense",
+   "results": 50,
+   "stages": {
+    "use_case_s": 2.1903,
+    "fan_out_s": 2.0225,
+    "ranking_s": 0.1668,
+    "outside_use_case_s": 0.1554
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "CancelledError",
+     "status": 200,
+     "headers_s": 1.3149,
+     "last_byte_s": null
+    },
+    "arxiv": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 1.2116,
+     "last_byte_s": 1.3622
+    }
+   }
+  },
+  {
+   "kind": "cold",
+   "query_id": "t05-reversed_keyword",
+   "topic": "t05",
+   "phrasing": "reversed_keyword",
+   "start": "s5",
+   "t_sent": 1791556058.216018,
+   "t_done": 1791556060.5472572,
+   "latency_s": 2.3309,
+   "status": 200,
+   "partial": false,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "cached": {
+    "openalex": false,
+    "arxiv": false
+   },
+   "relevance": "dense",
+   "first_after_start": false,
+   "results": 55,
+   "stages": {
+    "use_case_s": 2.3282,
+    "fan_out_s": 1.9087,
+    "ranking_s": 0.4195,
+    "outside_use_case_s": 0.0027
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 1.1022,
+     "last_byte_s": 1.9005
+    },
+    "arxiv": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 0.9652,
+     "last_byte_s": 1.1282
+    }
+   }
+  },
+  {
+   "kind": "repeat",
+   "query_id": "t05-reversed_keyword",
+   "topic": "t05",
+   "phrasing": "reversed_keyword",
+   "start": "s5",
+   "t_sent": 1791556064.7172813,
+   "t_done": 1791556064.7456965,
+   "latency_s": 0.0279,
+   "status": 200,
+   "partial": false,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "cached": {
+    "openalex": true,
+    "arxiv": true
+   },
+   "relevance": "dense",
+   "results": 55,
+   "stages": {
+    "use_case_s": 0.023,
+    "fan_out_s": 0.0056,
+    "ranking_s": 0.0164,
+    "outside_use_case_s": 0.0049
+   },
+   "source_timings": {}
+  },
+  {
+   "kind": "cold",
+   "query_id": "t10-keyword",
+   "topic": "t10",
+   "phrasing": "keyword",
+   "start": "s5",
+   "t_sent": 1791556071.2191901,
+   "t_done": 1791556073.5335865,
+   "latency_s": 2.3139,
+   "status": 200,
+   "partial": true,
+   "sources": {
+    "openalex": "timeout",
+    "arxiv": "ok"
+   },
+   "cached": {
+    "openalex": false,
+    "arxiv": false
+   },
+   "relevance": "dense",
+   "first_after_start": false,
+   "results": 50,
+   "stages": {
+    "use_case_s": 2.3097,
+    "fan_out_s": 2.014,
+    "ranking_s": 0.2957,
+    "outside_use_case_s": 0.0042
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "CancelledError",
+     "status": 200,
+     "headers_s": 1.5769,
+     "last_byte_s": null
+    },
+    "arxiv": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 0.9544,
+     "last_byte_s": 1.3373
+    }
+   }
+  },
+  {
+   "kind": "repeat",
+   "query_id": "t10-keyword",
+   "topic": "t10",
+   "phrasing": "keyword",
+   "start": "s5",
+   "t_sent": 1791556077.720282,
+   "t_done": 1791556079.3827415,
+   "latency_s": 1.6615,
+   "status": 200,
+   "partial": false,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "cached": {
+    "openalex": false,
+    "arxiv": true
+   },
+   "relevance": "dense",
+   "results": 59,
+   "stages": {
+    "use_case_s": 1.6574,
+    "fan_out_s": 1.3392,
+    "ranking_s": 0.3182,
+    "outside_use_case_s": 0.0041
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 0.5519,
+     "last_byte_s": 1.3318
+    }
+   }
+  },
+  {
+   "kind": "cold",
+   "query_id": "t06-keyword",
+   "topic": "t06",
+   "phrasing": "keyword",
+   "start": "s5",
+   "t_sent": 1791556084.2211795,
+   "t_done": 1791556086.4342597,
+   "latency_s": 2.2136,
+   "status": 200,
+   "partial": true,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "timeout"
+   },
+   "cached": {
+    "openalex": false,
+    "arxiv": false
+   },
+   "relevance": "dense",
+   "first_after_start": false,
+   "results": 23,
+   "stages": {
+    "use_case_s": 2.2111,
+    "fan_out_s": 2.0311,
+    "ranking_s": 0.18,
+    "outside_use_case_s": 0.0025
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 1.1216,
+     "last_byte_s": 1.9226
+    },
+    "arxiv": {
+     "outcome": "CancelledError",
+     "status": null,
+     "headers_s": null,
+     "last_byte_s": null
+    }
+   }
+  },
+  {
+   "kind": "repeat",
+   "query_id": "t06-keyword",
+   "topic": "t06",
+   "phrasing": "keyword",
+   "start": "s5",
+   "t_sent": 1791556090.7214322,
+   "t_done": 1791556091.9131322,
+   "latency_s": 1.1918,
+   "status": 200,
+   "partial": false,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "cached": {
+    "openalex": true,
+    "arxiv": false
+   },
+   "relevance": "dense",
+   "results": 64,
+   "stages": {
+    "use_case_s": 1.1881,
+    "fan_out_s": 0.8505,
+    "ranking_s": 0.3375,
+    "outside_use_case_s": 0.0037
+   },
+   "source_timings": {
+    "arxiv": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 0.5045,
+     "last_byte_s": 0.7979
+    }
+   }
+  },
+  {
+   "kind": "cold",
+   "query_id": "t07-keyword",
+   "topic": "t07",
+   "phrasing": "keyword",
+   "start": "s5",
+   "t_sent": 1791556097.2227187,
+   "t_done": 1791556099.1349342,
+   "latency_s": 1.9109,
+   "status": 200,
+   "partial": false,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "cached": {
+    "openalex": false,
+    "arxiv": false
+   },
+   "relevance": "dense",
+   "first_after_start": false,
+   "results": 67,
+   "stages": {
+    "use_case_s": 1.9071,
+    "fan_out_s": 1.8113,
+    "ranking_s": 0.0948,
+    "outside_use_case_s": 0.0038
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 0.9892,
+     "last_byte_s": 1.8033
+    },
+    "arxiv": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 0.9543,
+     "last_byte_s": 1.0975
+    }
+   }
+  },
+  {
+   "kind": "repeat",
+   "query_id": "t07-keyword",
+   "topic": "t07",
+   "phrasing": "keyword",
+   "start": "s5",
+   "t_sent": 1791556103.723569,
+   "t_done": 1791556103.7617102,
+   "latency_s": 0.0381,
+   "status": 200,
+   "partial": false,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "cached": {
+    "openalex": true,
+    "arxiv": true
+   },
+   "relevance": "dense",
+   "results": 67,
+   "stages": {
+    "use_case_s": 0.0351,
+    "fan_out_s": 0.0045,
+    "ranking_s": 0.0305,
+    "outside_use_case_s": 0.003
+   },
+   "source_timings": {}
+  },
+  {
+   "kind": "cold",
+   "query_id": "t04-natural_language",
+   "topic": "t04",
+   "phrasing": "natural_language",
+   "start": "s5",
+   "t_sent": 1791556110.224184,
+   "t_done": 1791556112.508817,
+   "latency_s": 2.285,
+   "status": 200,
+   "partial": true,
+   "sources": {
+    "openalex": "timeout",
+    "arxiv": "ok"
+   },
+   "cached": {
+    "openalex": false,
+    "arxiv": false
+   },
+   "relevance": "dense",
+   "first_after_start": false,
+   "results": 50,
+   "stages": {
+    "use_case_s": 2.27,
+    "fan_out_s": 2.0024,
+    "ranking_s": 0.2676,
+    "outside_use_case_s": 0.015
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "CancelledError",
+     "status": 200,
+     "headers_s": 1.2776,
+     "last_byte_s": null
+    },
+    "arxiv": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 1.1848,
+     "last_byte_s": 1.6922
+    }
+   }
+  },
+  {
+   "kind": "repeat",
+   "query_id": "t04-natural_language",
+   "topic": "t04",
+   "phrasing": "natural_language",
+   "start": "s5",
+   "t_sent": 1791556116.7246294,
+   "t_done": 1791556118.803118,
+   "latency_s": 2.078,
+   "status": 200,
+   "partial": false,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "ok"
+   },
+   "cached": {
+    "openalex": false,
+    "arxiv": true
+   },
+   "relevance": "dense",
+   "results": 71,
+   "stages": {
+    "use_case_s": 2.0739,
+    "fan_out_s": 1.8094,
+    "ranking_s": 0.2645,
+    "outside_use_case_s": 0.0041
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 0.9918,
+     "last_byte_s": 1.7953
+    }
+   }
+  },
+  {
+   "kind": "kill",
+   "query_id": "t01-keyword",
+   "topic": "t01",
+   "phrasing": "keyword",
+   "start": "kill-openalex-refused",
+   "t_sent": 1791556128.404858,
+   "t_done": 1791556130.621202,
+   "latency_s": 2.2154,
+   "status": 200,
+   "partial": true,
+   "sources": {
+    "openalex": "timeout",
+    "arxiv": "ok"
+   },
+   "cached": {
+    "openalex": false,
+    "arxiv": false
+   },
+   "relevance": "dense",
+   "killed": "openalex",
+   "how": "refused",
+   "results": 50,
+   "stages": {
+    "use_case_s": 2.1994,
+    "fan_out_s": 2.0063,
+    "ranking_s": 0.1921,
+    "outside_use_case_s": 0.016
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "CancelledError",
+     "status": null,
+     "headers_s": null,
+     "last_byte_s": null
+    },
+    "arxiv": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 0.8936,
+     "last_byte_s": 1.1258
+    }
+   }
+  },
+  {
+   "kind": "kill",
+   "query_id": "t02-keyword",
+   "topic": "t02",
+   "phrasing": "keyword",
+   "start": "kill-openalex-hang",
+   "t_sent": 1791556138.5851026,
+   "t_done": 1791556140.8379152,
+   "latency_s": 2.2523,
+   "status": 200,
+   "partial": true,
+   "sources": {
+    "openalex": "timeout",
+    "arxiv": "ok"
+   },
+   "cached": {
+    "openalex": false,
+    "arxiv": false
+   },
+   "relevance": "dense",
+   "killed": "openalex",
+   "how": "hang",
+   "results": 50,
+   "stages": {
+    "use_case_s": 2.2362,
+    "fan_out_s": 2.0154,
+    "ranking_s": 0.2208,
+    "outside_use_case_s": 0.0161
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "CancelledError",
+     "status": null,
+     "headers_s": null,
+     "last_byte_s": null
+    },
+    "arxiv": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 0.1009,
+     "last_byte_s": 0.2493
+    }
+   }
+  },
+  {
+   "kind": "kill",
+   "query_id": "t03-keyword",
+   "topic": "t03",
+   "phrasing": "keyword",
+   "start": "kill-openalex-error",
+   "t_sent": 1791556148.8577735,
+   "t_done": 1791556149.333086,
+   "latency_s": 0.4726,
+   "status": 200,
+   "partial": true,
+   "sources": {
+    "openalex": "error",
+    "arxiv": "ok"
+   },
+   "cached": {
+    "openalex": false,
+    "arxiv": false
+   },
+   "relevance": "dense",
+   "killed": "openalex",
+   "how": "error",
+   "results": 50,
+   "stages": {
+    "use_case_s": 0.4572,
+    "fan_out_s": 0.2651,
+    "ranking_s": 0.1911,
+    "outside_use_case_s": 0.0154
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "response",
+     "status": 500,
+     "headers_s": 0.001,
+     "last_byte_s": 0.001
+    },
+    "arxiv": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 0.2423,
+     "last_byte_s": 0.2485
+    }
+   }
+  },
+  {
+   "kind": "kill",
+   "query_id": "t04-keyword",
+   "topic": "t04",
+   "phrasing": "keyword",
+   "start": "kill-arxiv-refused",
+   "t_sent": 1791556157.272683,
+   "t_done": 1791556159.4394295,
+   "latency_s": 2.1659,
+   "status": 200,
+   "partial": true,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "timeout"
+   },
+   "cached": {
+    "openalex": false,
+    "arxiv": false
+   },
+   "relevance": "dense",
+   "killed": "arxiv",
+   "how": "refused",
+   "results": 23,
+   "stages": {
+    "use_case_s": 2.1497,
+    "fan_out_s": 2.0181,
+    "ranking_s": 0.1316,
+    "outside_use_case_s": 0.0162
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 0.9611,
+     "last_byte_s": 1.7594
+    },
+    "arxiv": {
+     "outcome": "CancelledError",
+     "status": null,
+     "headers_s": null,
+     "last_byte_s": null
+    }
+   }
+  },
+  {
+   "kind": "kill",
+   "query_id": "t05-keyword",
+   "topic": "t05",
+   "phrasing": "keyword",
+   "start": "kill-arxiv-hang",
+   "t_sent": 1791556167.43084,
+   "t_done": 1791556169.4363565,
+   "latency_s": 2.0058,
+   "status": 503,
+   "partial": null,
+   "sources": {},
+   "cached": {},
+   "relevance": null,
+   "killed": "arxiv",
+   "how": "hang",
+   "results": 0,
+   "stages": {
+    "use_case_s": 1.9902,
+    "outside_use_case_s": 0.0156
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "CancelledError",
+     "status": 200,
+     "headers_s": 1.2321,
+     "last_byte_s": null
+    },
+    "arxiv": {
+     "outcome": "CancelledError",
+     "status": null,
+     "headers_s": null,
+     "last_byte_s": null
+    }
+   }
+  },
+  {
+   "kind": "kill",
+   "query_id": "t06-keyword",
+   "topic": "t06",
+   "phrasing": "keyword",
+   "start": "kill-arxiv-error",
+   "t_sent": 1791556177.4392169,
+   "t_done": 1791556179.193269,
+   "latency_s": 1.7534,
+   "status": 200,
+   "partial": true,
+   "sources": {
+    "openalex": "ok",
+    "arxiv": "error"
+   },
+   "cached": {
+    "openalex": false,
+    "arxiv": false
+   },
+   "relevance": "dense",
+   "killed": "arxiv",
+   "how": "error",
+   "results": 23,
+   "stages": {
+    "use_case_s": 1.738,
+    "fan_out_s": 1.6215,
+    "ranking_s": 0.1155,
+    "outside_use_case_s": 0.0154
+   },
+   "source_timings": {
+    "openalex": {
+     "outcome": "response",
+     "status": 200,
+     "headers_s": 0.8103,
+     "last_byte_s": 1.6086
+    },
+    "arxiv": {
+     "outcome": "response",
+     "status": 500,
+     "headers_s": 0.001,
+     "last_byte_s": 0.001
+    }
+   }
+  }
+ ],
+ "outbound": [
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/collections/a4_18b8745d/exists",
+   "source": null,
+   "start": "s1",
+   "t_start": 1791554603.4407122,
+   "t_headers": 1791554603.4507,
+   "status": 200,
+   "bytes": 57,
+   "outcome": "response",
+   "t_end": 1791554603.4517004
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/collections/a4_18b8745d",
+   "source": null,
+   "start": "s1",
+   "t_start": 1791554603.4517004,
+   "t_headers": 1791554603.5569246,
+   "status": 200,
+   "bytes": 48,
+   "outcome": "response",
+   "t_end": 1791554603.5574431
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/",
+   "source": null,
+   "start": "s1",
+   "t_start": 1791554603.6268005,
+   "outcome": "sync"
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/collections/a4_18b8745d/index",
+   "source": null,
+   "start": "s1",
+   "t_start": 1791554603.5579658,
+   "t_headers": 1791554603.697368,
+   "status": 200,
+   "bytes": 83,
+   "outcome": "response",
+   "t_end": 1791554603.697368
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s1",
+   "t_start": 1791554611.4817142,
+   "outcome": "CancelledError",
+   "t_end": 1791554613.4853144
+  },
+  {
+   "kind": "outbound",
+   "host": "export.arxiv.org",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "s1",
+   "t_start": 1791554611.4817142,
+   "outcome": "CancelledError",
+   "t_end": 1791554613.4853144
+  },
+  {
+   "kind": "outbound",
+   "host": "export.arxiv.org",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "s1",
+   "t_start": 1791554617.9632432,
+   "t_headers": 1791554617.986861,
+   "status": 200,
+   "bytes": 108382,
+   "outcome": "response",
+   "t_end": 1791554617.9963684
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s1",
+   "t_start": 1791554617.9632432,
+   "t_headers": 1791554618.6640525,
+   "status": 200,
+   "bytes": 250557,
+   "outcome": "response",
+   "t_end": 1791554619.4621105
+  },
+  {
+   "kind": "outbound",
+   "host": "export.arxiv.org",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "s1",
+   "t_start": 1791554624.4642844,
+   "t_headers": 1791554625.4004164,
+   "status": 200,
+   "bytes": 116943,
+   "outcome": "response",
+   "t_end": 1791554625.4094121
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s1",
+   "t_start": 1791554624.4642844,
+   "t_headers": 1791554625.6505466,
+   "status": 200,
+   "outcome": "CancelledError",
+   "t_end": 1791554626.4512098
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s1",
+   "t_start": 1791554630.9667695,
+   "t_headers": 1791554631.9190419,
+   "status": 200,
+   "bytes": 287168,
+   "outcome": "response",
+   "t_end": 1791554632.715427
+  },
+  {
+   "kind": "outbound",
+   "host": "export.arxiv.org",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "s1",
+   "t_start": 1791554637.4653552,
+   "t_headers": 1791554638.3550203,
+   "status": 200,
+   "bytes": 122014,
+   "outcome": "response",
+   "t_end": 1791554638.3748775
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s1",
+   "t_start": 1791554637.466363,
+   "t_headers": 1791554638.0558355,
+   "status": 200,
+   "bytes": 292753,
+   "outcome": "response",
+   "t_end": 1791554638.8524363
+  },
+  {
+   "kind": "outbound",
+   "host": "export.arxiv.org",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "s1",
+   "t_start": 1791554650.4693394,
+   "t_headers": 1791554651.4502926,
+   "status": 200,
+   "bytes": 108382,
+   "outcome": "response",
+   "t_end": 1791554651.4694355
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s1",
+   "t_start": 1791554650.4693394,
+   "t_headers": 1791554651.0986733,
+   "status": 200,
+   "bytes": 235169,
+   "outcome": "response",
+   "t_end": 1791554651.8960545
+  },
+  {
+   "kind": "outbound",
+   "host": "export.arxiv.org",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "s1",
+   "t_start": 1791554663.4687135,
+   "t_headers": 1791554664.3322368,
+   "status": 200,
+   "bytes": 120846,
+   "outcome": "response",
+   "t_end": 1791554664.34443
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s1",
+   "t_start": 1791554663.4687135,
+   "t_headers": 1791554664.4852703,
+   "status": 200,
+   "bytes": 229458,
+   "outcome": "response",
+   "t_end": 1791554665.2823088
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s1",
+   "t_start": 1791554676.4870534,
+   "t_headers": 1791554677.8207257,
+   "status": 200,
+   "outcome": "CancelledError",
+   "t_end": 1791554678.50905
+  },
+  {
+   "kind": "outbound",
+   "host": "export.arxiv.org",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "s1",
+   "t_start": 1791554676.4870534,
+   "t_headers": 1791554677.700148,
+   "status": 200,
+   "outcome": "CancelledError",
+   "t_end": 1791554678.50905
+  },
+  {
+   "kind": "outbound",
+   "host": "export.arxiv.org",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "s1",
+   "t_start": 1791554682.969288,
+   "t_headers": 1791554683.060951,
+   "status": 200,
+   "bytes": 123132,
+   "outcome": "response",
+   "t_end": 1791554683.2407014
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s1",
+   "t_start": 1791554682.969288,
+   "t_headers": 1791554683.7158055,
+   "status": 200,
+   "bytes": 309573,
+   "outcome": "response",
+   "t_end": 1791554684.5155728
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/collections/a4_dd01aeb0/exists",
+   "source": null,
+   "start": "s2",
+   "t_start": 1791554687.4966896,
+   "t_headers": 1791554687.5056763,
+   "status": 200,
+   "bytes": 56,
+   "outcome": "response",
+   "t_end": 1791554687.5056763
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/collections/a4_dd01aeb0",
+   "source": null,
+   "start": "s2",
+   "t_start": 1791554687.5068376,
+   "t_headers": 1791554687.6174984,
+   "status": 200,
+   "bytes": 48,
+   "outcome": "response",
+   "t_end": 1791554687.6184988
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/",
+   "source": null,
+   "start": "s2",
+   "t_start": 1791554687.6792452,
+   "outcome": "sync"
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/collections/a4_dd01aeb0/index",
+   "source": null,
+   "start": "s2",
+   "t_start": 1791554687.619499,
+   "t_headers": 1791554687.7659075,
+   "status": 200,
+   "bytes": 83,
+   "outcome": "response",
+   "t_end": 1791554687.7659075
+  },
+  {
+   "kind": "outbound",
+   "host": "export.arxiv.org",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "s2",
+   "t_start": 1791554695.5294237,
+   "t_headers": 1791554696.5745554,
+   "status": 200,
+   "bytes": 115880,
+   "outcome": "response",
+   "t_end": 1791554696.9012475
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s2",
+   "t_start": 1791554695.5294237,
+   "t_headers": 1791554696.1603885,
+   "status": 200,
+   "bytes": 278992,
+   "outcome": "response",
+   "t_end": 1791554696.9612114
+  },
+  {
+   "kind": "outbound",
+   "host": "export.arxiv.org",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "s2",
+   "t_start": 1791554708.5267541,
+   "t_headers": 1791554709.7575343,
+   "status": 200,
+   "bytes": 113822,
+   "outcome": "response",
+   "t_end": 1791554709.8712604
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s2",
+   "t_start": 1791554708.5256994,
+   "t_headers": 1791554710.4011292,
+   "status": 200,
+   "outcome": "CancelledError",
+   "t_end": 1791554710.5412974
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s2",
+   "t_start": 1791554715.0142477,
+   "t_headers": 1791554716.3733568,
+   "status": 200,
+   "outcome": "CancelledError",
+   "t_end": 1791554717.0166693
+  },
+  {
+   "kind": "outbound",
+   "host": "export.arxiv.org",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "s2",
+   "t_start": 1791554721.513167,
+   "t_headers": 1791554722.541939,
+   "status": 200,
+   "bytes": 115771,
+   "outcome": "response",
+   "t_end": 1791554722.649837
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s2",
+   "t_start": 1791554721.5141613,
+   "t_headers": 1791554722.5489345,
+   "status": 200,
+   "bytes": 218654,
+   "outcome": "response",
+   "t_end": 1791554723.355734
+  },
+  {
+   "kind": "outbound",
+   "host": "export.arxiv.org",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "s2",
+   "t_start": 1791554734.5157423,
+   "t_headers": 1791554735.8321993,
+   "status": 200,
+   "bytes": 114389,
+   "outcome": "response",
+   "t_end": 1791554735.934739
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s2",
+   "t_start": 1791554734.5162532,
+   "t_headers": 1791554735.2511268,
+   "status": 200,
+   "bytes": 216885,
+   "outcome": "response",
+   "t_end": 1791554736.0490608
+  },
+  {
+   "kind": "outbound",
+   "host": "export.arxiv.org",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "s2",
+   "t_start": 1791554747.543517,
+   "outcome": "CancelledError",
+   "t_end": 1791554749.5496993
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s2",
+   "t_start": 1791554747.5425177,
+   "outcome": "CancelledError",
+   "t_end": 1791554749.5496993
+  },
+  {
+   "kind": "outbound",
+   "host": "export.arxiv.org",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "s2",
+   "t_start": 1791554754.0182302,
+   "t_headers": 1791554754.1335723,
+   "status": 200,
+   "bytes": 111028,
+   "outcome": "response",
+   "t_end": 1791554754.2683482
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s2",
+   "t_start": 1791554754.0182302,
+   "t_headers": 1791554755.095233,
+   "status": 200,
+   "bytes": 241747,
+   "outcome": "response",
+   "t_end": 1791554755.8936763
+  },
+  {
+   "kind": "outbound",
+   "host": "export.arxiv.org",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "s2",
+   "t_start": 1791554760.5180204,
+   "t_headers": 1791554761.5611844,
+   "status": 200,
+   "bytes": 118258,
+   "outcome": "response",
+   "t_end": 1791554761.665673
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s2",
+   "t_start": 1791554760.5180204,
+   "t_headers": 1791554761.3556187,
+   "status": 200,
+   "bytes": 221614,
+   "outcome": "response",
+   "t_end": 1791554762.152419
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/collections/a4_89acf950/exists",
+   "source": null,
+   "start": "s3",
+   "t_start": 1791554769.072468,
+   "t_headers": 1791554769.0815098,
+   "status": 200,
+   "bytes": 57,
+   "outcome": "response",
+   "t_end": 1791554769.0815098
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/collections/a4_89acf950",
+   "source": null,
+   "start": "s3",
+   "t_start": 1791554769.0825102,
+   "t_headers": 1791554769.1865797,
+   "status": 200,
+   "bytes": 48,
+   "outcome": "response",
+   "t_end": 1791554769.1875803
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/",
+   "source": null,
+   "start": "s3",
+   "t_start": 1791554769.2612662,
+   "outcome": "sync"
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/collections/a4_89acf950/index",
+   "source": null,
+   "start": "s3",
+   "t_start": 1791554769.1875803,
+   "t_headers": 1791554769.3294284,
+   "status": 200,
+   "bytes": 83,
+   "outcome": "response",
+   "t_end": 1791554769.3304286
+  },
+  {
+   "kind": "outbound",
+   "host": "export.arxiv.org",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "s3",
+   "t_start": 1791554776.6808388,
+   "t_headers": 1791554777.734472,
+   "status": 200,
+   "bytes": 40434,
+   "outcome": "response",
+   "t_end": 1791554777.7749882
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s3",
+   "t_start": 1791554776.6819322,
+   "outcome": "CancelledError",
+   "t_end": 1791554778.6931214
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s3",
+   "t_start": 1791554783.1607625,
+   "t_headers": 1791554784.2190843,
+   "status": 200,
+   "bytes": 261007,
+   "outcome": "response",
+   "t_end": 1791554785.0160823
+  },
+  {
+   "kind": "outbound",
+   "host": "export.arxiv.org",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "s3",
+   "t_start": 1791554789.6614103,
+   "t_headers": 1791554790.943239,
+   "status": 200,
+   "bytes": 111028,
+   "outcome": "response",
+   "t_end": 1791554791.1368299
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s3",
+   "t_start": 1791554789.6614103,
+   "t_headers": 1791554790.4063025,
+   "status": 200,
+   "bytes": 243976,
+   "outcome": "response",
+   "t_end": 1791554791.2059085
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s3",
+   "t_start": 1791554802.6849513,
+   "t_headers": 1791554803.7657616,
+   "status": 200,
+   "bytes": 216887,
+   "outcome": "response",
+   "t_end": 1791554804.5626926
+  },
+  {
+   "kind": "outbound",
+   "host": "export.arxiv.org",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "s3",
+   "t_start": 1791554802.6839519,
+   "t_headers": 1791554804.5369577,
+   "status": 200,
+   "outcome": "CancelledError",
+   "t_end": 1791554804.67557
+  },
+  {
+   "kind": "outbound",
+   "host": "export.arxiv.org",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "s3",
+   "t_start": 1791554809.1644313,
+   "t_headers": 1791554809.424578,
+   "status": 200,
+   "bytes": 114389,
+   "outcome": "response",
+   "t_end": 1791554809.4436412
+  },
+  {
+   "kind": "outbound",
+   "host": "export.arxiv.org",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "s3",
+   "t_start": 1791554815.6886652,
+   "t_headers": 1791554817.5694242,
+   "status": 200,
+   "bytes": 118652,
+   "outcome": "response",
+   "t_end": 1791554817.592673
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s3",
+   "t_start": 1791554815.689665,
+   "t_headers": 1791554817.1664672,
+   "status": 200,
+   "outcome": "CancelledError",
+   "t_end": 1791554817.7098615
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s3",
+   "t_start": 1791554822.1639588,
+   "outcome": "CancelledError",
+   "t_end": 1791554824.1803293
+  },
+  {
+   "kind": "outbound",
+   "host": "export.arxiv.org",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "s3",
+   "t_start": 1791554828.666496,
+   "t_headers": 1791554829.4639988,
+   "status": 200,
+   "bytes": 8137,
+   "outcome": "response",
+   "t_end": 1791554829.4639988
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s3",
+   "t_start": 1791554828.6670187,
+   "t_headers": 1791554829.7831376,
+   "status": 200,
+   "bytes": 252744,
+   "outcome": "response",
+   "t_end": 1791554830.5883842
+  },
+  {
+   "kind": "outbound",
+   "host": "export.arxiv.org",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "s3",
+   "t_start": 1791554841.6812499,
+   "t_headers": 1791554842.5593698,
+   "status": 200,
+   "bytes": 71672,
+   "outcome": "response",
+   "t_end": 1791554842.609376
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s3",
+   "t_start": 1791554841.6822479,
+   "t_headers": 1791554843.0051124,
+   "status": 200,
+   "outcome": "CancelledError",
+   "t_end": 1791554843.6871028
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s3",
+   "t_start": 1791554848.1720471,
+   "t_headers": 1791554849.3711743,
+   "status": 200,
+   "outcome": "CancelledError",
+   "t_end": 1791554850.171819
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/collections/a4_171a6a9e/exists",
+   "source": null,
+   "start": "s4",
+   "t_start": 1791554852.3402455,
+   "t_headers": 1791554852.3517625,
+   "status": 200,
+   "bytes": 57,
+   "outcome": "response",
+   "t_end": 1791554852.3527708
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/collections/a4_171a6a9e",
+   "source": null,
+   "start": "s4",
+   "t_start": 1791554852.3527708,
+   "t_headers": 1791554852.483816,
+   "status": 200,
+   "bytes": 48,
+   "outcome": "response",
+   "t_end": 1791554852.483816
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/",
+   "source": null,
+   "start": "s4",
+   "t_start": 1791554852.5243192,
+   "outcome": "sync"
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/collections/a4_171a6a9e/index",
+   "source": null,
+   "start": "s4",
+   "t_start": 1791554852.484818,
+   "t_headers": 1791554852.6281087,
+   "status": 200,
+   "bytes": 83,
+   "outcome": "response",
+   "t_end": 1791554852.6281087
+  },
+  {
+   "kind": "outbound",
+   "host": "export.arxiv.org",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "s4",
+   "t_start": 1791554860.3223324,
+   "t_headers": 1791554861.6024828,
+   "status": 200,
+   "bytes": 116378,
+   "outcome": "response",
+   "t_end": 1791554861.6191442
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s4",
+   "t_start": 1791554860.323331,
+   "t_headers": 1791554861.3518255,
+   "status": 200,
+   "bytes": 330690,
+   "outcome": "response",
+   "t_end": 1791554862.1546476
+  },
+  {
+   "kind": "outbound",
+   "host": "export.arxiv.org",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "s4",
+   "t_start": 1791554873.3236763,
+   "t_headers": 1791554874.6030877,
+   "status": 200,
+   "bytes": 122014,
+   "outcome": "response",
+   "t_end": 1791554874.6115909
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s4",
+   "t_start": 1791554873.3236763,
+   "t_headers": 1791554873.848106,
+   "status": 200,
+   "bytes": 292835,
+   "outcome": "response",
+   "t_end": 1791554874.6496181
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/collections/a4_d0d7abe3/exists",
+   "source": null,
+   "start": "s4b",
+   "t_start": 1791555980.2209294,
+   "t_headers": 1791555980.2310786,
+   "status": 200,
+   "bytes": 57,
+   "outcome": "response",
+   "t_end": 1791555980.2310786
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/collections/a4_d0d7abe3",
+   "source": null,
+   "start": "s4b",
+   "t_start": 1791555980.2321236,
+   "t_headers": 1791555980.332455,
+   "status": 200,
+   "bytes": 48,
+   "outcome": "response",
+   "t_end": 1791555980.332455
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/",
+   "source": null,
+   "start": "s4b",
+   "t_start": 1791555980.415689,
+   "outcome": "sync"
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/collections/a4_d0d7abe3/index",
+   "source": null,
+   "start": "s4b",
+   "t_start": 1791555980.3334723,
+   "t_headers": 1791555980.488466,
+   "status": 200,
+   "bytes": 83,
+   "outcome": "response",
+   "t_end": 1791555980.4894662
+  },
+  {
+   "kind": "outbound",
+   "host": "export.arxiv.org",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "s4b",
+   "t_start": 1791555988.3221211,
+   "t_headers": 1791555989.094753,
+   "status": 200,
+   "bytes": 123313,
+   "outcome": "response",
+   "t_end": 1791555989.1047893
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s4b",
+   "t_start": 1791555988.3231342,
+   "t_headers": 1791555989.89433,
+   "status": 200,
+   "outcome": "CancelledError",
+   "t_end": 1791555990.2945106
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s4b",
+   "t_start": 1791555994.8038244,
+   "t_headers": 1791555995.8909333,
+   "status": 200,
+   "bytes": 275634,
+   "outcome": "response",
+   "t_end": 1791555996.6892045
+  },
+  {
+   "kind": "outbound",
+   "host": "export.arxiv.org",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "s4b",
+   "t_start": 1791556001.3051908,
+   "t_headers": 1791556002.0046582,
+   "status": 200,
+   "bytes": 116347,
+   "outcome": "response",
+   "t_end": 1791556002.023798
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s4b",
+   "t_start": 1791556001.3051908,
+   "t_headers": 1791556002.5816786,
+   "status": 200,
+   "outcome": "CancelledError",
+   "t_end": 1791556003.310866
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s4b",
+   "t_start": 1791556007.8039393,
+   "t_headers": 1791556008.6750247,
+   "status": 200,
+   "bytes": 222342,
+   "outcome": "response",
+   "t_end": 1791556009.3083074
+  },
+  {
+   "kind": "outbound",
+   "host": "export.arxiv.org",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "s4b",
+   "t_start": 1791556014.3047636,
+   "t_headers": 1791556015.4856186,
+   "status": 200,
+   "bytes": 118258,
+   "outcome": "response",
+   "t_end": 1791556015.6451788
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s4b",
+   "t_start": 1791556014.3047636,
+   "t_headers": 1791556015.641525,
+   "status": 200,
+   "outcome": "CancelledError",
+   "t_end": 1791556016.3163657
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s4b",
+   "t_start": 1791556020.8066633,
+   "t_headers": 1791556021.3364875,
+   "status": 200,
+   "bytes": 224603,
+   "outcome": "response",
+   "t_end": 1791556022.136578
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s4b",
+   "t_start": 1791556027.3073134,
+   "t_headers": 1791556028.2472236,
+   "status": 200,
+   "bytes": 229305,
+   "outcome": "response",
+   "t_end": 1791556029.0397005
+  },
+  {
+   "kind": "outbound",
+   "host": "export.arxiv.org",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "s4b",
+   "t_start": 1791556027.3073134,
+   "t_headers": 1791556028.198394,
+   "status": 200,
+   "outcome": "CancelledError",
+   "t_end": 1791556029.3140523
+  },
+  {
+   "kind": "outbound",
+   "host": "export.arxiv.org",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "s4b",
+   "t_start": 1791556033.806971,
+   "t_headers": 1791556033.9061656,
+   "status": 200,
+   "bytes": 120179,
+   "outcome": "response",
+   "t_end": 1791556034.1798885
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/collections/a4_4e01fc4a/exists",
+   "source": null,
+   "start": "s5",
+   "t_start": 1791556037.2526877,
+   "t_headers": 1791556037.2626936,
+   "status": 200,
+   "bytes": 57,
+   "outcome": "response",
+   "t_end": 1791556037.2626936
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/collections/a4_4e01fc4a",
+   "source": null,
+   "start": "s5",
+   "t_start": 1791556037.2636929,
+   "t_headers": 1791556037.3614001,
+   "status": 200,
+   "bytes": 47,
+   "outcome": "response",
+   "t_end": 1791556037.3623915
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/",
+   "source": null,
+   "start": "s5",
+   "t_start": 1791556037.4405758,
+   "outcome": "sync"
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/collections/a4_4e01fc4a/index",
+   "source": null,
+   "start": "s5",
+   "t_start": 1791556037.3623915,
+   "t_headers": 1791556037.4974027,
+   "status": 200,
+   "bytes": 83,
+   "outcome": "response",
+   "t_end": 1791556037.4974027
+  },
+  {
+   "kind": "outbound",
+   "host": "export.arxiv.org",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "s5",
+   "t_start": 1791556045.237435,
+   "outcome": "CancelledError",
+   "t_end": 1791556047.2188537
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s5",
+   "t_start": 1791556045.237435,
+   "t_headers": 1791556046.7216082,
+   "status": 200,
+   "outcome": "CancelledError",
+   "t_end": 1791556047.2198505
+  },
+  {
+   "kind": "outbound",
+   "host": "export.arxiv.org",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "s5",
+   "t_start": 1791556051.7199626,
+   "t_headers": 1791556052.9315867,
+   "status": 200,
+   "bytes": 119459,
+   "outcome": "response",
+   "t_end": 1791556053.0821404
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s5",
+   "t_start": 1791556051.7194412,
+   "t_headers": 1791556053.0343237,
+   "status": 200,
+   "outcome": "CancelledError",
+   "t_end": 1791556053.7388868
+  },
+  {
+   "kind": "outbound",
+   "host": "export.arxiv.org",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "s5",
+   "t_start": 1791556058.218542,
+   "t_headers": 1791556059.1837285,
+   "status": 200,
+   "bytes": 118652,
+   "outcome": "response",
+   "t_end": 1791556059.3467193
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s5",
+   "t_start": 1791556058.218542,
+   "t_headers": 1791556059.32078,
+   "status": 200,
+   "bytes": 244652,
+   "outcome": "response",
+   "t_end": 1791556060.119082
+  },
+  {
+   "kind": "outbound",
+   "host": "export.arxiv.org",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "s5",
+   "t_start": 1791556071.2239866,
+   "t_headers": 1791556072.1784165,
+   "status": 200,
+   "bytes": 115771,
+   "outcome": "response",
+   "t_end": 1791556072.5612931
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s5",
+   "t_start": 1791556071.2234674,
+   "t_headers": 1791556072.80039,
+   "status": 200,
+   "outcome": "CancelledError",
+   "t_end": 1791556073.2338533
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s5",
+   "t_start": 1791556077.723686,
+   "t_headers": 1791556078.275545,
+   "status": 200,
+   "bytes": 215594,
+   "outcome": "response",
+   "t_end": 1791556079.05553
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s5",
+   "t_start": 1791556084.224185,
+   "t_headers": 1791556085.3458345,
+   "status": 200,
+   "bytes": 295291,
+   "outcome": "response",
+   "t_end": 1791556086.1467724
+  },
+  {
+   "kind": "outbound",
+   "host": "export.arxiv.org",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "s5",
+   "t_start": 1791556084.224185,
+   "outcome": "CancelledError",
+   "t_end": 1791556086.2427046
+  },
+  {
+   "kind": "outbound",
+   "host": "export.arxiv.org",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "s5",
+   "t_start": 1791556090.7241251,
+   "t_headers": 1791556091.228671,
+   "status": 200,
+   "bytes": 116943,
+   "outcome": "response",
+   "t_end": 1791556091.522066
+  },
+  {
+   "kind": "outbound",
+   "host": "export.arxiv.org",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "s5",
+   "t_start": 1791556097.2258234,
+   "t_headers": 1791556098.1800983,
+   "status": 200,
+   "bytes": 116347,
+   "outcome": "response",
+   "t_end": 1791556098.3233478
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s5",
+   "t_start": 1791556097.2258234,
+   "t_headers": 1791556098.2150452,
+   "status": 200,
+   "bytes": 223744,
+   "outcome": "response",
+   "t_end": 1791556099.0290976
+  },
+  {
+   "kind": "outbound",
+   "host": "export.arxiv.org",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "s5",
+   "t_start": 1791556110.2393796,
+   "t_headers": 1791556111.4242074,
+   "status": 200,
+   "bytes": 117780,
+   "outcome": "response",
+   "t_end": 1791556111.9316235
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s5",
+   "t_start": 1791556110.238856,
+   "t_headers": 1791556111.5164766,
+   "status": 200,
+   "outcome": "CancelledError",
+   "t_end": 1791556112.238605
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "s5",
+   "t_start": 1791556116.7283611,
+   "t_headers": 1791556117.720112,
+   "status": 200,
+   "bytes": 300875,
+   "outcome": "response",
+   "t_end": 1791556118.5236418
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/collections/a4_63ae56ca/exists",
+   "source": null,
+   "start": "kill-openalex-refused",
+   "t_start": 1791556120.924249,
+   "t_headers": 1791556120.9352484,
+   "status": 200,
+   "bytes": 57,
+   "outcome": "response",
+   "t_end": 1791556120.9352484
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/collections/a4_63ae56ca",
+   "source": null,
+   "start": "kill-openalex-refused",
+   "t_start": 1791556120.9362502,
+   "t_headers": 1791556121.0524783,
+   "status": 200,
+   "bytes": 48,
+   "outcome": "response",
+   "t_end": 1791556121.0524783
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/",
+   "source": null,
+   "start": "kill-openalex-refused",
+   "t_start": 1791556121.1145034,
+   "outcome": "sync"
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/collections/a4_63ae56ca/index",
+   "source": null,
+   "start": "kill-openalex-refused",
+   "t_start": 1791556121.0534797,
+   "t_headers": 1791556121.1924741,
+   "status": 200,
+   "bytes": 83,
+   "outcome": "response",
+   "t_end": 1791556121.1924741
+  },
+  {
+   "kind": "outbound",
+   "host": "export.arxiv.org",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "kill-openalex-refused",
+   "t_start": 1791556128.4287872,
+   "t_headers": 1791556129.322374,
+   "status": 200,
+   "bytes": 118258,
+   "outcome": "response",
+   "t_end": 1791556129.5546024
+  },
+  {
+   "kind": "outbound",
+   "host": "127.0.0.1",
+   "path": "/works",
+   "source": "openalex",
+   "start": "kill-openalex-refused",
+   "t_start": 1791556128.4277868,
+   "outcome": "CancelledError",
+   "t_end": 1791556130.423595
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/collections/a4_0dc64705/exists",
+   "source": null,
+   "start": "kill-openalex-hang",
+   "t_start": 1791556132.7225738,
+   "t_headers": 1791556132.7320557,
+   "status": 200,
+   "bytes": 57,
+   "outcome": "response",
+   "t_end": 1791556132.7330546
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/collections/a4_0dc64705",
+   "source": null,
+   "start": "kill-openalex-hang",
+   "t_start": 1791556132.7340555,
+   "t_headers": 1791556132.8417444,
+   "status": 200,
+   "bytes": 48,
+   "outcome": "response",
+   "t_end": 1791556132.8417444
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/",
+   "source": null,
+   "start": "kill-openalex-hang",
+   "t_start": 1791556132.9076254,
+   "outcome": "sync"
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/collections/a4_0dc64705/index",
+   "source": null,
+   "start": "kill-openalex-hang",
+   "t_start": 1791556132.8434763,
+   "t_headers": 1791556132.9883258,
+   "status": 200,
+   "bytes": 83,
+   "outcome": "response",
+   "t_end": 1791556132.9883258
+  },
+  {
+   "kind": "outbound",
+   "host": "export.arxiv.org",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "kill-openalex-hang",
+   "t_start": 1791556138.6066363,
+   "t_headers": 1791556138.7074995,
+   "status": 200,
+   "bytes": 114389,
+   "outcome": "response",
+   "t_end": 1791556138.855968
+  },
+  {
+   "kind": "outbound",
+   "host": "127.0.0.1",
+   "path": "/works",
+   "source": "openalex",
+   "start": "kill-openalex-hang",
+   "t_start": 1791556138.6066363,
+   "outcome": "CancelledError",
+   "t_end": 1791556140.6131217
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/collections/a4_382278ee/exists",
+   "source": null,
+   "start": "kill-openalex-error",
+   "t_start": 1791556142.931318,
+   "t_headers": 1791556142.942198,
+   "status": 200,
+   "bytes": 57,
+   "outcome": "response",
+   "t_end": 1791556142.9431973
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/collections/a4_382278ee",
+   "source": null,
+   "start": "kill-openalex-error",
+   "t_start": 1791556142.9441974,
+   "t_headers": 1791556143.0521247,
+   "status": 200,
+   "bytes": 48,
+   "outcome": "response",
+   "t_end": 1791556143.0521247
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/",
+   "source": null,
+   "start": "kill-openalex-error",
+   "t_start": 1791556143.1209042,
+   "outcome": "sync"
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/collections/a4_382278ee/index",
+   "source": null,
+   "start": "kill-openalex-error",
+   "t_start": 1791556143.05312,
+   "t_headers": 1791556143.1912966,
+   "status": 200,
+   "bytes": 83,
+   "outcome": "response",
+   "t_end": 1791556143.1912966
+  },
+  {
+   "kind": "outbound",
+   "host": "127.0.0.1",
+   "path": "/works",
+   "source": "openalex",
+   "start": "kill-openalex-error",
+   "t_start": 1791556148.8815122,
+   "t_headers": 1791556148.8825033,
+   "status": 500,
+   "bytes": 0,
+   "outcome": "response",
+   "t_end": 1791556148.8825033
+  },
+  {
+   "kind": "outbound",
+   "host": "export.arxiv.org",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "kill-openalex-error",
+   "t_start": 1791556148.8804986,
+   "t_headers": 1791556149.1227689,
+   "status": 200,
+   "bytes": 111028,
+   "outcome": "response",
+   "t_end": 1791556149.1289735
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/collections/a4_e0038202/exists",
+   "source": null,
+   "start": "kill-arxiv-refused",
+   "t_start": 1791556151.452797,
+   "t_headers": 1791556151.4649422,
+   "status": 200,
+   "bytes": 57,
+   "outcome": "response",
+   "t_end": 1791556151.4649422
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/collections/a4_e0038202",
+   "source": null,
+   "start": "kill-arxiv-refused",
+   "t_start": 1791556151.46594,
+   "t_headers": 1791556151.5762784,
+   "status": 200,
+   "bytes": 48,
+   "outcome": "response",
+   "t_end": 1791556151.5772846
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/",
+   "source": null,
+   "start": "kill-arxiv-refused",
+   "t_start": 1791556151.640783,
+   "outcome": "sync"
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/collections/a4_e0038202/index",
+   "source": null,
+   "start": "kill-arxiv-refused",
+   "t_start": 1791556151.5782778,
+   "t_headers": 1791556151.7307427,
+   "status": 200,
+   "bytes": 83,
+   "outcome": "response",
+   "t_end": 1791556151.7317374
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "kill-arxiv-refused",
+   "t_start": 1791556157.2947686,
+   "t_headers": 1791556158.2558637,
+   "status": 200,
+   "bytes": 229305,
+   "outcome": "response",
+   "t_end": 1791556159.0542004
+  },
+  {
+   "kind": "outbound",
+   "host": "127.0.0.1",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "kill-arxiv-refused",
+   "t_start": 1791556157.295312,
+   "outcome": "CancelledError",
+   "t_end": 1791556159.304169
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/collections/a4_ae1ac54f/exists",
+   "source": null,
+   "start": "kill-arxiv-hang",
+   "t_start": 1791556161.5499308,
+   "t_headers": 1791556161.5599368,
+   "status": 200,
+   "bytes": 57,
+   "outcome": "response",
+   "t_end": 1791556161.5608523
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/collections/a4_ae1ac54f",
+   "source": null,
+   "start": "kill-arxiv-hang",
+   "t_start": 1791556161.5618515,
+   "t_headers": 1791556161.6680834,
+   "status": 200,
+   "bytes": 48,
+   "outcome": "response",
+   "t_end": 1791556161.669083
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/",
+   "source": null,
+   "start": "kill-arxiv-hang",
+   "t_start": 1791556161.7372572,
+   "outcome": "sync"
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/collections/a4_ae1ac54f/index",
+   "source": null,
+   "start": "kill-arxiv-hang",
+   "t_start": 1791556161.669083,
+   "t_headers": 1791556161.7956996,
+   "status": 200,
+   "bytes": 83,
+   "outcome": "response",
+   "t_end": 1791556161.7956996
+  },
+  {
+   "kind": "outbound",
+   "host": "127.0.0.1",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "kill-arxiv-hang",
+   "t_start": 1791556167.4538164,
+   "outcome": "CancelledError",
+   "t_end": 1791556169.4352922
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "kill-arxiv-hang",
+   "t_start": 1791556167.4538164,
+   "t_headers": 1791556168.685912,
+   "status": 200,
+   "outcome": "CancelledError",
+   "t_end": 1791556169.4352922
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/collections/a4_4bfc6b16/exists",
+   "source": null,
+   "start": "kill-arxiv-error",
+   "t_start": 1791556171.5738459,
+   "t_headers": 1791556171.58419,
+   "status": 200,
+   "bytes": 57,
+   "outcome": "response",
+   "t_end": 1791556171.58419
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/collections/a4_4bfc6b16",
+   "source": null,
+   "start": "kill-arxiv-error",
+   "t_start": 1791556171.5851898,
+   "t_headers": 1791556171.6942155,
+   "status": 200,
+   "bytes": 48,
+   "outcome": "response",
+   "t_end": 1791556171.6952167
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/",
+   "source": null,
+   "start": "kill-arxiv-error",
+   "t_start": 1791556171.7590268,
+   "outcome": "sync"
+  },
+  {
+   "kind": "outbound",
+   "host": "localhost",
+   "path": "/collections/a4_4bfc6b16/index",
+   "source": null,
+   "start": "kill-arxiv-error",
+   "t_start": 1791556171.6962104,
+   "t_headers": 1791556171.8307095,
+   "status": 200,
+   "bytes": 83,
+   "outcome": "response",
+   "t_end": 1791556171.8307095
+  },
+  {
+   "kind": "outbound",
+   "host": "127.0.0.1",
+   "path": "/api/query",
+   "source": "arxiv",
+   "start": "kill-arxiv-error",
+   "t_start": 1791556177.4621487,
+   "t_headers": 1791556177.4631479,
+   "status": 500,
+   "bytes": 0,
+   "outcome": "response",
+   "t_end": 1791556177.4631479
+  },
+  {
+   "kind": "outbound",
+   "host": "api.openalex.org",
+   "path": "/works",
+   "source": "openalex",
+   "start": "kill-arxiv-error",
+   "t_start": 1791556177.4611511,
+   "t_headers": 1791556178.2714987,
+   "status": 200,
+   "bytes": 295291,
+   "outcome": "response",
+   "t_end": 1791556179.0697193
+  }
+ ],
+ "budget_left": {
+  "openalex": 5,
+  "arxiv": 7
+ },
+ "ui_check": {
+  "start": [
+   {
+    "kind": "start",
+    "start": "ui-openalex-refused",
+    "kill": "openalex",
+    "t_start": 1791556257.519574,
+    "t_live": 1791556266.6667635,
+    "startup_s": 9.147
+   }
+  ],
+  "how": "One start with OpenAlex's base URL at a closed local port (refused), held open; two searches by hand in the built-in browser for 'dense passage retrieval for open-domain question answering', the second about 20 s after the first. A throwaway account on the local app.",
+  "seen": [
+   "Search 1 (the first after the start): HTTP 503; the page said 'None of the academic sources answered this search. Try again shortly.' arXiv sent no headers within the 2.0 s deadline, and OpenAlex was refused. The status line kept reading 'Searching OpenAlex and arXiv...' beside the error: the 503 path does not clear it (a phase 9 defect, not fixed here).",
+   "Search 2: HTTP 200, partial; the page said 'openalex did not answer in time; showing what the others found. 50 papers.', DPR first, 'Found in arxiv', 'citations not reported', 'Why here? Score 0.85'. arXiv answered in 0.77 s (headers 0.43 s); OpenAlex's refusal took Windows past the deadline, so it reads as a timeout."
+  ],
+  "outbound": [
+   {
+    "kind": "outbound",
+    "host": "localhost",
+    "path": "/collections/a4_e6778159/exists",
+    "source": null,
+    "start": "ui-openalex-refused",
+    "t_start": 1791556259.2744386,
+    "t_headers": 1791556259.2835708,
+    "status": 200,
+    "bytes": 57,
+    "outcome": "response",
+    "t_end": 1791556259.2835708
+   },
+   {
+    "kind": "outbound",
+    "host": "localhost",
+    "path": "/collections/a4_e6778159",
+    "source": null,
+    "start": "ui-openalex-refused",
+    "t_start": 1791556259.2845707,
+    "t_headers": 1791556259.3868551,
+    "status": 200,
+    "bytes": 48,
+    "outcome": "response",
+    "t_end": 1791556259.3878555
+   },
+   {
+    "kind": "outbound",
+    "host": "localhost",
+    "path": "/",
+    "source": null,
+    "start": "ui-openalex-refused",
+    "t_start": 1791556259.4578035,
+    "outcome": "sync"
+   },
+   {
+    "kind": "outbound",
+    "host": "localhost",
+    "path": "/collections/a4_e6778159/index",
+    "source": null,
+    "start": "ui-openalex-refused",
+    "t_start": 1791556259.388857,
+    "t_headers": 1791556259.5178778,
+    "status": 200,
+    "bytes": 83,
+    "outcome": "response",
+    "t_end": 1791556259.5178778
+   },
+   {
+    "kind": "outbound",
+    "host": "export.arxiv.org",
+    "path": "/api/query",
+    "source": "arxiv",
+    "start": "ui-openalex-refused",
+    "t_start": 1791556304.5388281,
+    "outcome": "CancelledError",
+    "t_end": 1791556306.5294209
+   },
+   {
+    "kind": "outbound",
+    "host": "127.0.0.1",
+    "path": "/works",
+    "source": "openalex",
+    "start": "ui-openalex-refused",
+    "t_start": 1791556304.537824,
+    "outcome": "CancelledError",
+    "t_end": 1791556306.5294209
+   },
+   {
+    "kind": "outbound",
+    "host": "export.arxiv.org",
+    "path": "/api/query",
+    "source": "arxiv",
+    "start": "ui-openalex-refused",
+    "t_start": 1791556326.4182274,
+    "t_headers": 1791556326.848359,
+    "status": 200,
+    "bytes": 111028,
+    "outcome": "response",
+    "t_end": 1791556327.185064
+   },
+   {
+    "kind": "outbound",
+    "host": "127.0.0.1",
+    "path": "/works",
+    "source": "openalex",
+    "start": "ui-openalex-refused",
+    "t_start": 1791556326.417229,
+    "outcome": "CancelledError",
+    "t_end": 1791556328.4343803
+   }
+  ]
+ }
+}

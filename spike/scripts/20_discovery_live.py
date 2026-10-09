@@ -1,13 +1,16 @@
 """M4 phase 10b's live run, addendum A4 (D158, D159): the shipped app, end to end, live sources.
 
     .venv\\Scripts\\python.exe spike\\scripts\\20_discovery_live.py plan
-    .venv\\Scripts\\python.exe spike\\scripts\\20_discovery_live.py addendum-a4
+    .venv\\Scripts\\python.exe spike\\scripts\\20_discovery_live.py addendum-a4 [--resume STAMP]
     .venv\\Scripts\\python.exe spike\\scripts\\20_discovery_live.py ui-hold
     .venv\\Scripts\\python.exe spike\\scripts\\20_discovery_live.py dry-run
 
 `plan` prints the schedule and sends nothing. `addendum-a4` runs A4: 30 queries over 5
 fresh starts of the real app, each searched cold and then repeated, then the 4 kill
-searches, and writes spike/results/20_discovery_live.json with D158's verdict.
+searches, and writes spike/results/20_discovery_live.json with D158's verdict. Every
+search's record is written to var/spike/run/a4-STAMP-client.jsonl as it completes, and
+`--resume STAMP` continues a run from its two logs (DEV-A4-1): queries already searched
+or void are skipped, and the rest of an interrupted start runs in a new one.
 `ui-hold` starts the app with OpenAlex refused and serves on 127.0.0.1:8770 until a
 STOP file appears next to this script, for A4's UI check by hand. `dry-run` runs the
 whole schedule against a local stub serving A3's recorded t03 responses, with a
@@ -333,9 +336,10 @@ class App:
             except httpx.TransportError:
                 pass
             time.sleep(0.05)
-        self.run.starts.append({"start": self.start, "kill": self.kill[0] if self.kill else None,
-                                "t_start": began, "t_live": time.time(),
-                                "startup_s": round(time.time() - began, 3)})
+        started = {"kind": "start", "start": self.start, "kill": self.kill[0] if self.kill else None,
+                   "t_start": began, "t_live": time.time(), "startup_s": round(time.time() - began, 3)}
+        self.run.starts.append(started)
+        self.run.keep(started)
         self.run.login(self.client)
         return self
 
@@ -353,19 +357,37 @@ class App:
 
 class Run:
     def __init__(self, protocol: dict[str, Any], digest: str, db: str, objects: Path,
-                 stub_base: str | None = None) -> None:
+                 stub_base: str | None = None, resume: str | None = None) -> None:
         self.protocol, self.digest, self.db, self.objects = protocol, digest, db, objects
         self.stub_base = stub_base
         self.budget = protocol["addenda"]["A4"]["budget"]["max"]
-        stamp = time.strftime("%Y%m%dT%H%M%S", time.gmtime())
-        self.log_path = RUN_DIR / f"a4-{'dry-' if stub_base else ''}{stamp}.jsonl"
+        stamp = resume or time.strftime("%Y%m%dT%H%M%S", time.gmtime())
+        self.log_path = RUN_DIR / f"a4-{'dry-' if stub_base and not resume else ''}{stamp}.jsonl"
+        self.client_path = self.log_path.with_name(self.log_path.stem + "-client.jsonl")
+        if resume and not (self.log_path.exists() and self.client_path.exists()):
+            raise SystemExit(f"nothing to resume: {self.log_path.name} and {self.client_path.name} must both exist")
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         self.creds = {"email": f"a4-{uuid.uuid4().hex[:10]}@example.com", "password": secrets.token_urlsafe(18)}
+        # Per process: a fresh run and a resume each have their own throwaway Postgres.
         self.registered = False
         self.token = ""
         self.last_search = 0.0
         self.searches: list[dict[str, Any]] = []
         self.starts: list[dict[str, Any]] = []
+        if resume:
+            for line in self.client_path.read_text(encoding="utf-8").splitlines():
+                record = json.loads(line)
+                (self.starts if record["kind"] == "start" else self.searches).append(record)
+
+    def keep(self, record: dict[str, Any]) -> None:
+        """Write a record to disk as it happens, so a crash loses nothing measured (DEV-A4-1)."""
+        line = json.dumps(record, ensure_ascii=False)
+        Secrets([load_env().get("OPENALEX_API_KEY", "")]).assert_absent(line, where=str(self.client_path))
+        with open(self.client_path, "a", encoding="utf-8") as handle:
+            handle.write(line + "\n")
+
+    def done(self, kind: str, query_id: str) -> bool:
+        return any(s["kind"] == kind and s["query_id"] == query_id for s in self.searches)
 
     def server_records(self) -> list[dict[str, Any]]:
         if not self.log_path.exists():
@@ -411,11 +433,12 @@ class Run:
             **extra,
         }
         self.searches.append(record)
+        self.keep(record)
         print(f"{kind:7s} {step.query_id:28s} {record['status']} {elapsed:6.3f} s {record['sources']}", flush=True)
         return record
 
 
-def run_a4(dry_run: bool = False) -> int:
+def run_a4(dry_run: bool = False, resume: str | None = None) -> int:
     import redis
     from testcontainers.community.postgres import PostgresContainer
 
@@ -443,15 +466,25 @@ def run_a4(dry_run: bool = False) -> int:
             db = container.get_connection_url()
             subprocess.run([PY, "-m", "alembic", "-x", f"db_url={db}", "upgrade", "head"],
                            cwd=ROOT, check=True, capture_output=True)
-            run = Run(protocol, digest, db, objects, stub.base if stub else None)
+            run = Run(protocol, digest, db, objects, stub.base if stub else None, resume)
             for number, block in enumerate(blocks, 1):
-                with App(run, f"s{number}") as app:
-                    for position, step in enumerate(block):
+                # DEV-A4-1: what was searched, or void, is never sent again; the rest of an
+                # interrupted start runs in a new start, whose first search is a first-after-start.
+                todo = [step for step in block if not (run.done("cold", step.query_id)
+                                                        or run.done("void", step.query_id))]
+                if not todo:
+                    continue
+                name = f"s{number}" if len(todo) == len(block) else f"s{number}b"
+                with App(run, name) as app:
+                    for position, step in enumerate(todo):
                         run.search(app, step, "cold", first_after_start=position == 0)
                         run.search(app, step, "repeat")
             hang, unavailable = Hang(), Unavailable()
             try:
                 for source, mode, topic in KILLS:
+                    if any(s["kind"] == "kill" and s.get("killed") == source and s.get("how") == mode
+                           for s in run.searches):
+                        continue
                     redis.Redis.from_url(CACHE).flushdb()
                     port = {"refused": unused_port(), "hang": hang.port, "error": unavailable.port}[mode]
                     step = Step(f"{topic}-keyword", topic, "keyword", topics[topic]["keyword"])
@@ -470,7 +503,7 @@ def run_a4(dry_run: bool = False) -> int:
 
         shutil.rmtree(objects, ignore_errors=True)
     out = RUN_DIR / "a4-dry-run.json" if dry_run else RESULTS_PATH
-    text = json.dumps(results, indent=1, ensure_ascii=False)
+    text = json.dumps(strict(results), indent=1, ensure_ascii=False, allow_nan=False)
     Secrets([load_env().get("OPENALEX_API_KEY", "")]).assert_absent(text, where=str(out))
     out.write_text(text + "\n", encoding="utf-8")
     print(json.dumps(results["verdict"], indent=1))
@@ -482,6 +515,17 @@ def run_a4(dry_run: bool = False) -> int:
 
 def within(records: list[dict[str, Any]], search: dict[str, Any], kind: str) -> list[dict[str, Any]]:
     return [r for r in records if r.get("kind") == kind and search["t_sent"] <= r["t_start"] <= search["t_done"]]
+
+
+def strict(value: Any) -> Any:
+    """JSON has no infinity: a percentile that lands on a failed search is written as "failed"."""
+    if isinstance(value, float) and not math.isfinite(value):
+        return "failed"
+    if isinstance(value, dict):
+        return {k: strict(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [strict(v) for v in value]
+    return value
 
 
 def pct(values: list[float]) -> dict[str, Any]:
@@ -549,6 +593,7 @@ def a3_anchor_pages(protocol: dict[str, Any]) -> dict[str, dict[str, bool]]:
 
 def analyse(run: Run) -> dict[str, Any]:
     records = run.server_records()
+    void = [s for s in run.searches if s["kind"] == "void"]
     cold = [s for s in run.searches if s["kind"] == "cold"]
     repeats = [s for s in run.searches if s["kind"] == "repeat"]
     by_query = {s["query_id"]: s for s in cold}
@@ -564,11 +609,13 @@ def analyse(run: Run) -> dict[str, Any]:
     cold_stats = pct([latency(s) for s in cold])
     cached_stats = pct([latency(s) for s in qualifying])
 
+    # DEV-A4-1: a void search is excluded, and the bars are taken over the valid ones.
     floor = math.ceil(0.8 * len(cold))
     conditions = {
         "cold_p95_le_3s": cold_stats["p95"] is not None and cold_stats["p95"] <= 3.0,
         "cached_p95_le_0_4s": cached_stats["p95"] is not None and cached_stats["p95"] <= 0.4,
-        "each_source_ok_on_at_least_24_of_30": all(c["k"] >= floor for c in completion.values()) and len(cold) == 30,
+        "each_source_ok_on_at_least_80_percent": all(c["k"] >= floor for c in completion.values())
+        and len(cold) + len(void) == 30,
         "zero_outbound_on_every_counted_repeat": all(outbound_on_repeat[r["query_id"]] == 0 for r in qualifying),
     }
     first = [s for s in cold if s.get("first_after_start")]
@@ -579,9 +626,10 @@ def analyse(run: Run) -> dict[str, Any]:
     for topic in run.protocol["topics"]:
         for anchor in topic["anchors"]:
             today = keyword_cold.get(topic["id"])
+            lost = today is None or bool(today.get("results_lost")) or today["status"] != 200
             anchors.append({"topic": topic["id"], "title": anchor["title"],
-                            "today": anchor_hits(today["results"], anchor) if today else None,
-                            "a3_pages": a3_pages[anchor["title"]]})
+                            "today": None if lost else anchor_hits(today["results"], anchor),
+                            "today_lost": lost, "a3_pages": a3_pages[anchor["title"]]})
     boots = []
     for start in run.starts:
         during = [r for r in records if r.get("kind") == "outbound" and r.get("start") == start["start"]
@@ -596,13 +644,15 @@ def analyse(run: Run) -> dict[str, Any]:
              for s in run.searches if s["kind"] == "kill"]
     return {
         "addendum": "A4", "protocol_sha256": run.digest,
-        "ran": {"from": min(s["t_sent"] for s in run.searches), "to": max(s["t_done"] for s in run.searches)},
+        "ran": {"from": min(s["t_sent"] for s in run.searches), "to": max(s["t_done"] for s in run.searches if s.get("t_done"))},
         "verdict": {
             "criterion_1": "met" if all(conditions.values()) else "not met as written",
             "conditions": conditions,
             "cold": cold_stats, "cached": cached_stats,
             "completion": completion,
             "repeats_counted": len(qualifying), "repeats_of_partial_searches": len(repeats) - len(qualifying),
+            "void": [{"query_id": v["query_id"], "why": v.get("why")} for v in void],
+            "completion_floor": floor,
         },
         "first_after_start": {"first": pct([latency(s) for s in first]), "rest": pct([latency(s) for s in rest]),
                               "first_sources": [s["sources"] for s in first]},
@@ -613,7 +663,8 @@ def analyse(run: Run) -> dict[str, Any]:
         "kills": kills,
         "anchors": anchors,
         "searches": [{**{k: v for k, v in s.items() if k != "results"}, "results": len(s["results"]),
-                      "stages": stage(records, s), "source_timings": source_timings(records, s)}
+                      **({"stages": stage(records, s), "source_timings": source_timings(records, s)}
+                         if s.get("t_done") else {})}
                      for s in run.searches],
         "outbound": [r for r in records if r.get("kind") == "outbound"],
         "budget_left": run.budget_left(),
@@ -663,7 +714,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("plan")
-    sub.add_parser("addendum-a4")
+    a4 = sub.add_parser("addendum-a4")
+    a4.add_argument("--resume", metavar="STAMP")
     sub.add_parser("ui-hold")
     sub.add_parser("dry-run")
     s = sub.add_parser("serve")
@@ -686,7 +738,7 @@ def main() -> int:
         return 0
     if args.command == "ui-hold":
         return ui_hold()
-    return run_a4(dry_run=args.command == "dry-run")
+    return run_a4(dry_run=args.command == "dry-run", resume=getattr(args, "resume", None))
 
 
 if __name__ == "__main__":
