@@ -50,12 +50,13 @@ POOLS_MANIFEST_PATH = ROOT / "data" / "eval" / "discovery-pools.manifest.json"
 #: The canonical hash the owner approved: D116 on 2026-09-30, amended by DEV-2 on
 #: 2026-10-01 (D117), with addendum A1 added on 2026-10-02 (D120, b23f235e...),
 #: addendum A2 on 2026-10-04 (D125, da128b48...) and addendum A3 on 2026-10-08
-#: (D150), approved by the owner before any A3 request. A protocol that hashes to
-#: anything else is not the approved protocol, and nothing runs. Each run line in the
-#: log records the hash it ran under: the first 15 requests ran under the original,
-#: the rest of the spike under DEV-2's, A1 under b23f235e..., A2 under da128b48...,
-#: and A3 under this one.
-APPROVED_PROTOCOL_SHA256 = "7f9ee36501c99f9357b2561eb851d4f92378f0ee893608094526e25e2603d8de"
+#: (D150, 7f9ee365...), and addendum A4 on 2026-10-09 (D159), approved by the owner
+#: before any A4 request. A protocol that hashes to anything else is not the approved
+#: protocol, and nothing runs. Each run line in the log records the hash it ran
+#: under: the first 15 requests ran under the original, the rest of the spike under
+#: DEV-2's, A1 under b23f235e..., A2 under da128b48..., A3 under 7f9ee365..., and A4
+#: under this one.
+APPROVED_PROTOCOL_SHA256 = "e83027ac2078880efa30ffb33c9d14850f4588a79a0f8d8cb4f24c09f5ee6458"
 ORIGINAL_PROTOCOL_SHA256 = "6a2809025626b29b96119cd4d06639fd3341cd325c74c121e82ba5e9e8677a34"
 
 #: Addendum A2's OpenAlex page sizes (D125), largest first.

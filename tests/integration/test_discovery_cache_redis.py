@@ -472,11 +472,12 @@ def _encoder_ready() -> bool:
 
 @pytest.fixture(scope="module")
 def warm_encoder() -> LocalEmbedder:
-    """The production encoder, loaded before any test mocks HTTP.
+    """The production encoder, loaded once for the module, before any test mocks HTTP.
 
-    Loading asks the model hub whether the cached files are current; under respx
-    that request is refused, the load fails, and relevance falls back to lexical,
-    which is how this test first failed.
+    Until D157 loading asked the model hub whether the cached files were current;
+    under respx that request was refused, the load failed, and relevance fell back
+    to lexical, which is how this test first failed. It now loads from the local
+    copy, and loading here still keeps the load out of the timed searches.
     """
     settings = Settings()
     encoder = LocalEmbedder(

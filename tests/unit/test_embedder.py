@@ -8,6 +8,10 @@ genuinely needs the hardware.
 
 from __future__ import annotations
 
+import sys
+import types
+from typing import Any
+
 import pytest
 
 from scholiast.application.ports.ml import Precision, TextRole
@@ -162,3 +166,102 @@ class TestTheGpuGate:
         await embedder.embed(["what is RRF?"], role=TextRole.QUERY)
         assert gate.acquisitions[Priority.QUERY] == 1
         assert gate.acquisitions[Priority.INGESTION] == 0
+
+
+class _FakeModel:
+    """Stands in for a loaded SentenceTransformer: records what it encodes."""
+
+    def __init__(self) -> None:
+        self.encoded: list[list[str]] = []
+
+    def half(self) -> _FakeModel:
+        return self
+
+    def encode(self, texts: list[str], **_: Any) -> list[list[float]]:
+        self.encoded.append(list(texts))
+        return [[1.0] for _ in texts]
+
+
+class _FakeLibrary:
+    """`sentence_transformers` with a constructor that records how it was called.
+
+    Installed in `sys.modules`, so `_load`'s own import finds it: no 4 s import,
+    no model, no network, and the test sees exactly the keywords the hub sees.
+    """
+
+    def __init__(self, *, cached: bool = True, error: BaseException | None = None) -> None:
+        self.calls: list[dict[str, Any]] = []
+        self.model = _FakeModel()
+        self._cached = cached
+        self._error = error
+
+    def install(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        module = types.ModuleType("sentence_transformers")
+        module.SentenceTransformer = self.construct  # type: ignore[attr-defined]
+        monkeypatch.setitem(sys.modules, "sentence_transformers", module)
+
+    def construct(self, name: str, **kwargs: Any) -> _FakeModel:
+        self.calls.append(kwargs)
+        if self._error is not None:
+            raise self._error
+        if kwargs.get("local_files_only") and not self._cached:
+            # What sentence-transformers raises for a model not in the cache,
+            # read from the real library (5.6.1) with local_files_only=True.
+            raise OSError("couldn't find them in the cached files")
+        return self.model
+
+
+class TestTheModelLoadsFromTheLocalCopy:
+    """D157: the hub's update check cost 7.7-11.1 s and 32 requests per load."""
+
+    def test_a_downloaded_model_loads_without_asking_the_hub(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        library = _FakeLibrary(cached=True)
+        library.install(monkeypatch)
+
+        bge()._load()
+
+        assert [c.get("local_files_only") for c in library.calls] == [True]
+
+    def test_a_model_never_downloaded_is_fetched_from_the_hub(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A fresh install must still work: local first, then the hub, once.
+        library = _FakeLibrary(cached=False)
+        library.install(monkeypatch)
+
+        embedder = bge()
+        embedder._load()
+
+        assert [c.get("local_files_only", False) for c in library.calls] == [True, False]
+        assert embedder._model is library.model
+
+    def test_a_failure_that_is_not_a_missing_model_is_not_retried_online(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A CUDA error retried against the hub would add a network round trip to
+        # every failed boot and report the second failure, not the first.
+        library = _FakeLibrary(error=RuntimeError("CUDA error: no kernel image"))
+        library.install(monkeypatch)
+
+        with pytest.raises(RuntimeError, match="CUDA"):
+            bge()._load()
+        assert len(library.calls) == 1
+
+
+class TestWarming:
+    async def test_warming_loads_the_model_and_runs_one_query_encode(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # D156: the first encode after a load cost 0.24-0.29 s against 0.04 s,
+        # so a warm-up that only loaded would leave that on the first search.
+        library = _FakeLibrary()
+        library.install(monkeypatch)
+        embedder = bge()
+
+        await embedder.warm()
+
+        assert embedder._model is library.model
+        assert len(library.model.encoded) == 1
+        assert library.model.encoded[0][0].startswith(BGE_QUERY_PREFIX)

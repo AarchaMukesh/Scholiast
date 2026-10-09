@@ -58,6 +58,10 @@ class Settings(BaseSettings):
     #: priority semaphore needs, once a reranker exists to contend for the GPU.
     embedding_batch_size: int = 32
     embedding_dimensions: int = 768
+    #: Load and run the encoder before the API accepts a request (D156). Loaded
+    #: on first use instead, the first search after a start took 16.2 s. Tests
+    #: that build the real lifespan with a stand-in embedder turn this off.
+    embedding_warm_at_startup: bool = True
 
     # -- ingestion worker --------------------------------------------------
     #: The cost of not having a broker (D47): with jobs in Postgres there is

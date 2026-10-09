@@ -115,6 +115,13 @@ async def api_lifespan(app: FastAPI) -> AsyncIterator[None]:
     # every upsert deep inside ingestion, far from the cause.
     await index.ensure_ready()
 
+    # D156: last before `yield`, after the cheap checks above, so uvicorn accepts
+    # no connection until the encoder is warm. Loaded on first use, it cost the
+    # first search after a start 16.2 s. A model that cannot load fails the
+    # boot, as a bad key does (D84).
+    if settings.embedding_warm_at_startup:
+        await app.state.embedder.warm()
+
     try:
         yield
     finally:
