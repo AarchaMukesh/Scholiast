@@ -44,6 +44,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from scholiast.api.errors import RateLimited
 from scholiast.api.schemas import AddDiscoveredPapers
 from scholiast.application.ports.accounts import AccountRepository, SessionRepository
+from scholiast.application.ports.discovery import VectorCache
 from scholiast.application.ports.dispatch import JobDispatcher
 from scholiast.application.ports.llm import LLMProvider
 from scholiast.application.ports.ml import Embedder
@@ -72,6 +73,7 @@ from scholiast.application.use_cases.discover_papers import (
     ConfiguredSource,
     DiscoverPapersUseCase,
 )
+from scholiast.application.use_cases.rank_works import DenseRelevance
 from scholiast.application.use_cases.remove_paper import RemovePaperUseCase
 from scholiast.config.settings import Settings
 from scholiast.domain.fetch_policy import host_allowlist
@@ -532,11 +534,21 @@ def get_discovery_sources(request: Request) -> list[ConfiguredSource]:
 
 def discover_use_case(request: Request) -> DiscoverPapersUseCase:
     settings: Settings = request.app.state.settings
+    cache = getattr(request.app.state, "discovery_cache", None)
+    embedder = getattr(request.app.state, "embedder", None)
     return DiscoverPapersUseCase(
         get_discovery_sources(request),
         # Absent means uncached, which is correct, not broken: a cache can only
         # ever turn a source call into a miss (D127).
-        cache=getattr(request.app.state, "discovery_cache", None),
+        cache=cache,
+        # Dense with the app's encoder, its work vectors in the same cache (D153);
+        # lexical where no encoder is wired. A cache that is not a vector cache
+        # (a test double) leaves the vectors uncached, never the search broken.
+        relevance=(
+            DenseRelevance(embedder, cache if isinstance(cache, VectorCache) else None)
+            if embedder is not None
+            else None
+        ),
         # The add endpoint's allowlist, so the record each work offers is one add
         # will accept (D147).
         allowed_hosts=host_allowlist(settings.fetch_allowed_hosts),

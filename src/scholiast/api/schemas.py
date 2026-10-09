@@ -16,7 +16,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from scholiast.application.use_cases.add_discovered import MAX_ADD_PAPERS
 
@@ -231,6 +231,25 @@ class DiscoverySearch(_Input):
     #: A topic or a question. Searchability (a letter or digit) is the domain's
     #: rule, so a query of punctuation is a 400 from the use case, not a 422 here.
     query: NonBlank = Field(max_length=500)
+    #: FR-D8's filters, applied after ranking (D152). Years are the work's
+    #: earliest year (D147): when it first appeared, preprint or not.
+    year_from: int | None = Field(default=None, ge=1000, le=3000)
+    year_to: int | None = Field(default=None, ge=1000, le=3000)
+    #: Excludes works whose count is unknown: "unknown" cannot satisfy "at least N".
+    min_citations: int | None = Field(default=None, ge=0, le=10**9)
+    #: Case-insensitive substring of the venue.
+    venue: str | None = Field(default=None, min_length=1, max_length=200)
+    sort: Literal["score", "citations", "year"] = "score"
+
+    @model_validator(mode="after")
+    def _a_year_range_is_not_empty(self) -> DiscoverySearch:
+        if (
+            self.year_from is not None
+            and self.year_to is not None
+            and self.year_from > self.year_to
+        ):
+            raise ValueError("year_from is after year_to, so nothing could match")
+        return self
 
 
 class OpenAccessLinkOut(BaseModel):
@@ -257,6 +276,20 @@ class PaperRefOut(BaseModel):
     source_id: str
 
 
+class ScorePartsOut(BaseModel):
+    """Why this work ranked where it did (FR-D5): each part in [0, 1].
+
+    A part named in `imputed` was not measured for this work (an arXiv-only paper
+    has no citation count): it is the search's median, so it neither helps nor
+    hurts, and the score is still exactly the weighted sum of these numbers (D152).
+    """
+
+    relevance: float
+    citation_impact: float
+    recency: float
+    imputed: list[Literal["citation_impact", "recency"]] = Field(default_factory=list)
+
+
 class WorkOut(BaseModel):
     """One paper, however many sources returned it (FR-D1, FR-D3, D147).
 
@@ -268,6 +301,9 @@ class WorkOut(BaseModel):
 
     #: Every source record of this paper, in the search's interleaved order.
     members: list[WorkMemberOut]
+    #: The weighted sum of `score_parts` under `ranking.weights` (FR-D4).
+    score: float
+    score_parts: ScorePartsOut
     #: The record to add this paper by: one the fetcher can follow, if any is.
     add: PaperRefOut
     title: str
@@ -299,15 +335,44 @@ class SourceStatusOut(BaseModel):
     age_seconds: float | None = None
 
 
+class RankingWeightsOut(BaseModel):
+    relevance: float
+    citation_impact: float
+    recency: float
+
+
+class RankingOut(BaseModel):
+    """How `results` were scored (FR-D4, D151, D153)."""
+
+    #: The ranker build (NFR-M5).
+    version: str
+    #: "dense", or "lexical" when the encoder failed and relevance fell back.
+    relevance: Literal["dense", "lexical"]
+    weights: RankingWeightsOut
+    #: Ages, for citation impact and recency, are counted from this year.
+    year: int
+
+
+class ExcludedOut(BaseModel):
+    """How many works each filter removed (FR-D8), first filter that applied."""
+
+    year: int = 0
+    citations: int = 0
+    venue: int = 0
+    #: Of `citations`, how many were removed because their count is unknown.
+    unknown_citations: int = 0
+
+
 class DiscoveryResults(BaseModel):
-    #: One entry per paper, not per source record (FR-D3).
+    #: One entry per paper, not per source record (FR-D3), filtered and ordered.
     results: list[WorkOut]
     source_status: list[SourceStatusOut]
     #: True whenever any source did not answer (FR-D6).
     partial: bool
-    #: How `results` is ordered. Until phase 8 ranks, it is each source's own order,
-    #: interleaved, with each paper where its earliest record was (D122, D147).
-    ordering: Literal["source_rank"] = "source_rank"
+    #: How `results` is ordered: by score (default), citations or year, unknowns last.
+    ordering: Literal["score", "citations", "year"] = "score"
+    ranking: RankingOut
+    excluded: ExcludedOut = Field(default_factory=ExcludedOut)
 
 
 # -- adding discovered papers (D133, D137) ---------------------------------------

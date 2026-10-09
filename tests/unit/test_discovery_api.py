@@ -26,6 +26,7 @@ from scholiast.application.ports.tenancy import TenantContext
 from scholiast.application.use_cases.discover_papers import ConfiguredSource
 from scholiast.config.settings import Settings
 from scholiast.domain.discovery import LinkKind, OpenAccessLink, PaperCandidate
+from scholiast.domain.ranking import RANKER_VERSION, SHIPPED_WEIGHTS
 from scholiast.infrastructure.discovery.openalex import OpenAlexSource
 from scholiast.infrastructure.observability.metrics import REGISTRY
 from scholiast.infrastructure.security.ratelimit import FixedWindowLimiter
@@ -101,7 +102,7 @@ class TestAPartialResult:
         assert response.status_code == HTTPStatus.OK
         body = response.json()
         assert body["partial"] is True
-        assert body["ordering"] == "source_rank"
+        assert body["ordering"] == "score"
         assert body["source_status"] == [
             {
                 "source": "openalex",
@@ -152,6 +153,18 @@ class TestAPartialResult:
 
         result = build(Fake("arxiv", papers=(rich,))).post(SEARCH, json={"query": "dpr"}).json()
 
+        [work] = result["results"]
+        score, parts = work.pop("score"), work.pop("score_parts")
+        age = result["ranking"]["year"] - 2020
+        # arXiv reports no citation count: the part is imputed, never zero (D152).
+        assert parts["imputed"] == ["citation_impact"]
+        assert parts["recency"] == pytest.approx(0.5 ** (age / 3))
+        weights = result["ranking"]["weights"]
+        assert score == pytest.approx(
+            weights["relevance"] * parts["relevance"]
+            + weights["citation_impact"] * parts["citation_impact"]
+            + weights["recency"] * parts["recency"]
+        ), "the score is not the weighted sum of the parts it shows"
         assert result["results"] == [
             {
                 "members": [{"source": "arxiv", "source_id": "arxiv-1", "source_rank": 1}],
@@ -253,6 +266,109 @@ class TestOnePaperOneEntry:
 
         [work] = body["results"]
         assert work["add"] == {"source": "openalex", "source_id": "openalex-1"}
+
+
+class TestRankingAndFilters:
+    """FR-D4, FR-D5 and FR-D8 at the endpoint (D151-D153)."""
+
+    @staticmethod
+    def papers() -> tuple[PaperCandidate, ...]:
+        return (
+            paper(
+                "openalex",
+                1,
+                title="Graph neural networks",
+                year=2019,
+                citation_count=900,
+                venue="NeurIPS",
+            ),
+            paper(
+                "openalex",
+                2,
+                title="Dense passage retrieval for question answering",
+                year=2023,
+                citation_count=40,
+                venue="EMNLP",
+            ),
+            paper(
+                "openalex",
+                3,
+                title="Retrieval for question answering",
+                year=2024,
+                citation_count=None,
+                venue="ACL Findings",
+            ),
+        )
+
+    def search(self, **body: object) -> dict[str, object]:
+        response = build(Fake("openalex", papers=self.papers())).post(
+            SEARCH, json={"query": "dense passage retrieval", **body}
+        )
+        assert response.status_code == HTTPStatus.OK, response.text
+        return dict(response.json())
+
+    @staticmethod
+    def ids(body: dict[str, object]) -> list[str]:
+        return [r["add"]["source_id"] for r in body["results"]]  # type: ignore[index, union-attr]
+
+    def test_results_are_ordered_by_score_not_by_the_sources_rank(self) -> None:
+        body = self.search()
+
+        assert self.ids(body)[0] == "openalex-2"
+        scores = [r["score"] for r in body["results"]]  # type: ignore[union-attr]
+        assert scores == sorted(scores, reverse=True)
+
+    def test_the_response_says_what_ranked_it(self) -> None:
+        ranking = self.search()["ranking"]
+
+        assert ranking["version"] == RANKER_VERSION  # type: ignore[index]
+        # No encoder is wired in this app, so relevance is lexical, and says so.
+        assert ranking["relevance"] == "lexical"  # type: ignore[index]
+        assert ranking["weights"] == {  # type: ignore[index]
+            "relevance": SHIPPED_WEIGHTS.relevance,
+            "citation_impact": SHIPPED_WEIGHTS.citation,
+            "recency": SHIPPED_WEIGHTS.recency,
+        }
+
+    def test_a_filter_hides_works_without_changing_the_parts_of_those_left(self) -> None:
+        everything = {r["add"]["source_id"]: r for r in self.search()["results"]}  # type: ignore[union-attr]
+
+        body = self.search(year_from=2023)
+
+        assert self.ids(body) == ["openalex-2", "openalex-3"]
+        assert body["excluded"] == {"year": 1, "citations": 0, "venue": 0, "unknown_citations": 0}
+        for r in body["results"]:  # type: ignore[union-attr]
+            assert r == everything[r["add"]["source_id"]]
+
+    def test_a_minimum_citation_count_excludes_unknown_counts_and_says_how_many(self) -> None:
+        body = self.search(min_citations=10)
+
+        assert sorted(self.ids(body)) == ["openalex-1", "openalex-2"]
+        assert body["excluded"]["citations"] == 1  # type: ignore[index]
+        assert body["excluded"]["unknown_citations"] == 1  # type: ignore[index]
+
+    def test_a_venue_filter_matches_part_of_the_name_in_any_case(self) -> None:
+        assert self.ids(self.search(venue="findings")) == ["openalex-3"]
+
+    def test_sorting_by_citations_puts_an_unknown_count_last(self) -> None:
+        body = self.search(sort="citations")
+
+        assert self.ids(body) == ["openalex-1", "openalex-2", "openalex-3"]
+        assert body["ordering"] == "citations"
+
+    @pytest.mark.parametrize(
+        "body",
+        [
+            {"year_from": 2024, "year_to": 2020},
+            {"min_citations": -1},
+            {"sort": "popularity"},
+            {"venue": ""},
+        ],
+    )
+    def test_a_filter_that_cannot_mean_anything_is_a_422(self, body: dict[str, object]) -> None:
+        response = build(Fake("openalex")).post(SEARCH, json={"query": "x", **body})
+
+        assert response.status_code == HTTPStatus.UNPROCESSABLE_ENTITY
 
 
 class TestNoSourceAnswering:

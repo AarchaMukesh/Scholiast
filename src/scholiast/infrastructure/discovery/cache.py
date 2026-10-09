@@ -18,6 +18,10 @@ candidate cannot be silently dropped from cached pages.
 **The Redis is the cache's alone** (D128): capped, evicting least-recently-used
 keys, no persistence. Every write still carries the day's expiry, so an entry is
 never older than D127 allows even when memory is plentiful.
+
+**It also keeps each work's dense vector** (D153), under the same rules: per user,
+hashed keys, a day's expiry, every failure a miss. A vector is 768 float32 values,
+3 KB, so a search's 70 or so cost about 200 KB and arrive in one `MGET`.
 """
 
 from __future__ import annotations
@@ -25,8 +29,10 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import sys
 import zlib
-from collections.abc import Awaitable, Callable
+from array import array
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import date, datetime
 from typing import Any, TypeVar
 
@@ -34,7 +40,7 @@ import structlog
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
 
-from scholiast.application.ports.discovery import CachedPage, CacheKey, SourcePage
+from scholiast.application.ports.discovery import CachedPage, CacheKey, SourcePage, VectorKey
 from scholiast.domain.discovery import LinkKind, OpenAccessLink, PaperCandidate
 from scholiast.infrastructure.circuit import Circuit, Refused
 from scholiast.infrastructure.observability import metrics
@@ -60,6 +66,43 @@ def redis_key(key: CacheKey) -> str:
     )
     digest = hashlib.sha256(material.encode("utf-8")).hexdigest()
     return f"{KEY_PREFIX}:v{FORMAT_VERSION}:{digest}"
+
+
+#: The vector entries' own format, so a change to their encoding misses old ones.
+VECTOR_FORMAT = b"v1:"
+
+
+def vector_redis_key(key: VectorKey) -> str:
+    """The Redis key for a work's vector: hashed, so a listing shows nothing searched."""
+    material = json.dumps(
+        [FORMAT_VERSION, "vector", key.scope, key.embedder, key.record, key.text_sha256],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    digest = hashlib.sha256(material.encode("utf-8")).hexdigest()
+    return f"{KEY_PREFIX}:vec:v{FORMAT_VERSION}:{digest}"
+
+
+def encode_vector(vector: Sequence[float]) -> bytes:
+    """Little-endian float32: what the encoder produced at fp16 loses nothing more."""
+    values = array("f", vector)
+    if sys.byteorder != "little":  # pragma: no cover - no big-endian deployment
+        values.byteswap()
+    return VECTOR_FORMAT + values.tobytes()
+
+
+def decode_vector(raw: bytes | str) -> list[float]:
+    """A stored vector back to floats. Raises on anything malformed; the caller misses."""
+    if not isinstance(raw, bytes) or not raw.startswith(VECTOR_FORMAT):
+        raise ValueError("not a vector entry this build wrote")
+    body = raw[len(VECTOR_FORMAT) :]
+    if not body or len(body) % 4:
+        raise ValueError("a vector entry must hold whole float32 values")
+    values = array("f")
+    values.frombytes(body)
+    if sys.byteorder != "little":  # pragma: no cover - no big-endian deployment
+        values.byteswap()
+    return values.tolist()
 
 
 def _candidate_to_json(c: PaperCandidate) -> dict[str, Any]:
@@ -180,6 +223,43 @@ class RedisDiscoveryCache:
         )
         if stored:
             metrics.record_discovery_cache(key.source, "put", "stored")
+
+    async def get_vectors(self, keys: Sequence[VectorKey]) -> list[list[float] | None]:
+        if not keys:
+            return []
+        found, raws = await self._call(
+            "vectors", "get", lambda: self._client.mget([vector_redis_key(k) for k in keys])
+        )
+        if not found or raws is None:
+            return [None] * len(keys)
+        out: list[list[float] | None] = []
+        for raw in raws:
+            if raw is None:
+                out.append(None)
+                continue
+            try:
+                out.append(decode_vector(raw))
+            except ValueError:
+                # An entry this build cannot read is a miss; the next search rewrites it.
+                metrics.record_discovery_cache("vectors", "get", "unreadable")
+                out.append(None)
+        hits = sum(v is not None for v in out)
+        metrics.record_discovery_cache("vectors", "get", "hit" if hits == len(out) else "miss")
+        return out
+
+    async def put_vectors(self, entries: Sequence[tuple[VectorKey, Sequence[float]]]) -> None:
+        if not entries:
+            return
+
+        async def store() -> list[Any]:
+            pipe = self._client.pipeline(transaction=False)
+            for key, vector in entries:
+                pipe.set(vector_redis_key(key), encode_vector(vector), ex=self._ttl)
+            return list(await pipe.execute())
+
+        stored, _ = await self._call("vectors", "put", store)
+        if stored:
+            metrics.record_discovery_cache("vectors", "put", "stored")
 
     async def close(self) -> None:
         await self._client.aclose()

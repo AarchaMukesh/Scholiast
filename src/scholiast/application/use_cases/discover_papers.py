@@ -24,8 +24,10 @@ nothing is sent. Only answers are stored, never failures, so the next search ask
 again any source that failed. The cache is isolated like a source: if it raises,
 the search carries on as a miss.
 
-**The order is the sources' own, interleaved** (D122): each source's first result,
-then each one's second, until phase 8 replaces it with a ranking.
+**Then ranked** (FR-D4, D151-D153): each work gets relevance (dense, with work
+vectors cached per user), citation impact and recency, and a weighted score fitted
+on judged searches; every part is returned (FR-D5). FR-D8's filters run after the
+ranking, so a filter never changes a remaining work's parts (D152).
 
 **Records of one paper become one work** (FR-D3, D145-D148): the interleaved
 records are grouped by `dedup.works`, and each work sits where its earliest record
@@ -38,7 +40,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum, unique
@@ -51,6 +53,7 @@ from scholiast.application.ports.discovery import (
     SourcePage,
     SourceUnavailable,
 )
+from scholiast.application.use_cases.rank_works import LexicalRelevance, RelevanceScorer
 from scholiast.domain.dedup import DiscoveredWork, works
 from scholiast.domain.discovery import (
     PaperCandidate,
@@ -60,6 +63,15 @@ from scholiast.domain.discovery import (
     normalise_query,
 )
 from scholiast.domain.fetch_policy import fetchable_pdf_links
+from scholiast.domain.ranking import (
+    SHIPPED_WEIGHTS,
+    RankedWork,
+    RankingWeights,
+    RelevanceSignal,
+    SearchFilters,
+    apply_filters,
+    rank,
+)
 
 #: D122: the sources' share of NFR-P1's 3.0 s.
 DEFAULT_DEADLINE_SECONDS = 2.0
@@ -116,6 +128,17 @@ class DiscoveryResult:
     #: The same records as works, one per paper, in order of first appearance (D147).
     #: Required: a default of none would make "not grouped" read as "found nothing".
     works: tuple[DiscoveredWork, ...]
+    #: The works the filters kept, in the requested order, each with its score parts.
+    ranked: tuple[RankedWork, ...] = ()
+    #: How many works each filter removed (D152), and of the citation removals,
+    #: how many had no count at all.
+    excluded: Mapping[str, int] = field(default_factory=dict)
+    excluded_unknown_citations: int = 0
+    #: What ranked them: the signal actually used (lexical if the encoder failed),
+    #: the weights, and the year ages were counted from.
+    relevance_signal: RelevanceSignal = RelevanceSignal.DENSE
+    weights: RankingWeights = SHIPPED_WEIGHTS
+    ranking_year: int = 0
 
     @property
     def partial(self) -> bool:
@@ -145,8 +168,13 @@ class DiscoverPapersUseCase:
         deadline_seconds: float = DEFAULT_DEADLINE_SECONDS,
         clock: Callable[[], float] = time.perf_counter,
         now: Callable[[], datetime] = lambda: datetime.now(UTC),
+        relevance: RelevanceScorer | None = None,
+        weights: RankingWeights = SHIPPED_WEIGHTS,
     ) -> None:
         self._sources = tuple(sources)
+        #: Dense in production (D153); lexical where no encoder is wired.
+        self._relevance: RelevanceScorer = relevance or LexicalRelevance()
+        self._weights = weights
         self._cache = cache
         #: The fetcher's allowlist, so a work offers for adding a record the add
         #: endpoint will accept (D147). Empty means no record counts as fetchable,
@@ -156,7 +184,9 @@ class DiscoverPapersUseCase:
         self._clock = clock
         self._now = now
 
-    async def execute(self, query: str, *, scope: str) -> DiscoveryResult:
+    async def execute(
+        self, query: str, *, scope: str, filters: SearchFilters | None = None
+    ) -> DiscoveryResult:
         """Search every source for `query` on behalf of the user `scope` names."""
         if not is_searchable(query):
             raise UnsearchableQuery("the query has no letter or digit to search for")
@@ -177,13 +207,24 @@ class DiscoverPapersUseCase:
         if not any(o.status is SourceStatus.OK for o in outcomes):
             raise NoSourceAnswered(tuple(outcomes))
         candidates = interleave([o.candidates for o in outcomes])
+        found = works(
+            candidates,
+            fetchable=lambda record: bool(fetchable_pdf_links(record, self._allowed_hosts)),
+        )
+        relevance = await self._relevance.score(query, found, scope=scope)
+        ranking_year = self._now().year
+        ranked = rank(found, relevance.scores, self._weights, ranking_year=ranking_year)
+        kept = apply_filters(ranked, filters or SearchFilters())
         return DiscoveryResult(
             candidates=candidates,
             sources=tuple(outcomes),
-            works=works(
-                candidates,
-                fetchable=lambda record: bool(fetchable_pdf_links(record, self._allowed_hosts)),
-            ),
+            works=found,
+            ranked=kept.works,
+            excluded=kept.excluded,
+            excluded_unknown_citations=kept.excluded_unknown_citations,
+            relevance_signal=relevance.signal,
+            weights=self._weights,
+            ranking_year=ranking_year,
         )
 
     async def _ask(

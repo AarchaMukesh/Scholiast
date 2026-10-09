@@ -72,6 +72,15 @@ from scholiast.eval.pdfcheck import (
     queries_by_id,
     sample_papers,
 )
+from scholiast.eval.ranking import (
+    DENSE_SCORES,
+    Latency,
+    RankingReport,
+    compute_dense_scores,
+    load_searches,
+    run_ranking,
+)
+from scholiast.eval.ranking import render as _render_ranking
 from scholiast.eval.smoke import (
     BASELINE_PATH,
     SMOKE_PAPERS,
@@ -1258,6 +1267,26 @@ def _render_contention(report: EvalReport) -> str:
     return "\n".join(out)
 
 
+async def _recompute_dense() -> Latency:
+    """D152's committed scores, rewritten with the encoder production runs."""
+    from scholiast.application.ports.ml import Precision
+    from scholiast.infrastructure.ml.embedder import LocalEmbedder
+
+    settings = get_settings()
+    embedder = LocalEmbedder(
+        settings.embedding_model,
+        device=settings.embedding_device,
+        precision=Precision(settings.embedding_precision),
+        batch_size=settings.embedding_batch_size,
+    )
+    data, latency = await compute_dense_scores(load_searches(), embedder)
+    DENSE_SCORES.write_text(
+        json.dumps(data, indent=1, sort_keys=True) + "\n", encoding="utf-8", newline="\n"
+    )
+    print(f"rewrote {DENSE_SCORES} with {data['embedder_version']}")
+    return latency
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="eval",
@@ -1356,7 +1385,27 @@ def main(argv: list[str] | None = None) -> int:
             "every error, and time the grouping (D148). Offline: reads committed data only."
         ),
     )
+    parser.add_argument(
+        "--ranking",
+        action="store_true",
+        help=(
+            "FR-D4: fit the ranking weights on the D149 judgments' train searches, score "
+            "the shipped ranker on the held-out ones against today's order and relevance "
+            "alone, and time the ranking step (D151). Offline unless --recompute-dense."
+        ),
+    )
+    parser.add_argument(
+        "--recompute-dense",
+        action="store_true",
+        help=(
+            "with --ranking, re-embed every search with the production encoder, rewrite "
+            "the committed dense scores (D152) and time dense ranking on this device."
+        ),
+    )
     args = parser.parse_args(argv)
+
+    if args.recompute_dense and not args.ranking:
+        parser.error("--recompute-dense only means something with --ranking")
 
     if args.update_baseline and not args.smoke:
         # Refused rather than ignored: a flag that quietly does nothing is how
@@ -1376,8 +1425,12 @@ def main(argv: list[str] | None = None) -> int:
         return 0 if comparison.passed else 1
 
     # Both kinds archive the same way: a timestamp and a JSON body.
-    report: EvalReport | DedupReport
-    if args.dedup:
+    report: EvalReport | DedupReport | RankingReport
+    if args.ranking:
+        dense_latency = asyncio.run(_recompute_dense()) if args.recompute_dense else None
+        report = run_ranking(dense_latency)
+        print(_render_ranking(report))
+    elif args.dedup:
         # Discovery, not retrieval: no index, no encoder, its own fixture.
         report = run_dedup()
         print(_render_dedup(report))
@@ -1411,6 +1464,7 @@ def main(argv: list[str] | None = None) -> int:
             (
                 name
                 for name, selected in (
+                    ("ranking", args.ranking),
                     ("dedup", args.dedup),
                     ("pdf-check", args.pdf_check),
                     ("contention", args.contention),

@@ -13,7 +13,10 @@ Redis is running; CI runs one (D128).
 from __future__ import annotations
 
 import asyncio
+import gzip
+import json
 import os
+import struct
 import time
 import uuid
 from collections.abc import AsyncIterator
@@ -30,7 +33,8 @@ from fastapi import FastAPI
 from scholiast.api import deps
 from scholiast.api.errors import register_error_handlers
 from scholiast.api.routers import discovery
-from scholiast.application.ports.discovery import CacheKey, SourcePage
+from scholiast.application.ports.discovery import CacheKey, SourcePage, VectorKey
+from scholiast.application.ports.ml import Precision
 from scholiast.application.ports.tenancy import TenantContext
 from scholiast.application.use_cases.discover_papers import (
     ConfiguredSource,
@@ -42,8 +46,13 @@ from scholiast.infrastructure.circuit import Circuit
 from scholiast.infrastructure.discovery import arxiv as arxiv_adapter
 from scholiast.infrastructure.discovery import openalex as openalex_adapter
 from scholiast.infrastructure.discovery.breaker import SourceBreaker
-from scholiast.infrastructure.discovery.cache import RedisDiscoveryCache, redis_key
+from scholiast.infrastructure.discovery.cache import (
+    RedisDiscoveryCache,
+    redis_key,
+    vector_redis_key,
+)
 from scholiast.infrastructure.discovery.sources import build_discovery_sources
+from scholiast.infrastructure.ml.embedder import LocalEmbedder
 from scholiast.infrastructure.observability.metrics import REGISTRY
 from scholiast.infrastructure.security.ratelimit import FixedWindowLimiter
 
@@ -52,6 +61,7 @@ pytestmark = [pytest.mark.integration]
 REDIS_URL = os.environ.get("SCHOLIAST_TEST_REDIS_URL", "redis://localhost:6379/14")
 CACHE_REDIS_URL = "redis://localhost:6380/0"
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "discovery"
+A3_POOLS = Path(__file__).resolve().parents[2] / "data" / "eval" / "discovery-pools-a3.json.gz"
 OPENALEX_WORKS = "https://api.openalex.org/works"
 ARXIV_QUERY = "https://export.arxiv.org/api/query"
 KEY = "test-key-0123456789"
@@ -372,3 +382,150 @@ class TestThroughTheEndpoint:
         timings.sort()
         p95 = timings[int(0.95 * len(timings)) - 1]
         assert p95 <= 0.4, f"cached p95 {p95 * 1000:.0f} ms"
+
+
+# -- work vectors (D153) ----------------------------------------------------------
+
+
+def a_vector_key(record: str = "arxiv:2004.04906", scope: str = "u-1") -> VectorKey:
+    return VectorKey(scope=scope, embedder="enc/1", record=record, text_sha256="ab" * 32)
+
+
+@needs_redis
+class TestWorkVectorsAgainstRealRedis:
+    async def test_a_vector_survives_the_round_trip_at_float32(self, redis: aioredis.Redis) -> None:
+        cache, k = cache_on(redis), a_vector_key()
+        vector = [0.1, -0.25, 3.0e-3]
+
+        await cache.put_vectors([(k, vector)])
+        [found] = await cache.get_vectors([k])
+
+        assert found == pytest.approx(vector, rel=1e-6)
+
+    async def test_every_vector_expires_within_the_day(self, redis: aioredis.Redis) -> None:
+        cache, k = cache_on(redis), a_vector_key()
+        await cache.put_vectors([(k, [1.0])])
+
+        ttl = await redis.ttl(vector_redis_key(k))
+
+        assert 0 < ttl <= 24 * 3600
+
+    async def test_hits_and_misses_come_back_in_the_order_asked(
+        self, redis: aioredis.Redis
+    ) -> None:
+        cache = cache_on(redis)
+        stored, absent = a_vector_key("arxiv:1"), a_vector_key("arxiv:2")
+        await cache.put_vectors([(stored, [1.0, 2.0])])
+
+        found = await cache.get_vectors([absent, stored, absent])
+
+        assert found[0] is None and found[2] is None
+        assert found[1] == pytest.approx([1.0, 2.0])
+
+    async def test_another_users_vector_is_a_miss(self, redis: aioredis.Redis) -> None:
+        cache = cache_on(redis)
+        await cache.put_vectors([(a_vector_key(scope="u-1"), [1.0])])
+
+        assert await cache.get_vectors([a_vector_key(scope="u-2")]) == [None]
+
+    async def test_a_vector_in_another_format_is_a_miss_not_a_misread(
+        self, redis: aioredis.Redis
+    ) -> None:
+        # Whole float32 values under another format tag: readable bytes, wrong meaning.
+        cache, k = cache_on(redis), a_vector_key()
+        await redis.set(vector_redis_key(k), b"v0:" + struct.pack("<2f", 1.0, 2.0))
+
+        assert await cache.get_vectors([k]) == [None]
+
+    async def test_an_entry_this_build_cannot_read_is_a_miss(self, redis: aioredis.Redis) -> None:
+        cache, k = cache_on(redis), a_vector_key()
+        await redis.set(vector_redis_key(k), b"written by something else")
+        before = count("get", "unreadable", source="vectors")
+
+        assert await cache.get_vectors([k]) == [None]
+        assert count("get", "unreadable", source="vectors") == before + 1
+
+
+class TestWorkVectorsWithRedisDown:
+    async def test_redis_down_is_every_vector_a_miss_and_nothing_raised(self) -> None:
+        cache = cache_on(aioredis.from_url("redis://127.0.0.1:1/0", socket_connect_timeout=0.2))
+
+        started = time.perf_counter()
+        assert await cache.get_vectors([a_vector_key(), a_vector_key("arxiv:2")]) == [None, None]
+        await cache.put_vectors([(a_vector_key(), [1.0])])
+
+        assert time.perf_counter() - started < 1.0
+
+
+def _encoder_ready() -> bool:
+    """The production encoder, cached locally, on a CUDA device (NFR-T3: no downloads)."""
+    settings = Settings()
+    try:
+        import torch
+        from huggingface_hub import snapshot_download
+
+        snapshot_download(settings.embedding_model, local_files_only=True)
+        return bool(torch.cuda.is_available()) or not settings.embedding_device.startswith("cuda")
+    except Exception:
+        return False
+
+
+@pytest.fixture(scope="module")
+def warm_encoder() -> LocalEmbedder:
+    """The production encoder, loaded before any test mocks HTTP.
+
+    Loading asks the model hub whether the cached files are current; under respx
+    that request is refused, the load fails, and relevance falls back to lexical,
+    which is how this test first failed.
+    """
+    settings = Settings()
+    encoder = LocalEmbedder(
+        settings.embedding_model,
+        device=settings.embedding_device,
+        precision=Precision(settings.embedding_precision),
+    )
+    assert encoder.dimensions > 0  # loads the model
+    return encoder
+
+
+@needs_redis
+@pytest.mark.skipif(not _encoder_ready(), reason="production encoder not cached locally, or no GPU")
+class TestDenseRankingThroughTheEndpoint:
+    @respx.mock
+    async def test_a_cached_dense_search_meets_nfr_p1s_400_ms(
+        self, redis: aioredis.Redis, warm_encoder: LocalEmbedder
+    ) -> None:
+        """D153's claim: with work vectors cached, a repeat search embeds only its query.
+
+        Through the endpoint with the production encoder on this machine; a regression
+        bound, not phase 10's live number. The first search is cold and warms the model.
+        """
+        # A real-sized search: A3's recorded responses for one query, about 60 works.
+        # The cached path's cost grows with the works (one vector each), so a
+        # five-work fixture would pass this bound without testing it.
+        entries = json.loads(gzip.decompress(A3_POOLS.read_bytes()))["entries"]
+        bodies = {e["source"]: e["body"] for e in entries if e["query_id"] == "t03-keyword"}
+        respx.get(OPENALEX_WORKS).mock(return_value=httpx.Response(200, text=bodies["openalex"]))
+        respx.get(ARXIV_QUERY).mock(return_value=httpx.Response(200, text=bodies["arxiv"]))
+        query = {"query": "dense passage retrieval open-domain question answering"}
+        app = app_with(cache_on(redis), uuid.uuid4().hex)
+        app.state.embedder = warm_encoder
+        transport = httpx.ASGITransport(app=app)
+        timings = []
+        async with httpx.AsyncClient(transport=transport, base_url="http://t") as client:
+            cold = (await client.post("/v1/discovery/search", json=query)).json()
+            hits_before = count("get", "hit", source="vectors")
+            for _ in range(30):
+                started = time.perf_counter()
+                response = await client.post("/v1/discovery/search", json=query)
+                timings.append(time.perf_counter() - started)
+
+        assert len(cold["results"]) >= 50
+        assert cold["ranking"]["relevance"] == "dense"
+        assert response.json()["ranking"]["relevance"] == "dense"
+        assert count("get", "hit", source="vectors") == hits_before + 30, (
+            "a cached search embedded its works again"
+        )
+        timings.sort()
+        p95 = timings[int(0.95 * len(timings)) - 1]
+        assert p95 <= 0.4, f"cached dense p95 {p95 * 1000:.0f} ms"

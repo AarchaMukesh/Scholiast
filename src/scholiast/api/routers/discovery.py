@@ -13,6 +13,8 @@ was a bug rather than the source saying no.
 
 from __future__ import annotations
 
+from typing import Literal
+
 import structlog
 from fastapi import APIRouter
 
@@ -24,15 +26,28 @@ from scholiast.application.use_cases.discover_papers import (
     SourceOutcome,
     SourceStatus,
 )
-from scholiast.domain.dedup import DiscoveredWork
+from scholiast.domain.ranking import RANKER_VERSION, RankedWork, SearchFilters, SortOrder
 from scholiast.infrastructure.observability import metrics
 
 router = APIRouter(prefix="/v1/discovery", tags=["discovery"])
 log = structlog.get_logger(__name__)
 
 
-def _work(work: DiscoveredWork) -> schemas.WorkOut:
+def _work(ranked: RankedWork) -> schemas.WorkOut:
+    work, parts = ranked.work, ranked.parts
+    imputed: list[Literal["citation_impact", "recency"]] = []
+    if parts.citation_imputed:
+        imputed.append("citation_impact")
+    if parts.recency_imputed:
+        imputed.append("recency")
     return schemas.WorkOut(
+        score=ranked.score,
+        score_parts=schemas.ScorePartsOut(
+            relevance=parts.relevance,
+            citation_impact=parts.citation,
+            recency=parts.recency,
+            imputed=imputed,
+        ),
         members=[
             schemas.WorkMemberOut(source=m.source, source_id=m.source_id, source_rank=m.rank)
             for m in work.members
@@ -97,14 +112,35 @@ def _observe(outcomes: tuple[SourceOutcome, ...]) -> None:
 async def search(
     body: schemas.DiscoverySearch, discover: DiscoverDep, tenant: TenantDep
 ) -> schemas.DiscoveryResults:
+    filters = SearchFilters(
+        year_from=body.year_from,
+        year_to=body.year_to,
+        min_citations=body.min_citations,
+        venue=body.venue,
+        sort=SortOrder(body.sort),
+    )
     try:
-        result = await discover.execute(body.query, scope=tenant.user_id)
+        result = await discover.execute(body.query, scope=tenant.user_id, filters=filters)
     except NoSourceAnswered as exc:
         _observe(exc.sources)
         raise
     _observe(result.sources)
     return schemas.DiscoveryResults(
-        results=[_work(w) for w in result.works],
+        results=[_work(r) for r in result.ranked],
         source_status=[_source_status(o) for o in result.sources],
         partial=result.partial,
+        ordering=body.sort,
+        ranking=schemas.RankingOut(
+            version=RANKER_VERSION,
+            relevance=result.relevance_signal.value,
+            weights=schemas.RankingWeightsOut(
+                relevance=result.weights.relevance,
+                citation_impact=result.weights.citation,
+                recency=result.weights.recency,
+            ),
+            year=result.ranking_year,
+        ),
+        excluded=schemas.ExcludedOut(
+            **result.excluded, unknown_citations=result.excluded_unknown_citations
+        ),
     )

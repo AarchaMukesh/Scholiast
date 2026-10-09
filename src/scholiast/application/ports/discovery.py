@@ -184,3 +184,37 @@ class DiscoveryCache(Protocol):
     async def put(self, key: CacheKey, page: SourcePage, fetched_at: datetime) -> None:
         """Store a page a source answered with. Only answers are stored, never failures."""
         ...
+
+
+@dataclass(frozen=True, slots=True)
+class VectorKey:
+    """What makes two embeddings of a work the same embedding, for one user (D153).
+
+    The text's hash is in it because a new adapter build can change a work's
+    abstract, and a vector of the old text would rank the new one.
+    """
+
+    #: The user the entry belongs to, as D127's pages are.
+    scope: str
+    #: The embedder build that produced the vector (NFR-M5).
+    embedder: str
+    #: The work's add record, `source:source_id`.
+    record: str
+    #: SHA-256 of the exact text embedded.
+    text_sha256: str
+
+
+@runtime_checkable
+class VectorCache(Protocol):
+    """Each work's dense vector, kept so a repeated search embeds only its query (D153).
+
+    The page cache's rule holds here too: a failure is a miss, never an error.
+    """
+
+    async def get_vectors(self, keys: Sequence[VectorKey]) -> list[list[float] | None]:
+        """One entry per key, in order: the vector, or None on a miss or any failure."""
+        ...
+
+    async def put_vectors(self, entries: Sequence[tuple[VectorKey, Sequence[float]]]) -> None:
+        """Store vectors just computed. Never raises."""
+        ...
