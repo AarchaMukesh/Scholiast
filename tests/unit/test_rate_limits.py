@@ -23,11 +23,14 @@ from http import HTTPStatus
 import pytest
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from scholiast.api import deps
 from scholiast.api.app import create_app
 from scholiast.api.errors import PROBLEM_CONTENT_TYPE, RateLimited, register_error_handlers
+from scholiast.api.schemas import AddDiscoveredPapers
 from scholiast.application.ports.tenancy import TenantContext
+from scholiast.application.use_cases.add_discovered import MAX_ADD_PAPERS
 from scholiast.config.settings import Settings
 from scholiast.infrastructure.security.ratelimit import (
     Decision,
@@ -269,6 +272,11 @@ PROTECTED: dict[tuple[str, str], str] = {
         "POST",
         "/v1/workspaces/{workspace_id}/conversations/{conversation_id}/messages",
     ): "qa",
+    # Each search spends from an OpenAlex allowance every user shares (D122).
+    ("POST", "/v1/discovery/search"): "discovery",
+    # Each paper added is a lookup share, a paced fetch, a parse and an embedding
+    # pass, so this bucket counts papers rather than requests (D133).
+    ("POST", "/v1/workspaces/{workspace_id}/papers"): "add",
 }
 
 
@@ -405,6 +413,84 @@ def test_the_dependency_objects_are_distinct_per_bucket() -> None:
     assert isinstance(deps.AuthRateLimit, type(Depends(lambda: None)))
     assert deps.AuthRateLimit.dependency is not deps.QaRateLimit.dependency
     assert deps.QaRateLimit.dependency is not deps.UploadRateLimit.dependency
+    assert deps.AddRateLimit.dependency is not deps.UploadRateLimit.dependency
+
+
+class TestARequestCanCostWhatItCarries:
+    """D133's add counts papers, so one request may spend more than one."""
+
+    def test_a_request_that_fits_spends_its_whole_cost(self) -> None:
+        limiter_, _ = limiter()
+        limit = Limit(requests=10, window_seconds=60.0)
+
+        assert limiter_.check(key="k", bucket="b", limit=limit, cost=8).allowed
+        assert limiter_.check(key="k", bucket="b", limit=limit, cost=2).allowed
+        assert not limiter_.check(key="k", bucket="b", limit=limit, cost=1).allowed
+
+    def test_a_request_that_does_not_fit_whole_is_refused_whole_and_spends_nothing(
+        self,
+    ) -> None:
+        # Admitting part of it would break the add's all-or-nothing rule; counting
+        # the refusal would turn a limit into a ban.
+        limiter_, _ = limiter()
+        limit = Limit(requests=10, window_seconds=60.0)
+        limiter_.check(key="k", bucket="b", limit=limit, cost=8)
+
+        refused = limiter_.check(key="k", bucket="b", limit=limit, cost=3)
+
+        assert not refused.allowed and refused.retry_after > 0
+        assert limiter_.check(key="k", bucket="b", limit=limit, cost=2).allowed
+
+    def test_a_request_cannot_cost_nothing(self) -> None:
+        limiter_, _ = limiter()
+        with pytest.raises(ValueError):
+            limiter_.check(key="k", bucket="b", limit=Limit(10, 60.0), cost=0)
+
+
+class TestTheAddLimitCountsPapers:
+    def build(self, *, allowance: int) -> TestClient:
+        app = FastAPI()
+        register_error_handlers(app)
+        app.state.settings = Settings(rate_limit_add_per_minute=allowance)
+        app.state.rate_limiter = FixedWindowLimiter()
+        app.dependency_overrides[deps.current_tenant] = lambda: TenantContext(user_id="u-1")
+
+        @app.post("/add", dependencies=[deps.AddRateLimit])
+        async def _add(body: AddDiscoveredPapers) -> dict[str, int]:
+            return {"papers": len(body.papers)}
+
+        return TestClient(app, raise_server_exceptions=False)
+
+    @staticmethod
+    def batch(size: int) -> dict[str, list[dict[str, str]]]:
+        return {"papers": [{"source": "arxiv", "source_id": f"2004.0490{i}"} for i in range(size)]}
+
+    def test_ten_papers_in_one_request_cost_what_ten_requests_would(self) -> None:
+        client = self.build(allowance=10)
+
+        statuses = [client.post("/add", json=self.batch(n)).status_code for n in (8, 3, 2)]
+
+        assert statuses == [HTTPStatus.OK, HTTPStatus.TOO_MANY_REQUESTS, HTTPStatus.OK]
+
+    def test_the_route_reads_the_same_body_it_was_counted_by(self) -> None:
+        # One body, parsed once: the dependency and the route share the parameter.
+        # Two of them would make FastAPI expect `{"body": ...}` and refuse a real
+        # client's request.
+        response = self.build(allowance=10).post("/add", json=self.batch(3))
+        assert response.status_code == HTTPStatus.OK
+        assert response.json() == {"papers": 3}
+
+    def test_a_malformed_batch_is_refused_before_it_spends_anything(self) -> None:
+        client = self.build(allowance=10)
+
+        assert client.post("/add", json=self.batch(11)).status_code == 422
+        assert client.post("/add", json=self.batch(10)).status_code == HTTPStatus.OK
+
+    def test_the_allowance_cannot_be_set_below_one_full_batch(self) -> None:
+        # Below it, a full batch could never be accepted at all.
+        with pytest.raises(ValidationError):
+            Settings(rate_limit_add_per_minute=MAX_ADD_PAPERS - 1)
+        assert Settings(rate_limit_add_per_minute=MAX_ADD_PAPERS).rate_limit_add_per_minute == 10
 
 
 class TestTheUserKeyedLimitIsWiredToo:

@@ -33,9 +33,15 @@ semantics alone and stay silent about the domain.
 
 **Two queues, by latency profile rather than by caller** (§5.7.4's "interactive
 vs bulk backfill"). `ingest` carries a user's upload, which somebody is watching;
-`backfill` carries bulk work M4's discovery flow will produce. They are declared
-now because a queue added after the workers are deployed is a queue nothing
-consumes until every worker restarts.
+`backfill` carries discovered papers (D140). **Which job runs is not decided
+here:** a wake-up claims whatever is due, and the claim takes interactive work
+first (D139). The queues are how an operator tells the two kinds of work apart,
+and where a deployment can give backfill its own worker. Every queue a worker
+must consume is in `WORKER_QUEUES`, and a test holds every route to it.
+
+**Beat runs two sweeps** (D100, D141): reconciliation, and an ingestion wake-up
+every `ingest_sweep_seconds`. The second is what wakes a worker for a retry or a
+crash redelivery, which no enqueue announces.
 
 Idempotency is not configured here because it is not configurable: at-least-once
 delivery is only safe because the consumer is idempotent (FR-I7), which the
@@ -72,6 +78,11 @@ RECONCILE_TASK = "scholiast.reconcile"
 #: were: a queue added after the workers are deployed is a queue nothing
 #: consumes until every worker restarts.
 MAINTENANCE_QUEUE = "maintenance"
+
+#: Every queue a worker must consume, in the order the documented command lists
+#: them. A route or a publish to anything outside it is a message nothing reads,
+#: which is what `backfill` would have become in M4 without this (D140).
+WORKER_QUEUES: tuple[str, ...] = (INGEST_QUEUE, BACKFILL_QUEUE, MAINTENANCE_QUEUE)
 
 #: Where a task goes when it dies for a reason the pipeline never saw — an
 #: unhandled crash in the task wrapper rather than a classified ingestion
@@ -110,13 +121,24 @@ def build_celery_app(settings: Settings) -> Celery:
                 "task": RECONCILE_TASK,
                 "schedule": float(settings.reconcile_interval_seconds),
                 "options": {"queue": MAINTENANCE_QUEUE},
-            }
+            },
+            # D141. The sweep every docstring here assumed and nothing ran: a
+            # retried job and a crash redelivery are due with no enqueue to
+            # announce them. No argument, because a wake-up names no job.
+            "ingest-sweep": {
+                "task": INGEST_TASK,
+                "schedule": float(settings.ingest_sweep_seconds),
+                "options": {"queue": INGEST_QUEUE},
+            },
         },
         # Redis-specific: how long before an unfinished message is re-queued.
         # Tied to the database lease on purpose — see the module docstring.
+        # No `queue_order_strategy`: kombu's "priority" ordered the queues by a
+        # string hash, differently in each process (D139), and the claim, not
+        # the broker, is what puts an upload first. Round-robin, the default,
+        # keeps a stream of wake-ups from starving maintenance work orders.
         broker_transport_options={
             "visibility_timeout": int(settings.worker_lease_seconds),
-            "queue_order_strategy": "priority",
         },
         # No result backend. Nothing waits on a task's return value: progress is
         # read from `ingestion_jobs` via GET /v1/jobs/{id} (FR-I3), and a second

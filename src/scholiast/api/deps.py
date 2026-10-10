@@ -42,10 +42,13 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from scholiast.api.errors import RateLimited
+from scholiast.api.schemas import AddDiscoveredPapers
 from scholiast.application.ports.accounts import AccountRepository, SessionRepository
+from scholiast.application.ports.discovery import VectorCache
 from scholiast.application.ports.dispatch import JobDispatcher
 from scholiast.application.ports.llm import LLMProvider
 from scholiast.application.ports.ml import Embedder
+from scholiast.application.ports.queue import JobPriority
 from scholiast.application.ports.security import (
     AuthenticationFailed,
     PasswordHasher,
@@ -57,6 +60,7 @@ from scholiast.application.ports.tenancy import (
     TenantContext,
 )
 from scholiast.application.ports.vector import VectorIndex
+from scholiast.application.use_cases.add_discovered import AddDiscoveredPapersUseCase
 from scholiast.application.use_cases.add_paper import AddPaperUseCase
 from scholiast.application.use_cases.answer_question import AnswerQuestionUseCase
 from scholiast.application.use_cases.authentication import (
@@ -65,8 +69,14 @@ from scholiast.application.use_cases.authentication import (
     RegisterUserUseCase,
     StartSessionUseCase,
 )
+from scholiast.application.use_cases.discover_papers import (
+    ConfiguredSource,
+    DiscoverPapersUseCase,
+)
+from scholiast.application.use_cases.rank_works import DenseRelevance
 from scholiast.application.use_cases.remove_paper import RemovePaperUseCase
 from scholiast.config.settings import Settings
+from scholiast.domain.fetch_policy import host_allowlist
 from scholiast.infrastructure.db import pending
 from scholiast.infrastructure.db.accounts import SqlAccountRepository, SqlSessionRepository
 from scholiast.infrastructure.db.repositories import (
@@ -131,15 +141,23 @@ async def _dispatch_committed_jobs(request: Request, session: AsyncSession) -> N
     it. The result is still not raised — logging it is the useful thing available
     here, and failing the request is not.
     """
-    jobs = pending.drain(session, pending.PENDING_DISPATCH)
+    jobs = [
+        (job_id, JobPriority.INTERACTIVE)
+        for job_id in pending.drain(session, pending.PENDING_DISPATCH)
+    ] + [
+        (job_id, JobPriority.BACKFILL)
+        for job_id in pending.drain(session, pending.PENDING_BACKFILL_DISPATCH)
+    ]
     deletions = pending.drain(session, pending.PENDING_DELETION_DISPATCH)
     if not jobs and not deletions:
         return
     dispatcher: JobDispatcher = request.app.state.dispatcher
-    for job_id in jobs:
-        published = await dispatcher.dispatch(job_id)
+    for job_id, priority in jobs:
+        published = await dispatcher.dispatch(job_id, priority=priority)
         if dispatcher.publishes and not published:
-            log.warning("dispatch.not_published", job_id=job_id, kind="ingestion")
+            log.warning(
+                "dispatch.not_published", job_id=job_id, kind="ingestion", priority=priority.label
+            )
     for workspace_id in deletions:
         published = await dispatcher.dispatch_deletion(workspace_id)
         if dispatcher.publishes and not published:
@@ -287,13 +305,13 @@ def _peer_key(request: Request) -> str:
     return f"ip:{client.host}" if client is not None else "ip:unknown"
 
 
-def _enforce(request: Request, *, bucket: str, allowance: int, key: str) -> None:
+def _enforce(request: Request, *, bucket: str, allowance: int, key: str, cost: int = 1) -> None:
     settings: Settings = request.app.state.settings
     if not settings.rate_limit_enabled:
         return
     limiter: FixedWindowLimiter = request.app.state.rate_limiter
     decision = limiter.check(
-        key=key, bucket=bucket, limit=Limit(requests=allowance, window_seconds=60.0)
+        key=key, bucket=bucket, limit=Limit(requests=allowance, window_seconds=60.0), cost=cost
     )
     if not decision.allowed:
         # Warning, not info: on a healthy system nobody hits these, so every line
@@ -358,10 +376,36 @@ def peer_rate_limit(bucket: str, allowance: Callable[[Settings], int]) -> Callab
 AUTH_BUCKET = "auth"
 QA_BUCKET = "qa"
 UPLOAD_BUCKET = "upload"
+DISCOVERY_BUCKET = "discovery"
+ADD_BUCKET = "add"
 
 AuthRateLimit = Depends(peer_rate_limit(AUTH_BUCKET, lambda s: s.rate_limit_auth_per_minute))
 QaRateLimit = Depends(user_rate_limit(QA_BUCKET, lambda s: s.rate_limit_qa_per_minute))
 UploadRateLimit = Depends(user_rate_limit(UPLOAD_BUCKET, lambda s: s.rate_limit_upload_per_minute))
+DiscoveryRateLimit = Depends(
+    user_rate_limit(DISCOVERY_BUCKET, lambda s: s.rate_limit_discovery_per_minute)
+)
+
+
+def _add_rate_limit(request: Request, scope: TenantDep, body: AddDiscoveredPapers) -> None:
+    """Limit adding discovered papers, counting each PAPER rather than the request (D133).
+
+    Each paper is a lookup share, a paced fetch, a parse and an embedding pass, so
+    ten papers in one request must cost what ten requests would. The body is the
+    route's own (same name, same model), which FastAPI parses once; a malformed
+    body is a 422 before this runs and spends nothing.
+    """
+    _enforce(
+        request,
+        bucket=ADD_BUCKET,
+        allowance=request.app.state.settings.rate_limit_add_per_minute,
+        key=f"user:{scope.user_id}",
+        cost=len(body.papers),
+    )
+
+
+_add_rate_limit.rate_limit_bucket = ADD_BUCKET  # type: ignore[attr-defined]
+AddRateLimit = Depends(_add_rate_limit)
 
 IndexDep = Annotated[VectorIndex, Depends(get_index)]
 EmbedderDep = Annotated[Embedder, Depends(get_embedder)]
@@ -479,3 +523,63 @@ def answer_use_case(
 AddPaperDep = Annotated[AddPaperUseCase, Depends(add_paper_use_case)]
 RemovePaperDep = Annotated[RemovePaperUseCase, Depends(remove_paper_use_case)]
 AnswerDep = Annotated[AnswerQuestionUseCase, Depends(answer_use_case)]
+
+
+def get_discovery_sources(request: Request) -> list[ConfiguredSource]:
+    """The process's sources: built once, because each breaker and the arXiv pacer
+    are state that must outlive a request (D104, D123)."""
+    sources: list[ConfiguredSource] = request.app.state.discovery_sources
+    return sources
+
+
+def discover_use_case(request: Request) -> DiscoverPapersUseCase:
+    settings: Settings = request.app.state.settings
+    cache = getattr(request.app.state, "discovery_cache", None)
+    embedder = getattr(request.app.state, "embedder", None)
+    return DiscoverPapersUseCase(
+        get_discovery_sources(request),
+        # Absent means uncached, which is correct, not broken: a cache can only
+        # ever turn a source call into a miss (D127).
+        cache=cache,
+        # Dense with the app's encoder, its work vectors in the same cache (D153);
+        # lexical where no encoder is wired. A cache that is not a vector cache
+        # (a test double) leaves the vectors uncached, never the search broken.
+        relevance=(
+            DenseRelevance(embedder, cache if isinstance(cache, VectorCache) else None)
+            if embedder is not None
+            else None
+        ),
+        # The add endpoint's allowlist, so the record each work offers is one add
+        # will accept (D147).
+        allowed_hosts=host_allowlist(settings.fetch_allowed_hosts),
+        deadline_seconds=settings.discovery_deadline_seconds,
+    )
+
+
+DiscoverDep = Annotated[DiscoverPapersUseCase, Depends(discover_use_case)]
+
+
+def add_discovered_use_case(
+    request: Request,
+    session: SessionDep,
+    scope: TenantDep,
+    workspace_repo: WorkspacesDep,
+    paper_repo: PapersDep,
+) -> AddDiscoveredPapersUseCase:
+    settings: Settings = request.app.state.settings
+    return AddDiscoveredPapersUseCase(
+        workspaces=workspace_repo,
+        papers=paper_repo,
+        chunks=SqlChunkRepository(session, scope),
+        # Same session as the repositories: papers, memberships and jobs are one
+        # transaction (D47), so a batch that fails part-way leaves nothing (D133).
+        queue=PostgresQueue(session, scope),
+        # The process's sources, so a lookup passes through the same breakers and
+        # the same arXiv pacer as a search (D123, D133).
+        sources={c.source.name: c.source for c in get_discovery_sources(request)},
+        allowed_hosts=host_allowlist(settings.fetch_allowed_hosts),
+        owner_id=scope.user_id,
+    )
+
+
+AddDiscoveredDep = Annotated[AddDiscoveredPapersUseCase, Depends(add_discovered_use_case)]

@@ -1,0 +1,55 @@
+{
+ "dataset": "scholiast-m4-discovery-pools-arxiv-a1",
+ "decision": "D120",
+ "protocol_sha256": "b23f235ea5314c6a3a2db73f48fbce80060c549c840577e166926021a850dd79",
+ "file": "discovery-pools-arxiv-a1.json.gz",
+ "sha256": "e7f31a79cba478c11a2431186ef365d637ab452270d13e921a291ae1375c9333",
+ "bytes": 901697,
+ "entries": 35,
+ "by_construction_and_phrasing": {
+  "AND/keyword": 9,
+  "OR/keyword": 10,
+  "AND/natural_language": 8,
+  "OR/natural_language": 8
+ },
+ "recorded_from": "2026-10-02T03:33:21.483+00:00",
+ "recorded_to": "2026-10-02T06:28:48.269+00:00",
+ "licence": "arXiv metadata CC0",
+ "request": {
+  "method": "GET",
+  "url": "https://export.arxiv.org/api/query",
+  "params": {
+   "search_query": "<constructed>",
+   "start": 0,
+   "max_results": 50,
+   "sortBy": "relevance",
+   "sortOrder": "descending"
+  }
+ },
+ "query_construction": "terms = the normalised text split on every character that is not a letter or digit; drop arxiv_stopwords and tokens shorter than 2 characters; de-duplicate keeping first occurrence. search_query = 'all:<t1> AND all:<t2> AND ...'.",
+ "addendum": {
+  "question": "Does joining the query words with OR instead of AND put more anchors in arXiv's top 50?",
+  "why": "arXiv missed ASM-1d (35% of anchors in its top 50 for the keyword phrasing), and at least 7 of its 13 misses lack a query word in any form, so the AND construction excluded them before arXiv ranked anything (SPIKE-FINDINGS-M4.md 1d).",
+  "queries": "The 20 P1 queries: 10 topics x keyword and natural_language. Terms are built exactly as query_construction.arxiv; search_query joins them with ' AND ' (the same-day control) or ' OR ' (the treatment). Every other parameter as sources.arxiv.search.params. 40 requests.",
+  "order": "Seeded with stream '<seed>/A1': the 20 queries are shuffled, and within each query the order of AND and OR is shuffled.",
+  "pacing": "pacing['export.arxiv.org']: 3 s from the previous response end, one connection. Retry-After and the host-stop rule apply as in pacing.",
+  "budget": {
+   "max": {
+    "queries": 40
+   },
+   "planned": {
+    "queries": 40
+   }
+  },
+  "no_repeats": "As rules: a failure is an outcome, and no A1 request is repeated.",
+  "measure": "Per construction and phrasing: anchors in the top 10 and top 50 (definitions.anchor_match, using the ids P2 verified), results returned, the reported total, and the zero-result rate. Latency per construction is reported, comparable because both run in the same window, and is not a decision input.",
+  "decision_rule": "Adopt OR iff, for the keyword phrasing, OR's top-50 anchor recall is >= 50% and strictly greater than the same-day AND's. Otherwise AND stays. If OR beats AND but is below 50%, AND stays and the gap is reported to the owner.",
+  "outputs": "Responses to data/eval/discovery-pools-arxiv-a1.json.gz with a manifest (arXiv metadata, CC0); numbers under addendum_a1 in spike/results/19_discovery_analysis.json; a section in SPIKE-FINDINGS-M4.md. The spike's committed pools are not changed.",
+  "does_not_establish": [
+   "Anchor recall counts 20 famous papers and is blind to precision; OR may return more off-topic papers, which only phase 8's judged set can measure.",
+   "ASM-1 is not recomputed: a construction chosen after the fact cannot pass a bar retroactively.",
+   "One alternative is tested, so the anchors choose between two constructions, not among many."
+  ]
+ },
+ "caveat": "The pools reflect this protocol's query construction. If phase 2 changes it or the page size, the pools are re-recorded through the real adapters before any judging. Judgments attach to papers, not positions, so any already made carry over."
+}

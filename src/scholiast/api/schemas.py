@@ -13,10 +13,12 @@ a workspace called nothing.
 
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Annotated
+from datetime import date, datetime
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+
+from scholiast.application.use_cases.add_discovered import MAX_ADD_PAPERS
 
 
 class _Input(BaseModel):
@@ -220,3 +222,186 @@ class TokenPair(BaseModel):
     #: the one a client actually schedules against.
     expires_in: int
     user_id: str
+
+
+# -- discovery (FR-D1, FR-D6, D122) ---------------------------------------------
+
+
+class DiscoverySearch(_Input):
+    #: A topic or a question. Searchability (a letter or digit) is the domain's
+    #: rule, so a query of punctuation is a 400 from the use case, not a 422 here.
+    query: NonBlank = Field(max_length=500)
+    #: FR-D8's filters, applied after ranking (D152). Years are the work's
+    #: earliest year (D147): when it first appeared, preprint or not.
+    year_from: int | None = Field(default=None, ge=1000, le=3000)
+    year_to: int | None = Field(default=None, ge=1000, le=3000)
+    #: Excludes works whose count is unknown: "unknown" cannot satisfy "at least N".
+    min_citations: int | None = Field(default=None, ge=0, le=10**9)
+    #: Case-insensitive substring of the venue.
+    venue: str | None = Field(default=None, min_length=1, max_length=200)
+    sort: Literal["score", "citations", "year"] = "score"
+
+    @model_validator(mode="after")
+    def _a_year_range_is_not_empty(self) -> DiscoverySearch:
+        if (
+            self.year_from is not None
+            and self.year_to is not None
+            and self.year_from > self.year_to
+        ):
+            raise ValueError("year_from is after year_to, so nothing could match")
+        return self
+
+
+class OpenAccessLinkOut(BaseModel):
+    url: str
+    #: What the SOURCE claims the link is ("pdf" or "landing"). The claim was wrong
+    #: in both directions in the spike, so a client must not treat it as a fact.
+    kind: str
+    licence: str | None = None
+
+
+class WorkMemberOut(BaseModel):
+    """One source's record of a work: where that source put it."""
+
+    source: str
+    source_id: str
+    #: The position in that source's own results, 1-based.
+    source_rank: int
+
+
+class PaperRefOut(BaseModel):
+    """A record to send to the add endpoint as it is: `{"papers": [<this>]}`."""
+
+    source: str
+    source_id: str
+
+
+class ScorePartsOut(BaseModel):
+    """Why this work ranked where it did (FR-D5): each part in [0, 1].
+
+    A part named in `imputed` was not measured for this work (an arXiv-only paper
+    has no citation count): it is the search's median, so it neither helps nor
+    hurts, and the score is still exactly the weighted sum of these numbers (D152).
+    """
+
+    relevance: float
+    citation_impact: float
+    recency: float
+    imputed: list[Literal["citation_impact", "recency"]] = Field(default_factory=list)
+
+
+class WorkOut(BaseModel):
+    """One paper, however many sources returned it (FR-D1, FR-D3, D147).
+
+    Title, authors, venue and published date are the `add` record's, so what is shown
+    is what will be added. The rest is merged across `members`: a publisher DOI, the
+    arXiv id, the earliest year, the longest abstract, the largest citation count and
+    every open-access link once.
+    """
+
+    #: Every source record of this paper, in the search's interleaved order.
+    members: list[WorkMemberOut]
+    #: The weighted sum of `score_parts` under `ranking.weights` (FR-D4).
+    score: float
+    score_parts: ScorePartsOut
+    #: The record to add this paper by: one the fetcher can follow, if any is.
+    add: PaperRefOut
+    title: str
+    authors: list[str]
+    year: int | None = None
+    published: date | None = None
+    venue: str | None = None
+    abstract: str | None = None
+    #: None when the source reports none, which arXiv never does. Never 0 for unknown.
+    citation_count: int | None = None
+    doi: str | None = None
+    arxiv_id: str | None = None
+    open_access: list[OpenAccessLinkOut] = Field(default_factory=list)
+
+
+class SourceStatusOut(BaseModel):
+    """What happened to one source in this search (FR-D6)."""
+
+    source: str
+    status: Literal["ok", "timeout", "rate_limited", "error", "circuit_open"]
+    results: int
+    total_hits: int | None = None
+    #: When the source said, or our pacing knows, when it will accept work again.
+    retry_after_seconds: float | None = None
+    #: Whether this source's page came from the cache rather than the source (D127).
+    #: Per user, so it reveals nothing about anyone else's searches.
+    cached: bool = False
+    #: How old a cached page is, in seconds; at most a day (D127).
+    age_seconds: float | None = None
+
+
+class RankingWeightsOut(BaseModel):
+    relevance: float
+    citation_impact: float
+    recency: float
+
+
+class RankingOut(BaseModel):
+    """How `results` were scored (FR-D4, D151, D153)."""
+
+    #: The ranker build (NFR-M5).
+    version: str
+    #: "dense", or "lexical" when the encoder failed and relevance fell back.
+    relevance: Literal["dense", "lexical"]
+    weights: RankingWeightsOut
+    #: Ages, for citation impact and recency, are counted from this year.
+    year: int
+
+
+class ExcludedOut(BaseModel):
+    """How many works each filter removed (FR-D8), first filter that applied."""
+
+    year: int = 0
+    citations: int = 0
+    venue: int = 0
+    #: Of `citations`, how many were removed because their count is unknown.
+    unknown_citations: int = 0
+
+
+class DiscoveryResults(BaseModel):
+    #: One entry per paper, not per source record (FR-D3), filtered and ordered.
+    results: list[WorkOut]
+    source_status: list[SourceStatusOut]
+    #: True whenever any source did not answer (FR-D6).
+    partial: bool
+    #: How `results` is ordered: by score (default), citations or year, unknowns last.
+    ordering: Literal["score", "citations", "year"] = "score"
+    ranking: RankingOut
+    excluded: ExcludedOut = Field(default_factory=ExcludedOut)
+
+
+# -- adding discovered papers (D133, D137) ---------------------------------------
+
+
+class DiscoveredPaperRef(_Input):
+    """One paper to add, exactly as search returned it: never a URL, never metadata."""
+
+    source: NonBlank = Field(max_length=32)
+    source_id: NonBlank = Field(max_length=64)
+
+
+class AddDiscoveredPapers(_Input):
+    #: All added, or none (D133).
+    papers: list[DiscoveredPaperRef] = Field(min_length=1, max_length=MAX_ADD_PAPERS)
+
+
+class AddedPaperOut(BaseModel):
+    source: str
+    source_id: str
+    paper_id: str
+    #: None when the paper was already here, or already indexed, and nothing was queued.
+    job_id: str | None
+    state: str
+    #: True when an existing paper of yours was reused rather than created (FR-I7).
+    deduplicated: bool
+
+
+class AddDiscoveredAccepted(BaseModel):
+    """`202` from the add endpoint: one entry per paper sent, in the order sent."""
+
+    papers: list[AddedPaperOut]

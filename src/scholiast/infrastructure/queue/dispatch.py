@@ -21,7 +21,9 @@ import asyncio
 
 from celery import Celery
 
+from scholiast.application.ports.queue import JobPriority
 from scholiast.infrastructure.queue.celery_app import (
+    BACKFILL_QUEUE,
     DELETE_TASK,
     INGEST_QUEUE,
     INGEST_TASK,
@@ -37,10 +39,12 @@ class CeleryDispatcher:
         app: Celery,
         *,
         queue: str = INGEST_QUEUE,
+        backfill_queue: str = BACKFILL_QUEUE,
         maintenance_queue: str = MAINTENANCE_QUEUE,
     ) -> None:
         self._app = app
         self._queue = queue
+        self._backfill_queue = backfill_queue
         self._maintenance_queue = maintenance_queue
 
     @property
@@ -48,16 +52,19 @@ class CeleryDispatcher:
         """True: a failed dispatch here is a real broker problem worth logging."""
         return True
 
-    async def dispatch(self, job_id: str) -> bool:
-        """Publish a wake-up for one committed job.
+    async def dispatch(
+        self, job_id: str, *, priority: JobPriority = JobPriority.INTERACTIVE
+    ) -> bool:
+        """Publish a wake-up for one committed job, on its priority's queue (D140).
 
         `send_task` opens a socket, so it runs off the event loop: the request
         that triggered it has already done its database work and a few
         milliseconds of broker I/O on the loop would be paid by every other
         in-flight request.
         """
+        queue = self._backfill_queue if priority is JobPriority.BACKFILL else self._queue
         try:
-            await asyncio.to_thread(self._send, job_id)
+            await asyncio.to_thread(self._send, job_id, queue)
         except Exception:
             # Deliberately broad. Any failure to reach the broker — connection
             # refused, auth, a serialisation bug in kombu — has the same
@@ -80,8 +87,8 @@ class CeleryDispatcher:
             return False
         return True
 
-    def _send(self, job_id: str) -> None:
-        self._app.send_task(INGEST_TASK, args=[job_id], queue=self._queue)
+    def _send(self, job_id: str, queue: str) -> None:
+        self._app.send_task(INGEST_TASK, args=[job_id], queue=queue)
 
     def _send_deletion(self, workspace_id: str) -> None:
         self._app.send_task(DELETE_TASK, args=[workspace_id], queue=self._maintenance_queue)
@@ -106,7 +113,12 @@ class NullDispatcher:
         """
         return False
 
-    async def dispatch(self, job_id: str) -> bool:  # noqa: ARG002 - the point is to do nothing
+    async def dispatch(
+        self,
+        job_id: str,  # noqa: ARG002 - the point is to do nothing
+        *,
+        priority: JobPriority = JobPriority.INTERACTIVE,  # noqa: ARG002 - as above
+    ) -> bool:
         return False
 
     async def dispatch_deletion(self, workspace_id: str) -> bool:  # noqa: ARG002 - as above

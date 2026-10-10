@@ -1,0 +1,37 @@
+{
+ "pools": "discovery-pools.json.gz",
+ "pools_sha256": "d0f65e842ccb4860efaa406a1822fe7dde0156a601ba6acd5bdf0bc5a309f3d1",
+ "files": {
+  "openalex_search.json": {
+   "rid": "P1/t01-keyword/openalex",
+   "url": "https://api.openalex.org/works?search=retrieval-augmented+generation+long+documents&per_page=50&select=id%2Cdoi%2Ctitle%2Cdisplay_name%2Cpublication_year%2Cpublication_date%2Cids%2Ctype%2Cauthorships%2Cprimary_location%2Clocations%2Cbest_oa_location%2Copen_access%2Ccited_by_count%2Cabstract_inverted_index%2Crelevance_score",
+   "kept_work_ids": [
+    "https://openalex.org/W4389984066",
+    "https://openalex.org/W3015883388",
+    "https://openalex.org/W4410705984"
+   ],
+   "why": "W3015883388: arXiv id only through a location URL; W4410705984: no abstract and no pdf_url, only an oa_url landing page; W4389984066: an arXiv DataCite DOI"
+  },
+  "openalex_400_wildcard.json": {
+   "rid": "P1/t01-natural_language/openalex",
+   "url": "https://api.openalex.org/works?search=how+can+retrieval-augmented+generation+work+over+long+documents%3F&per_page=50&select=id%2Cdoi%2Ctitle%2Cdisplay_name%2Cpublication_year%2Cpublication_date%2Cids%2Ctype%2Cauthorships%2Cprimary_location%2Clocations%2Cbest_oa_location%2Copen_access%2Ccited_by_count%2Cabstract_inverted_index%2Crelevance_score",
+   "status": 400,
+   "why": "OpenAlex's real refusal of a '?' in stemmed search (D117)"
+  },
+  "arxiv_search.xml": {
+   "rid": "P1/t03-keyword/arxiv",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Adense+AND+all%3Apassage+AND+all%3Aretrieval+AND+all%3Aopen+AND+all%3Adomain+AND+all%3Aquestion+AND+all%3Aanswering&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "kept": "the first 3 entries"
+  },
+  "arxiv_superseded_duplicate.xml": {
+   "rid": "P1/t05-keyword/arxiv",
+   "url": "https://export.arxiv.org/api/query?search_query=all%3Astate+AND+all%3Aspace+AND+all%3Amodels+AND+all%3Along+AND+all%3Asequence+AND+all%3Amodeling&start=0&max_results=50&sortBy=relevance&sortOrder=descending",
+   "kept": "the 2507.20128v2 entry, rank 5 in the original",
+   "why": "the spike's one arXiv 404 was a link rebuilt from this entry's bare id"
+  },
+  "arxiv_error.xml": {
+   "hand_written": true,
+   "why": "the spike never received an arXiv error feed; this follows the format arXiv's API manual documents (a 200 whose single entry has an id under /api/errors)"
+  }
+ }
+}

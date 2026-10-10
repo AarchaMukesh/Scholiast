@@ -5,27 +5,35 @@ and groundedness are **measured rather than asserted**. Portfolio project for ML
 Engineer interviews; the measurement discipline *is* the differentiator, not the
 feature list.
 
-**Status:** M0, M1, M2 and **M3 complete**, built one phase per commit. M1 was the spine —
+**Status:** M0–M3 and **M4 complete**, built one phase per commit. M1 was the spine —
 schema, repositories, parser, index, pipeline, QA, API. M2 is the thesis: D-RET, the metric
 pipeline, four retrieval arms, the ablation axes, the GPU contention number and a CI
 regression gate. M3 is the operational surface: auth, three-layer tenant isolation, Celery,
-the §4.4.1 failure taxonomy, cascade deletion across three stores, a provider circuit
-breaker, observability, and rate limiting. **1218 tests, five gates green.** M4 is next:
-the discovery engine.
+the §4.4.1 failure taxonomy, cascade deletion, a circuit breaker, observability, rate
+limiting. M4 is the discovery engine: OpenAlex and arXiv under one deadline, per-user page
+cache, the SSRF-guarded PDF fetcher, add-by-identifier through `backfill`, a rules-first
+dedup, a fitted ranker that explains every score, and a UI that logs in again. **1929
+tests, five gates green.** M5 is next: grounding and comparison.
 
-**Read `docs/milestone-logs/M3-MILESTONE-LOG.md` before starting M4**, then M2's for the
-retrieval numbers. Milestone logs are the only tracked files under `docs/` (D67), and each
-one's "what this does **not** establish" section sits above its findings on purpose.
+**Read `docs/milestone-logs/M4-MILESTONE-LOG.md` before starting M5**, then M3's and M2's.
+Milestone logs are the only tracked files under `docs/` (D67), and each one's "what this
+does **not** establish" section sits above its findings on purpose.
 
-**M4 has two recorded preconditions** (M3 log §9): build the SSRF allowlist D115 moved
-there — discovery is the first thing that dereferences a URL it did not choose — and
-produce work on the `backfill` queue, which exists and is empty.
+**M4 criterion 1 (NFR-P1) is NOT MET AS WRITTEN — do not report it as met** (D158, D160).
+Cached searches meet 400 ms easily (p95 42 ms, zero outbound calls); cold searches do not
+meet 3.0 s at p95, because 4 of 29 lost both sources and OpenAlex answered inside the
+2.0 s deadline on only 15 of 29. Measured cause: OpenAlex's body takes a near-constant
+0.80 s after headers on a fresh connection per search, so it fits only when headers come
+by ~1.2 s. The next experiment is a pooled connection per source, pre-registered as its
+own change — not a longer deadline or a retry slipped into something else (M4 log §3).
 
-**One of M3's eight acceptance criteria was amended rather than met**, by two decisions,
-both because a design document described behaviour the code could not perform: §5.11's `reranker_unavailable`
-and `dense_retrieval_unavailable` rungs are vacuous (D105), and `local_generation` now
-describes the happy path (D106). FR-O4 tracing is deferred (D109). Do not re-argue these
-either — they are in the M3 log §3.
+**Live calls to the sources go through `spike/m4-protocol.json`**: every M4 live pass (the
+spike, A1–A4) was pre-registered with its rule and budget and approved by hash before its
+first request (`APPROVED_PROTOCOL_SHA256` in `spike/scripts/m4_common.py`). Keep doing that.
+
+**Two earlier criteria were amended rather than met**, both because a design document
+described behaviour the code could not perform: M3's §5.11 rungs (D105, D106; M3 log §3).
+FR-O4 tracing is deferred (D109). Do not re-argue these.
 
 **Retrieval quality is now measured, and three of its four headline results are
 negative.** Do not re-argue any of these — they cost a phase each:
@@ -45,7 +53,7 @@ negative.** Do not re-argue any of these — they cost a phase each:
 
 ## Read this first
 
-**`docs/00-decisions-log.md` is the source of truth.** D1–D115, and several *reverse*
+**`docs/00-decisions-log.md` is the source of truth.** D1–D160, and several *reverse*
 what the earlier design docs say — including two that reverse *other decisions*.
 Reading doc 5, 6 or 7 without the log will lead you to recommend things already
 measured against:
@@ -83,7 +91,9 @@ measurements against a specific commit, so it belongs in history with it.
 
 | File | What it holds |
 |---|---|
-| `docs/00-decisions-log.md` | D1–D115 + measured hardware baseline. **Start here.** |
+| `docs/00-decisions-log.md` | D1–D160 + measured hardware baseline. **Start here.** |
+| `docs/milestone-logs/M4-MILESTONE-LOG.md` | M4's close-out: 6/7 criteria as written and **1 not met (NFR-P1 cold) with its cause measured**, its defects and what found them, 305 mutations, debt to M5/M6 |
+| `SPIKE-FINDINGS-M4.md` · `spike/m4-protocol.json` | M4's live-source spike and its pre-registered addenda A1–A4, with their results under `spike/results/` |
 | `docs/milestone-logs/M3-MILESTONE-LOG.md` | M3's close-out: 7/8 criteria as written and 1 amended with cause, 15 defects and what found them, 96 mutations, debt to M4/M6 |
 | `docs/milestone-logs/M2-MILESTONE-LOG.md` | M2's close-out: 8/8 criteria, every measurement with its interval, 16 defects and what found them, debt to M3/M5/M6 |
 | `docs/milestone-logs/M1-MILESTONE-LOG.md` | M1's close-out: 7/7 criteria, what is *not* measured, debt to M2/M3/M5 |
@@ -204,6 +214,8 @@ Every one of these cost real time in M0 or M1. Do not rediscover them.
 | **Warm models before any clock that divides by wall-clock** | Whichever condition touches a model first pays its load. Per-query percentiles survive it (they have warm-ups); throughput does not — it once deflated a gated arm by a fifth, nearly publishing "the gate costs 32% of ingestion" when it costs 17% |
 | **The corpus text is LaTeX-derived, and carries `BIBREF` markers** | QASPER's `full_text` comes from arXiv LaTeX, not the typeset PDF: **47.8% of indexed chunks contain `BIBREF<n>`**, which the lexical tokenizer indexes as real terms (`bibref0`…). It qualifies every lexical result, and it is why judgments cannot be transferred to a GROBID build by string matching (T12, D81) |
 | **The Grep tool cannot see `docs/`** | `docs/` is gitignored (D12) and ripgrep skips ignored files, so a Grep over `docs/` returns "No matches found" even when the text is there. This nearly produced a false report that a docstring misattributed a quote. Use bash `grep -rn ... docs/` for anything under `docs/` |
+| **⚠️ Modern standby stops a long run, whatever the keep-awake hold says** | The app's hold prevents *idle* sleep only. During M4's live run the laptop entered modern standby twice in 14 minutes on mains power, once 2 s into a timed search, and the client's 120 s timeout looked like the app had hung. **Before debugging a hang or a gap in a long run, check Kernel-Power events 506 (enter) and 507 (exit) in the System log for that minute.** Write measurements to disk as they happen, so a standby costs the search in flight and nothing else (D160) |
+| **A refused connection takes Windows 2.04 s to report** | It retries a closed port before giving up (measured). Under discovery's 2.0 s deadline a refused source is therefore indistinguishable from a hung one and reads `timeout`, not `error`; on Linux a refusal is immediate. To make a source fail fast in a test or demo on Windows, have something answer with an error status — and not 503 for arXiv, which the adapter reads as throttling (D159) |
 
 **Dev topology:** backing services in Docker; **API and worker run natively on Windows**
 for direct GPU access. CI runs the fully containerized Linux path so the two cannot
@@ -248,6 +260,25 @@ under `var/eval/` (gitignored).
 | Retrieval stage, idle | rerank p50 **156–159 ms**, whole stage p95 **~221 ms** against NFR-P2's 800 ms |
 | Under concurrent ingestion | rerank p95 **372 ms ungated → 289 ms gated**; ingestion pays 17% (209 → 173 chunks/s). NFR-P2 holds in every condition |
 | Reproducibility | **exact** for metrics — 124/124 values identical across runs. Latency is not, and says so |
+
+---
+
+## Measured discovery (M4)
+
+Quote these, with their caveats. Full detail in the M4 milestone log; live results in
+`spike/results/20_discovery_live.json`.
+
+| | |
+|---|---|
+| **NFR-P1, live (A4)** | **cached p95 42 ms** ✅, zero outbound calls · **cold: not met** ❌ — 4/29 lost both sources; the 25 that answered p50 2.28 s, max 2.44 s |
+| Source completion inside 2.0 s (A4) | OpenAlex **15/29** (52%) · arXiv **22/29** (76%). A3 the day before had OpenAlex at 18/20 — it varies by day |
+| OpenAlex on a fresh connection | headers p50 0.99 s, then the body a near-constant **0.80 s** (290–330 KB) |
+| A cold search's own cost | dense ranking p50 0.29 s, p95 0.42 s; everything outside the use case p50 4 ms |
+| First search after a start | **0.59–0.82 s** with the encoder warmed at boot (D156), against 16.2 s before; boot 7.6–11.5 s |
+| Model load | 32 requests to huggingface.co and 7.7–11.1 s without `local_files_only`; 1.2 s from the local copy (D157) |
+| Dedup, held out (D148) | precision **1.000** [0.930, 1.000], recall **0.927** [0.827, 0.971]; identifiers alone 0.291 |
+| Ranker, held out (D153) | nDCG@10 **+0.053** [+0.003, +0.100] over the sources' order; dense 0.8 · recency 0.2 · citation 0.0, fitted |
+| OA PDF reachable (ASM-2) | 83.9% of 180 works; **74.4%** through the three-host allowlist (D130) |
 
 ---
 

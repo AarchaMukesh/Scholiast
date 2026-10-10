@@ -32,7 +32,7 @@ count without bound.
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from contextlib import AbstractAsyncContextManager
 
 from prometheus_client import CollectorRegistry, Counter, Gauge, generate_latest
@@ -40,6 +40,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from scholiast.application.ports.llm import TokenUsage
+from scholiast.application.ports.queue import JobPriority
 
 CONTENT_TYPE = "text/plain; version=0.0.4; charset=utf-8"
 
@@ -99,6 +100,33 @@ BREAKER_STATE = Gauge(
 
 _BREAKER_VALUES = {"closed": 0, "half_open": 1, "open": 2}
 
+DISCOVERY_SOURCE_OUTCOMES = Counter(
+    "scholiast_discovery_source_outcomes_total",
+    "Discovery searches by source and outcome: ok, timeout, rate_limited, error, "
+    "circuit_open (D122). Without it, arXiv skipped by its pacing on most searches "
+    "(D123) would be invisible.",
+    ("source", "status"),
+    registry=REGISTRY,
+)
+
+DISCOVERY_CACHE = Counter(
+    "scholiast_discovery_cache_total",
+    "Discovery cache operations by source, operation (get, put) and outcome: hit, "
+    "miss, unreadable, stored, error, bypassed (its breaker open). D108 dropped "
+    "cache hit rate because no cache existed; D127 gives it one.",
+    ("source", "operation", "outcome"),
+    registry=REGISTRY,
+)
+
+DISCOVERY_SOURCE_DURATION = Gauge(
+    "scholiast_discovery_source_duration_seconds_last",
+    "Time from the most recent search's start to this source's outcome. A gauge, "
+    "for HTTP_DURATION's reason: the deadline is checked by measured runs, not read "
+    "off a dashboard (D122, D125).",
+    ("source",),
+    registry=REGISTRY,
+)
+
 # -- read at scrape time: facts about the work (D111) ----------------------
 
 QUEUE_DEPTH = Gauge(
@@ -110,8 +138,11 @@ QUEUE_DEPTH = Gauge(
 
 OLDEST_JOB_AGE = Gauge(
     "scholiast_ingestion_oldest_job_age_seconds",
-    "Age of the oldest claimable job. The queue-is-not-draining alarm: depth "
-    "alone cannot distinguish a busy queue from a stalled one.",
+    "Age of the oldest claimable job, per priority. The queue-is-not-draining "
+    "alarm: depth alone cannot distinguish a busy queue from a stalled one, and "
+    "one number for both priorities would hide a starved backfill lane behind a "
+    "draining upload lane (D139). A job waiting out a host's Retry-After counts.",
+    ("priority",),
     registry=REGISTRY,
 )
 
@@ -173,6 +204,17 @@ def record_degradations(modes: tuple[str, ...]) -> None:
         DEGRADATIONS.labels(mode=mode).inc()
 
 
+def record_discovery(outcomes: Iterable[tuple[str, str, float]]) -> None:
+    """One search's per-source outcomes, as (source, status, seconds)."""
+    for source, status, seconds in outcomes:
+        DISCOVERY_SOURCE_OUTCOMES.labels(source=source, status=status).inc()
+        DISCOVERY_SOURCE_DURATION.labels(source=source).set(seconds)
+
+
+def record_discovery_cache(source: str, operation: str, outcome: str) -> None:
+    DISCOVERY_CACHE.labels(source=source, operation=operation, outcome=outcome).inc()
+
+
 def refresh_breaker_states(providers: object) -> None:
     """Read each breaker's state. Silent about providers that are not breakers.
 
@@ -209,12 +251,13 @@ async def refresh_work_gauges(sessions: SessionFactory) -> None:
         oldest = (
             await session.execute(
                 text(
-                    "SELECT COALESCE(MAX(EXTRACT(EPOCH FROM (now() - created_at))), 0) AS age "
+                    "SELECT priority, MAX(EXTRACT(EPOCH FROM (now() - created_at))) AS age "
                     "FROM ingestion_jobs WHERE state IN "
-                    "('queued', 'fetching', 'parsing', 'chunking', 'embedding')"
+                    "('queued', 'fetching', 'parsing', 'chunking', 'embedding') "
+                    "GROUP BY priority"
                 )
             )
-        ).scalar_one()
+        ).all()
         papers = (
             await session.execute(
                 text("SELECT state, count(*) AS n FROM workspace_papers GROUP BY state")
@@ -232,7 +275,11 @@ async def refresh_work_gauges(sessions: SessionFactory) -> None:
     QUEUE_DEPTH.clear()
     for row in jobs:
         QUEUE_DEPTH.labels(state=row.state).set(row.n)
-    OLDEST_JOB_AGE.set(float(oldest or 0.0))
+    # Every priority is reported, at zero when it has nothing waiting, so a
+    # dashboard never mistakes an absent series for a healthy one.
+    ages = {row.priority: float(row.age or 0.0) for row in oldest}
+    for priority in JobPriority:
+        OLDEST_JOB_AGE.labels(priority=priority.label).set(ages.get(int(priority), 0.0))
     PAPERS_BY_STATE.clear()
     for row in papers:
         PAPERS_BY_STATE.labels(state=row.state).set(row.n)

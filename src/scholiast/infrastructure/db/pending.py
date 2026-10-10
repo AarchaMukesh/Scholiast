@@ -20,8 +20,12 @@ from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-#: Ingestion job ids left by `PostgresQueue.enqueue` (D95).
+#: Ingestion job ids left by `PostgresQueue.enqueue` (D95): interactive work.
 PENDING_DISPATCH = "scholiast.pending_job_dispatch"
+#: Backfill job ids (D140). Their own key for the reason the deletion key below
+#: has one: they are published to a different queue, and a single list of bare
+#: ids would have nothing to say which.
+PENDING_BACKFILL_DISPATCH = "scholiast.pending_backfill_dispatch"
 
 #: Workspace ids left by `SqlWorkspaceRepository.soft_delete` (D99). A separate
 #: key rather than a tagged entry in the one above: the two are dispatched to

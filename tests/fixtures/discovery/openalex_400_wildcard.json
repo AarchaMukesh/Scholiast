@@ -1,0 +1,2 @@
+{"error":"Invalid query parameters error.","message":"Wildcards (* or ?) require exact (no-stem) search. The default search is stemmed, so the literal text before the wildcard is removed when the work is indexed and the search returns wrong results. Use the search.exact= parameter instead (or the default.search.exact filter), e.g. search.exact=how can retrieval-augmented generation work over long documents?."}
+

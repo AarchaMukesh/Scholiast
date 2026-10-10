@@ -1,0 +1,122 @@
+{
+ "dataset": "scholiast-m4-discovery-pools",
+ "decision": "D116",
+ "protocol_sha256": "6f46de9af888c2998f9c3faf61d8c902692e8e688db012aef307a098df820884",
+ "file": "discovery-pools.json.gz",
+ "sha256": "d0f65e842ccb4860efaa406a1822fe7dde0156a601ba6acd5bdf0bc5a309f3d1",
+ "bytes": 3773507,
+ "entries": 81,
+ "by_source_and_pass": {
+  "arxiv/P1/search": 20,
+  "openalex/P1/search": 25,
+  "arxiv/P2/lookup": 5,
+  "openalex/P2/lookup": 11,
+  "arxiv/P5/search": 10,
+  "openalex/P5/search": 10
+ },
+ "recorded_from": "2026-10-01T05:15:59.682+00:00",
+ "recorded_to": "2026-10-01T12:13:12.150+00:00",
+ "sources_included": [
+  "openalex",
+  "arxiv"
+ ],
+ "sources_excluded": {
+  "semantic_scholar": "licence restricts redistribution (D116); kept under var/spike/"
+ },
+ "licence": "OpenAlex data CC0; arXiv metadata CC0",
+ "requests": {
+  "openalex": {
+   "method": "GET",
+   "url": "https://api.openalex.org/works",
+   "params": {
+    "search": "<query>",
+    "per_page": 50,
+    "select": "id,doi,title,display_name,publication_year,publication_date,ids,type,authorships,primary_location,locations,best_oa_location,open_access,cited_by_count,abstract_inverted_index,relevance_score"
+   }
+  },
+  "arxiv": {
+   "method": "GET",
+   "url": "https://export.arxiv.org/api/query",
+   "params": {
+    "search_query": "<constructed>",
+    "start": 0,
+    "max_results": 50,
+    "sortBy": "relevance",
+    "sortOrder": "descending"
+   }
+  }
+ },
+ "query_construction": {
+  "normalise": "Unicode NFKC, casefold, collapse whitespace runs to one space, strip. Applied to every phrasing before any source-specific step; mirrors the cache-key normalisation proposed for production. Casefolding also stops a capitalised word being read as an OpenAlex boolean operator.",
+  "openalex": "search = the normalised text with every '?' and '*' replaced by a space and whitespace re-collapsed (DEV-2). OpenAlex reads both as wildcards and refuses them in its default, stemmed search.",
+  "semantic_scholar": "query = the normalised text with every '-' replaced by a space and whitespace re-collapsed. S2's API reference: hyphenated query terms yield no matches.",
+  "arxiv": "terms = the normalised text split on every character that is not a letter or digit; drop arxiv_stopwords and tokens shorter than 2 characters; de-duplicate keeping first occurrence. search_query = 'all:<t1> AND all:<t2> AND ...'.",
+  "arxiv_stopwords": [
+   "a",
+   "an",
+   "the",
+   "and",
+   "or",
+   "but",
+   "of",
+   "to",
+   "in",
+   "on",
+   "at",
+   "by",
+   "for",
+   "from",
+   "with",
+   "over",
+   "into",
+   "via",
+   "as",
+   "is",
+   "are",
+   "was",
+   "were",
+   "be",
+   "been",
+   "being",
+   "do",
+   "does",
+   "did",
+   "can",
+   "could",
+   "should",
+   "would",
+   "will",
+   "may",
+   "might",
+   "how",
+   "what",
+   "which",
+   "who",
+   "whom",
+   "whose",
+   "why",
+   "when",
+   "where",
+   "that",
+   "this",
+   "these",
+   "those",
+   "it",
+   "its",
+   "their",
+   "there"
+  ]
+ },
+ "deviations_after_approval": {
+  "DEV-2": {
+   "found": "Session 1, after 15 requests: all five OpenAlex searches sent (all natural_language, by the seeded order) returned HTTP 400, 'Wildcards (* or ?) require exact (no-stem) search', with X-RateLimit-Cost-USD 0. Every natural_language phrasing ends in '?'; no keyword or reversed_keyword phrasing contains '?' or '*'.",
+   "change": "query_construction.openalex: '?' and '*' become spaces. Applies to every OpenAlex search sent after the amendment.",
+   "repeats": "Each P1 OpenAlex search refused with HTTP 400 for a wildcard before the amendment is repeated once, after P1's last query and before P2, under request id <rid>/DEV-2, with the amended query. The repeat stands in for the refused request in the analysis, as DEV-1's would; the refusals stay in the log and are reported. The repeats run alone, not started together with the other two sources, and are marked. No other request is repeated.",
+   "dev1": "DEV-1 applies to the first OpenAlex search that is not refused for a wildcard, since the first search was refused before its select list was judged.",
+   "budget": "OpenAlex searches: 30 planned plus at most 5 repeats, within the maximum of 40.",
+   "s2": "Not a deviation, recorded here for one place: S2 keyless returned 429 on its first five requests, the pacing.host_stop trigger, and stays stopped for session 1 as pre-registered."
+  }
+ },
+ "note": "The OpenAlex searches DEV-2 repeats were first sent with the unamended query and refused with HTTP 400; both the refusal and the repeat are in the pools (D117).",
+ "caveat": "The pools reflect this protocol's query construction. If phase 2 changes it or the page size, the pools are re-recorded through the real adapters before any judging. Judgments attach to papers, not positions, so any already made carry over."
+}

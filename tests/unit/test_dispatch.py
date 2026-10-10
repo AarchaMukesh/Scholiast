@@ -20,18 +20,30 @@ here, is the *telling*:
 
 from __future__ import annotations
 
+import asyncio
+import re
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
 from scholiast.api.deps import _dispatch_committed_jobs
-from scholiast.infrastructure.db.pending import PENDING_DELETION_DISPATCH, PENDING_DISPATCH
+from scholiast.application.ports.queue import JobPriority
+from scholiast.config.settings import Settings
+from scholiast.infrastructure.db.pending import (
+    PENDING_BACKFILL_DISPATCH,
+    PENDING_DELETION_DISPATCH,
+    PENDING_DISPATCH,
+)
 from scholiast.infrastructure.queue.celery_app import (
+    BACKFILL_QUEUE,
     DELETE_TASK,
     INGEST_QUEUE,
     INGEST_TASK,
     MAINTENANCE_QUEUE,
     RECONCILE_TASK,
+    WORKER_QUEUES,
+    build_celery_app,
 )
 from scholiast.infrastructure.queue.dispatch import CeleryDispatcher, NullDispatcher
 
@@ -56,10 +68,14 @@ class RecordingDispatcher:
 
     def __init__(self) -> None:
         self.dispatched: list[str] = []
+        self.priorities: dict[str, JobPriority] = {}
         self.deleted: list[str] = []
 
-    async def dispatch(self, job_id: str) -> bool:
+    async def dispatch(
+        self, job_id: str, *, priority: JobPriority = JobPriority.INTERACTIVE
+    ) -> bool:
         self.dispatched.append(job_id)
+        self.priorities[job_id] = priority
         return True
 
     async def dispatch_deletion(self, workspace_id: str) -> bool:
@@ -71,13 +87,18 @@ class FakeSession:
     """Just the `info` dict the real session exposes."""
 
     def __init__(
-        self, pending: list[str] | None = None, deletions: list[str] | None = None
+        self,
+        pending: list[str] | None = None,
+        deletions: list[str] | None = None,
+        backfill: list[str] | None = None,
     ) -> None:
         self.info: dict[str, Any] = {}
         if pending is not None:
             self.info[PENDING_DISPATCH] = pending
         if deletions is not None:
             self.info[PENDING_DELETION_DISPATCH] = deletions
+        if backfill is not None:
+            self.info[PENDING_BACKFILL_DISPATCH] = backfill
 
 
 class FakeRequest:
@@ -180,15 +201,30 @@ class TestDispatchHappensAfterTheCommit:
         # One unreachable publish must not strand the other jobs in the same
         # transaction; each is independently recoverable by the lease anyway.
         class OneBadDispatcher(RecordingDispatcher):
-            async def dispatch(self, job_id: str) -> bool:
+            async def dispatch(
+                self, job_id: str, *, priority: JobPriority = JobPriority.INTERACTIVE
+            ) -> bool:
                 if job_id == "job-1":
                     return False
-                return await super().dispatch(job_id)
+                return await super().dispatch(job_id, priority=priority)
 
         dispatcher = OneBadDispatcher()
         session = FakeSession(["job-1", "job-2"])
         await _dispatch_committed_jobs(FakeRequest(dispatcher), session)  # type: ignore[arg-type]
         assert dispatcher.dispatched == ["job-2"]
+
+    async def test_a_backfill_job_is_dispatched_as_backfill(self) -> None:
+        # D140: its wake-up has to reach the backfill queue, so the priority has
+        # to survive from the enqueue, across the commit, to the dispatcher.
+        dispatcher = RecordingDispatcher()
+        session = FakeSession(["upload"], backfill=["discovered"])
+        await _dispatch_committed_jobs(FakeRequest(dispatcher), session)  # type: ignore[arg-type]
+        assert dispatcher.priorities == {
+            "upload": JobPriority.INTERACTIVE,
+            "discovered": JobPriority.BACKFILL,
+        }
+        await _dispatch_committed_jobs(FakeRequest(dispatcher), session)  # type: ignore[arg-type]
+        assert dispatcher.dispatched == ["upload", "discovered"], "a backfill id was re-sent"
 
 
 class TestTheTaskNameIsNotAccidental:
@@ -225,8 +261,10 @@ class TestTheTaskNameIsNotAccidental:
         from scholiast.workers import tasks
 
         scheduled = {entry["task"] for entry in tasks.app.conf.beat_schedule.values()}
-        assert scheduled == {RECONCILE_TASK}
+        # D141 added the ingestion sweep on purpose; anything else is a surprise.
+        assert scheduled == {RECONCILE_TASK, INGEST_TASK}
         assert RECONCILE_TASK in tasks.app.tasks
+        assert INGEST_TASK in tasks.app.tasks
 
     def test_maintenance_work_is_routed_off_the_ingest_queue(self) -> None:
         # D100. With `worker_prefetch_multiplier=1` a worker holds one message
@@ -265,3 +303,86 @@ async def test_the_dispatcher_does_not_validate_the_id(job_id: str) -> None:
     app = FakeCelery()
     assert await CeleryDispatcher(app).dispatch(job_id) is True
     assert app.sent[0][1] == [job_id]
+
+
+class TestBackfillIsProducedAndConsumed:
+    """D140: M3's precondition, and the trap M3's declaration fell into.
+
+    `backfill` was declared so a queue would exist before workers were deployed,
+    and the documented worker command still did not consume it. Publishing to it
+    then piles messages in Redis with nothing failing anywhere.
+    """
+
+    async def test_a_backfill_wake_up_goes_to_the_backfill_queue(self) -> None:
+        app = FakeCelery()
+        dispatcher = CeleryDispatcher(app)
+
+        await dispatcher.dispatch("discovered", priority=JobPriority.BACKFILL)
+        await dispatcher.dispatch("upload", priority=JobPriority.INTERACTIVE)
+
+        assert app.sent == [
+            (INGEST_TASK, ["discovered"], BACKFILL_QUEUE),
+            (INGEST_TASK, ["upload"], INGEST_QUEUE),
+        ]
+
+    async def test_the_null_dispatcher_takes_a_priority_and_still_does_nothing(self) -> None:
+        assert await NullDispatcher().dispatch("job", priority=JobPriority.BACKFILL) is False
+
+    def test_everything_routed_or_scheduled_lands_on_a_consumed_queue(self) -> None:
+        app = build_celery_app(Settings())
+        routed = {route["queue"] for route in app.conf.task_routes.values()}
+        scheduled = {entry["options"]["queue"] for entry in app.conf.beat_schedule.values()}
+        published = {INGEST_QUEUE, BACKFILL_QUEUE, MAINTENANCE_QUEUE}
+
+        assert routed | scheduled | published <= set(WORKER_QUEUES)
+
+    def test_the_documented_worker_command_consumes_every_queue(self) -> None:
+        from scholiast.workers import tasks
+
+        match = re.search(r"worker -Q (\S+)", tasks.__doc__ or "")
+        assert match is not None, "the worker command left the docstring"
+        assert tuple(match.group(1).split(",")) == WORKER_QUEUES
+
+    def test_the_broker_does_not_pretend_to_order_by_priority(self) -> None:
+        # D139: kombu's "priority" strategy ordered queues by string hash,
+        # differently in each process. The claim orders work; the broker must not
+        # look as though it does.
+        options = build_celery_app(Settings()).conf.broker_transport_options
+        assert "queue_order_strategy" not in options
+
+    def test_the_sweep_wakes_ingestion_on_its_own_interval(self) -> None:
+        sweep = build_celery_app(Settings(ingest_sweep_seconds=12.5)).conf.beat_schedule[
+            "ingest-sweep"
+        ]
+        assert sweep["task"] == INGEST_TASK
+        assert sweep["schedule"] == 12.5
+        assert sweep["options"]["queue"] == INGEST_QUEUE
+
+
+class TestAWakeUpDrainsWhatIsDue:
+    """D141: one wake-up, from an enqueue or from beat, clears every due job."""
+
+    def _run(self, monkeypatch: pytest.MonkeyPatch, *args: str) -> int:
+        from scholiast.workers import tasks
+
+        class Worker:
+            async def drain(self) -> int:
+                return 3
+
+            async def run_once(self) -> int:
+                raise AssertionError("a wake-up that runs one job leaves the rest waiting")
+
+        loop = asyncio.new_event_loop()
+        monkeypatch.setattr(
+            tasks, "_process_context", lambda: SimpleNamespace(loop=loop, worker=Worker())
+        )
+        try:
+            return int(tasks.ingest_paper(*args))
+        finally:
+            loop.close()
+
+    def test_an_enqueues_wake_up_drains(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        assert self._run(monkeypatch, "job-1") == 3
+
+    def test_the_sweep_needs_no_job_id(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        assert self._run(monkeypatch) == 3

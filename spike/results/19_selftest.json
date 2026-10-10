@@ -1,0 +1,176 @@
+{
+  "protocol_sha256": "7f9ee36501c99f9357b2561eb851d4f92378f0ee893608094526e25e2603d8de",
+  "at": "2026-10-08T10:37:08.740+00:00",
+  "address_table": {
+    "refuse": 16,
+    "accept": 3,
+    "wrong": []
+  },
+  "url_cases": 7,
+  "normalisation_cases": 13,
+  "addendum_a2": {
+    "failures": []
+  },
+  "admission": {
+    "per_host_cap_while_queued": {
+      "outcomes": [
+        "fetched",
+        "fetched",
+        "not_sent_budget"
+      ],
+      "sent": 2
+    },
+    "host_stopped_while_queued": {
+      "outcomes": [
+        "throttled",
+        "throttled",
+        "throttled",
+        "throttled",
+        "throttled",
+        "not_sent_host_stopped",
+        "not_sent_host_stopped"
+      ],
+      "sent": 5,
+      "refused_after_s": [
+        -0.0,
+        0.001
+      ]
+    },
+    "total_cap_while_waiting": {
+      "outcomes": [
+        "not_sent_budget",
+        "fetched",
+        "fetched"
+      ],
+      "sent": 2
+    },
+    "refusals": {
+      "outcomes": [
+        "refused",
+        "dns_error",
+        "refused",
+        "refused",
+        "refused",
+        "fetched"
+      ],
+      "sent": 2,
+      "reasons": [
+        "malformed:InvalidURL",
+        "scheme:ftp",
+        "address",
+        "label empty or too long",
+        "address"
+      ]
+    },
+    "transport_saw": {
+      "requests": 11,
+      "non_https_or_non_global": []
+    }
+  },
+  "containment": {
+    "failures": []
+  },
+  "resume": {
+    "failures": []
+  },
+  "planted": {
+    "arxiv-spacing": true,
+    "arxiv-org-spacing": true,
+    "other-host-spacing": true,
+    "budget": true,
+    "address": true,
+    "auto-redirect": true,
+    "missing-hop": true,
+    "overlap": true
+  },
+  "mutants": {
+    "arxiv-spacing": {
+      "caught": true,
+      "caught_by": [
+        "planted",
+        "clean"
+      ]
+    },
+    "budget": {
+      "caught": true,
+      "caught_by": [
+        "planted"
+      ]
+    },
+    "overlap": {
+      "caught": true,
+      "caught_by": [
+        "planted"
+      ]
+    },
+    "address": {
+      "caught": true,
+      "caught_by": [
+        "planted"
+      ]
+    },
+    "auto-redirect": {
+      "caught": true,
+      "caught_by": [
+        "planted"
+      ]
+    },
+    "missing-hop": {
+      "caught": true,
+      "caught_by": [
+        "planted"
+      ]
+    },
+    "pacer:admit-before-wait": {
+      "caught": true,
+      "caught_by": [
+        "admission: a stopped host's queued requests waited 1.00s for its Retry-After before being refused"
+      ]
+    },
+    "pacer:admit-after-wait": {
+      "caught": true,
+      "caught_by": [
+        "admission: shared cap filled while waiting gave ['raised RuntimeError', 'fetched', 'fetched']"
+      ]
+    },
+    "fetch:guard-address": {
+      "caught": true,
+      "caught_by": [
+        "refusals: gave ['refused', 'dns_error', 'refused', 'fetched', 'fetched', 'fetched'] with 4 sent",
+        "containment: the transport received ['https://10.0.0.1/a.pdf', 'https://127.0.0.1/x.pdf']"
+      ]
+    },
+    "a2-deadline": {
+      "caught": true,
+      "caught_by": [
+        "A2 rule: the deadline is inclusive: chose 15, want 25"
+      ]
+    },
+    "a2-anchors": {
+      "caught": true,
+      "caught_by": [
+        "A2 rule: half the anchors is enough: chose None, want 25"
+      ]
+    },
+    "a2-failures": {
+      "caught": true,
+      "caught_by": [
+        "A2 counts a failed request as finishing in time (D125)"
+      ]
+    },
+    "document:probe-s2-only": {
+      "caught": true,
+      "caught_by": [
+        "containment: the tracked probe document carries S2-only URL(s) ['https://cdn.example/f/oa.pdf', 'https://pub.example/oa.pdf']"
+      ]
+    },
+    "document:download-s2-only": {
+      "caught": true,
+      "caught_by": [
+        "containment: the tracked probe document carries S2-only URL(s) ['https://cdn.example/f/oa.pdf', 'https://pub.example/oa.pdf']"
+      ]
+    }
+  },
+  "failures": [],
+  "passed": true
+}

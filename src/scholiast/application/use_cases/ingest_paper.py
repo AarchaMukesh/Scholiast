@@ -1,4 +1,4 @@
-"""The ingestion pipeline: parse → chunk → embed → index (§5.4.2, §5.7.3).
+"""The ingestion pipeline: fetch → parse → chunk → embed → index (§5.4.2, §5.7.3).
 
 The asynchronous half. It is given a claimed job and ports, and it drives the
 §4.4.1 state machine through `PaperMembership.transition_to` rather than
@@ -28,28 +28,42 @@ path, so a duplicate would attribute a chunk to the wrong text and highlight the
 wrong span with nothing raising. The parser guarantees uniqueness; this checks it
 rather than trusting it, because the cost of being wrong is a silent citation
 defect and the cost of checking is one set comparison.
+
+**A paper with no PDF yet is fetched first** (D134). The stage is keyed on the
+data, `content_hash IS NULL`, not on how the job was made: an upload skips it, and
+so does a redelivery after a fetch that succeeded. The blob is stored before the
+hash is written, so a crash between the two re-fetches into the same key rather
+than leaving a hash with no PDF. If the owner already has these exact bytes, the
+workspace is pointed at that paper and this one is dropped.
 """
 
 from __future__ import annotations
 
+import asyncio
+import hashlib
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 
+from scholiast.application.ports.fetch import FetchAttempt, FetchFailed, PdfFetcher
 from scholiast.application.ports.ml import Embedder, GpuBudgetExceeded, TextRole
 from scholiast.application.ports.parsing import (
     DocumentParser,
     DocumentUnparseable,
     ParsedDocument,
 )
-from scholiast.application.ports.queue import Queue
+from scholiast.application.ports.queue import DEFAULT_LEASE_SECONDS, JobPriority, Queue
 from scholiast.application.ports.repositories import (
     ChunkRepository,
     PaperRepository,
     SectionRepository,
+    WorkspaceRepository,
 )
 from scholiast.application.ports.storage import ObjectNotFound, ObjectStore, source_key, tei_key
 from scholiast.application.ports.unit_of_work import UnitOfWork
 from scholiast.application.ports.vector import VectorIndex, VectorRecord
+from scholiast.application.use_cases.add_paper import attach_existing
+from scholiast.application.use_cases.purge_paper import PaperPurger
 from scholiast.domain.chunking import (
     SECTION_PATH_SEPARATOR,
     ChunkingConfig,
@@ -57,7 +71,8 @@ from scholiast.domain.chunking import (
     StructureAwareChunker,
 )
 from scholiast.domain.errors import FailureClass, IngestionFailure, InvariantViolation
-from scholiast.domain.paper import Chunk, Paper, ParseStatus, Section
+from scholiast.domain.paper import Chunk, Paper, PaperOrigin, ParseStatus, Section
+from scholiast.domain.upload import UploadRejected, validate_upload
 from scholiast.domain.workspace import PaperMembership, PaperState
 
 
@@ -76,6 +91,10 @@ class IngestionOutcome:
     chunks: int = 0
     embedded: int = 0
     failure: IngestionFailure | None = None
+    #: Set when the fetched PDF turned out to be one the owner already had (D134):
+    #: the workspace now holds that paper, this job is complete, and `paper_id`
+    #: has been deleted unless another workspace still holds it.
+    merged_into: str | None = None
 
     @property
     def succeeded(self) -> bool:
@@ -99,6 +118,9 @@ class IngestPaperUseCase:
         uow: UnitOfWork,
         chunking: ChunkingConfig | None = None,
         embed_batch_size: int | None = None,
+        workspaces: WorkspaceRepository | None = None,
+        fetcher: PdfFetcher | None = None,
+        lease_seconds: float = DEFAULT_LEASE_SECONDS,
     ) -> None:
         self._papers = papers
         self._sections = sections
@@ -111,9 +133,22 @@ class IngestPaperUseCase:
         self._uow = uow
         self._chunker = StructureAwareChunker(chunking)
         self._embed_batch_size = embed_batch_size
+        #: Both only for a paper awaiting its PDF (D134); an upload needs neither.
+        self._workspaces = workspaces
+        self._fetcher = fetcher
+        #: The worker's lease, which every heartbeat renews and which bounds the
+        #: fetch: half of it, so a slow chain of links and redirects cannot outlive
+        #: the claim and be run twice (D134).
+        self._lease_seconds = lease_seconds
 
     async def execute(
-        self, *, job_id: str, workspace_id: str, paper_id: str, membership: PaperMembership
+        self,
+        *,
+        job_id: str,
+        workspace_id: str,
+        paper_id: str,
+        membership: PaperMembership,
+        source_links: Sequence[str] = (),
     ) -> IngestionOutcome:
         try:
             return await self._run(
@@ -121,9 +156,15 @@ class IngestPaperUseCase:
                 workspace_id=workspace_id,
                 paper_id=paper_id,
                 membership=membership,
+                source_links=source_links,
             )
         except DocumentUnparseable as exc:
             return _failed(paper_id, exc.failure_class, exc.detail)
+        except _FetchStageFailed as exc:
+            # Classified where it happened (D134): a refused or missing link is
+            # SOURCE_UNAVAILABLE, not the TRANSIENT the catch-all below would make
+            # it, which would spend three paced requests rediscovering a 404.
+            return _failed(paper_id, exc.failure_class, exc.detail, retry_after=exc.retry_after)
         except ObjectNotFound as exc:
             # The blob the job points at is gone. Not retryable in any useful
             # sense — the bytes are not coming back — and distinct enough from a
@@ -151,11 +192,23 @@ class IngestPaperUseCase:
     # -- the pipeline ------------------------------------------------------
 
     async def _run(
-        self, *, job_id: str, workspace_id: str, paper_id: str, membership: PaperMembership
+        self,
+        *,
+        job_id: str,
+        workspace_id: str,
+        paper_id: str,
+        membership: PaperMembership,
+        source_links: Sequence[str],
     ) -> IngestionOutcome:
         paper = await self._papers.get(paper_id)
         if paper is None:
             raise InvariantViolation(f"job {job_id!r} references unreachable paper {paper_id!r}")
+
+        # -- fetch (D134) ------------------------------------------------------
+        if paper.content_hash is None:
+            merged_into = await self._fetch(job_id, workspace_id, membership, paper, source_links)
+            if merged_into is not None:
+                return IngestionOutcome(paper_id=paper_id, merged_into=merged_into)
 
         # -- parse ---------------------------------------------------------
         await self._advance(job_id, workspace_id, membership, PaperState.PARSING)
@@ -205,7 +258,7 @@ class IngestPaperUseCase:
         await self._advance(job_id, workspace_id, membership, PaperState.EMBEDDING)
         embeddable = result.embeddable
         embedded = await self._embed_and_index(
-            paper=paper, parsed=parsed, chunks=embeddable, workspace_id=workspace_id
+            paper=paper, chunks=embeddable, workspace_id=workspace_id
         )
 
         await self._advance(job_id, workspace_id, membership, PaperState.INDEXED)
@@ -220,7 +273,6 @@ class IngestPaperUseCase:
         self,
         *,
         paper: Paper,
-        parsed: ParsedDocument,
         chunks: list[Chunk],
         workspace_id: str,  # noqa: ARG002 - see D36
     ) -> int:
@@ -233,7 +285,11 @@ class IngestPaperUseCase:
         if not chunks:
             return 0
 
-        title = parsed.title or paper.title
+        # The row's title, after `_parsed_metadata`'s rule, so the title embedded
+        # and the title stored are one string by construction: `rebuild_index`
+        # re-embeds from the row and relies on that (D135, NFR-R6). For an upload
+        # it is `parsed.title or` the provisional title, exactly as before.
+        title = paper.title
         # The contextual header is applied here, at the only place that knows
         # both the chunk and its paper (ML-3). It is ~20 tokens and no LLM call,
         # and it is what marks a Related Work chunk as describing other work.
@@ -265,6 +321,113 @@ class IngestPaperUseCase:
             [chunk.id for chunk in chunks], self._embedder.version
         )
 
+    # -- fetching (D134) ------------------------------------------------------
+
+    async def _fetch(
+        self,
+        job_id: str,
+        workspace_id: str,
+        membership: PaperMembership,
+        paper: Paper,
+        links: Sequence[str],
+    ) -> str | None:
+        """Get this paper's PDF, or find that its owner already has it.
+
+        Returns the id of the paper this one merged into, or None to carry on into
+        PARSING with `paper.content_hash` set.
+        """
+        if self._fetcher is None or self._workspaces is None:
+            # A wiring fault, not a property of the paper: loud, never classified.
+            raise InvariantViolation(
+                f"paper {paper.id} awaits its PDF and this pipeline has no fetcher"
+            )
+        await self._advance(job_id, workspace_id, membership, PaperState.FETCHING)
+        # `_advance` committed, so no transaction is open across the fetch: a 15 s
+        # pacing wait must not hold a pooled connection, let alone a row lock.
+        deadline = self._lease_seconds / 2
+        try:
+            async with asyncio.timeout(deadline):
+                fetched = await self._fetcher.fetch(links)
+        except TimeoutError as exc:
+            raise _FetchStageFailed(
+                FailureClass.TRANSIENT, f"the fetch did not finish within {deadline:g} s"
+            ) from exc
+        except FetchFailed as exc:
+            raise _FetchStageFailed(
+                exc.failure_class, _attempts_detail(exc.attempts), retry_after=exc.retry_after
+            ) from exc
+        try:
+            # The fetcher already checked the size and the magic bytes; this is
+            # the upload path's own gate, so a fetched PDF passes the same one.
+            validate_upload(fetched.data, filename=f"{paper.id}.pdf")
+        except UploadRejected as exc:
+            raise _FetchStageFailed(exc.failure_class, exc.detail) from exc
+        content_hash = hashlib.sha256(fetched.data).hexdigest()
+
+        # The critical section, under this paper's row lock and nothing more.
+        locked = await self._papers.get_for_update(paper.id)
+        if locked is None:
+            raise _FetchStageFailed(
+                FailureClass.SOURCE_UNAVAILABLE,
+                "the paper was removed while its PDF was being fetched",
+            )
+        if locked.content_hash is None:
+            existing = await self._papers.find_by_content_hash(content_hash)
+            if existing is not None:
+                await self._merge(job_id, workspace_id, placeholder=paper, existing=existing)
+                return existing.id
+            # Blob first, then the hash (D134): a crash between them leaves a
+            # paper that re-fetches into the same key and converges, where the
+            # reverse would leave a hash with no PDF and tell the user to upload.
+            await self._store.put(
+                source_key(paper.id), fetched.data, content_type="application/pdf"
+            )
+            await self._papers.set_content_hash(paper.id, content_hash)
+        # Otherwise another job for this paper stored its PDF while this one was
+        # fetching. Its blob and hash stand; these bytes are dropped, never
+        # written over a blob that a different hash describes.
+        await self._uow.commit()
+        paper.content_hash = locked.content_hash or content_hash
+        return None
+
+    async def _merge(
+        self, job_id: str, workspace_id: str, *, placeholder: Paper, existing: Paper
+    ) -> None:
+        """Point the workspace at the paper the owner already has (D134).
+
+        The placeholder's membership goes and `existing` joins by the add's own
+        rules: INDEXED if it is indexed, otherwise QUEUED with a job of its own.
+        This job is complete, and the placeholder is deleted unless another
+        workspace still holds it. Nothing is re-homed if the user removed the
+        paper while it was being fetched: that would add back what they removed.
+        """
+        if self._workspaces is None:  # pragma: no cover - `_fetch` checked
+            raise InvariantViolation("merging needs the workspace repository")
+        workspace = await self._workspaces.get(workspace_id)
+        if workspace is not None and any(
+            m.paper_id == placeholder.id and m.state is not PaperState.REMOVED
+            for m in workspace.memberships
+        ):
+            # Removed first, so a workspace at its cap has room for `existing`.
+            workspace.remove_paper(placeholder.id)
+            await self._papers.remove_from_workspace(workspace_id, placeholder.id)
+            await attach_existing(
+                workspace,
+                existing,
+                papers=self._papers,
+                chunks=self._chunks,
+                queue=self._queue,
+                # Only a discovered paper's fetch can merge, so its job is backfill.
+                priority=JobPriority.BACKFILL,
+            )
+        # Completed before the purge: if the placeholder goes, its jobs go with it
+        # (ON DELETE CASCADE), and if it stays, this one must not be redelivered.
+        await self._queue.complete(job_id)
+        await PaperPurger(
+            papers=self._papers, index=self._index, store=self._store
+        ).purge_if_unheld(placeholder.id)
+        await self._uow.commit()
+
     # -- persistence helpers ----------------------------------------------
 
     async def _persist_tei(self, paper: Paper, parsed: ParsedDocument) -> str | None:
@@ -295,13 +458,43 @@ class IngestPaperUseCase:
         """
         membership.transition_to(state)
         await self._papers.set_membership_state(workspace_id, membership.paper_id, state)
-        await self._queue.heartbeat(job_id, state=state)
+        await self._queue.heartbeat(job_id, state=state, lease_seconds=self._lease_seconds)
         await self._uow.commit()
 
 
-def _failed(paper_id: str, failure_class: FailureClass, detail: str) -> IngestionOutcome:
+class _FetchStageFailed(Exception):
+    """A classified FETCHING failure, raised where it is understood and recorded by `execute`."""
+
+    def __init__(
+        self, failure_class: FailureClass, detail: str, *, retry_after: float | None = None
+    ) -> None:
+        super().__init__(f"{failure_class.value}: {detail}")
+        self.failure_class = failure_class
+        self.detail = detail
+        #: The longest wait a refusing host stated (D142).
+        self.retry_after = retry_after
+
+
+def _attempts_detail(attempts: Sequence[FetchAttempt]) -> str:
+    """What each link came to, without the links themselves (D134).
+
+    This becomes the job's `last_error` and the membership's failure detail, both
+    of which the API returns, and the port keeps attempts "for the log, never for
+    a client": a URL from a third party's record is not ours to show back.
+    """
+    if not attempts:
+        return "there was no open-access link to try"
+    return "links tried: " + ", ".join(attempt.outcome for attempt in attempts)
+
+
+def _failed(
+    paper_id: str, failure_class: FailureClass, detail: str, *, retry_after: float | None = None
+) -> IngestionOutcome:
     return IngestionOutcome(
-        paper_id=paper_id, failure=IngestionFailure(failure_class=failure_class, detail=detail)
+        paper_id=paper_id,
+        failure=IngestionFailure(
+            failure_class=failure_class, detail=detail, retry_after=retry_after
+        ),
     )
 
 
@@ -362,13 +555,22 @@ def _to_sections(parsed: ParsedDocument, *, paper_id: str) -> list[Section]:
 def _parsed_metadata(paper: Paper, parsed: ParsedDocument, *, tei_key: str | None) -> Paper:
     """The paper as the parse leaves it.
 
-    The provisional filename title is replaced only if GROBID found one: an
-    empty title would violate the entity's own invariant, and a paper called
+    An upload's provisional filename title is replaced only if GROBID found one:
+    an empty title would violate the entity's own invariant, and a paper called
     "untitled" is less useful than a paper called by its filename (D55).
+
+    A discovered paper keeps its source's record, and GROBID only fills what the
+    source left blank (D135): the user chose the paper by the title search
+    showed, and a header guess replacing it would change what the workspace lists.
     """
-    paper.title = parsed.title or paper.title
-    paper.authors = parsed.authors or paper.authors
-    paper.abstract = parsed.abstract or paper.abstract
+    if paper.origin is PaperOrigin.DISCOVERY:
+        # The title is never blank (the entity's invariant), so only these can be.
+        paper.authors = paper.authors or parsed.authors
+        paper.abstract = paper.abstract or parsed.abstract
+    else:
+        paper.title = parsed.title or paper.title
+        paper.authors = parsed.authors or paper.authors
+        paper.abstract = parsed.abstract or paper.abstract
     paper.parse_status = ParseStatus.PARSED
     paper.parse_failure_class = None
     paper.parser_version = parsed.parser_version

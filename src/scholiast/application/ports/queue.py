@@ -20,6 +20,10 @@ What the port still has to express, because M3 swaps the transport for Celery:
                "in-flight", so an operator and `GET /v1/jobs/{id}` can see where
                a paper actually is (FR-I3, FR-O5).
 
+  priority     a user's upload is claimed before a discovered paper (D139).
+               Every enqueue states it, and the claim, not the broker, honours
+               it: under D95 a wake-up claims whatever is due.
+
 Nothing here mentions SQL, and nothing here takes a session: the adapter is
 constructed with one, exactly as the repositories are, which is what lets a use
 case commit a job alongside the rows it belongs to.
@@ -27,7 +31,9 @@ case commit a job alongside the rows it belongs to.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
+from enum import IntEnum, unique
 from typing import Protocol, runtime_checkable
 
 from scholiast.domain.errors import FailureClass
@@ -47,6 +53,25 @@ RETRY_JITTER_RATIO = 0.2
 #: paper is seconds more, so a five-minute lease means only a genuinely dead
 #: worker loses its claim — while a live one refreshes it at every stage.
 DEFAULT_LEASE_SECONDS = 300.0
+
+#: D142. The longest wait a host's Retry-After may impose on a retry. Past it the
+#: job fails at once: parking a paper for longer is worse than telling the user.
+MAX_RETRY_AFTER_SECONDS = 3600.0
+
+
+@unique
+class JobPriority(IntEnum):
+    """How soon a job's work is wanted (D139). Higher values are claimed first."""
+
+    #: Bulk work: discovered papers, and the jobs their adds cause (D136).
+    BACKFILL = 0
+    #: A user is waiting on it: an upload.
+    INTERACTIVE = 10
+
+    @property
+    def label(self) -> str:
+        """The name metrics and logs use for it."""
+        return self.name.lower()
 
 
 @dataclass(frozen=True, slots=True)
@@ -70,14 +95,30 @@ class QueuedJob:
     #: None for a job enqueued outside a request, and for every row written
     #: before migration 0006.
     correlation_id: str | None = None
+    #: The open-access links a FETCHING job tries, best first (D133, D134).
+    #: Empty for an upload, whose bytes are stored already.
+    source_links: tuple[str, ...] = ()
+    priority: JobPriority = JobPriority.INTERACTIVE
 
 
 @runtime_checkable
 class Queue(Protocol):
     """Durable, at-least-once ingestion work."""
 
-    async def enqueue(self, *, workspace_id: str, paper_id: str) -> str:
+    async def enqueue(
+        self,
+        *,
+        workspace_id: str,
+        paper_id: str,
+        priority: JobPriority,
+        source_links: Sequence[str] = (),
+    ) -> str:
         """Record a job and return its id.
+
+        `priority` has no default, so every call site says whether a user is
+        waiting (D139). `source_links` travel with the job for a paper that still
+        has to be fetched (D134); they are input to this unit of work, not a
+        paper fact.
 
         At-least-once delivery plus an idempotent consumer (FR-I7) is the
         contract; exactly-once is not offered because it cannot be honoured
@@ -119,13 +160,18 @@ class Queue(Protocol):
         failure_class: FailureClass,
         detail: str,
         max_attempts: int = DEFAULT_MAX_ATTEMPTS,
+        retry_after: float | None = None,
     ) -> PaperState:
-        """Apply the retry policy and report where the job landed (D48).
+        """Apply the retry policy and report where the job landed (D48, D142).
 
         Returns `QUEUED` when the job will be retried — the caller needs to know
         that in order to leave the membership showing "retrying" rather than a
         terminal failure the user cannot act on (§4.4.1). Returns `FAILED` on a
         retryable class whose attempts are exhausted, and `UNSUPPORTED` for a
         class that retrying cannot help.
+
+        `retry_after` is the wait a failing service stated, when it stated one.
+        The retry is then no earlier than that, and a wait over
+        `MAX_RETRY_AFTER_SECONDS` lands the job `FAILED` at once (D142).
         """
         ...

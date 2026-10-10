@@ -1,0 +1,58 @@
+{
+ "dataset": "scholiast-m4-discovery-pools-openalex-a2",
+ "decision": "D125",
+ "protocol_sha256": "da128b48e71f95aff1514e65a374ab7b1387e3e9715ed5a72a6c08fd12ebb682",
+ "file": "discovery-pools-openalex-a2.json.gz",
+ "sha256": "33b2f960dda5a5b05d360cf02712a2df92af955cdadba18fa686243bf988edae",
+ "bytes": 2646380,
+ "entries": 60,
+ "by_per_page_and_phrasing": {
+  "15/keyword": 10,
+  "25/keyword": 10,
+  "50/keyword": 10,
+  "15/natural_language": 10,
+  "25/natural_language": 10,
+  "50/natural_language": 10
+ },
+ "recorded_from": "2026-10-04T06:27:43.033+00:00",
+ "recorded_to": "2026-10-04T06:29:11.522+00:00",
+ "licence": "OpenAlex data CC0",
+ "request": {
+  "built_by": "scholiast.infrastructure.discovery.openalex.OpenAlexSource.request",
+  "adapter_version": "openalex-1",
+  "select": "id,doi,title,display_name,publication_year,publication_date,ids,type,authorships,primary_location,locations,best_oa_location,open_access,cited_by_count,abstract_inverted_index,relevance_score",
+  "per_page": [
+   50,
+   25,
+   15
+  ]
+ },
+ "addendum": {
+  "question": "Which OpenAlex page size finishes within D122's 2.0 s source deadline, and what does a smaller page cost in anchors?",
+  "why": "OpenAlex missed ASM-1a (p95 2.61 s at 50 results) and finished within 2.0 s on 18 of the spike's 30 searches. Offline, from the frozen pools: authorships is 52% of a page and select takes only whole top-level fields; dropping locations would lose the arXiv id on 183 of 1,000 records; every response was already gzip and parsing takes under 10 ms. Page size is the lever left (D125). Numbered as the second addendum; unrelated to ASM-2's allowlist A2.",
+  "queries": "The 20 P1 queries: 10 topics x keyword and natural_language, each at per_page 50, 25 and 15. Every request, URL and headers, is built by the production adapter, scholiast.infrastructure.discovery.openalex.OpenAlexSource.request(text, limit=per_page): the spike's select list, with '?' and '*' replaced by spaces (D117). 60 requests.",
+  "order": "Seeded with stream '<seed>/A2': the 20 queries are shuffled, and within each query the order of the three sizes is shuffled. A query's three requests run back to back.",
+  "connection": "A new HTTP client, and so a new connection, for every request, as the production adapter opens one per search. Bodies are decoded as the client receives them, as in P1.",
+  "pacing": "pacing['api.openalex.org']: 1 s from the previous request start, one request at a time. Retry-After and the host-stop rule apply as in pacing.",
+  "timeouts": "timeouts_s.api_connect and api_total, as P1: the tail is observed, not cut at 2.0 s.",
+  "budget": {
+   "max": {
+    "searches": 60
+   },
+   "planned": {
+    "searches": 60
+   }
+  },
+  "no_repeats": "As rules: a failure is an outcome, and no A2 request is repeated.",
+  "measure": "Per size, over all 20 requests: latency from request issued to last body byte, nearest-rank p50, p90 and p95 and the max, a failed request counted as slower than any success; the share finished within 2.0 s (Wilson); time to headers; body bytes; and the keyword-phrasing anchor recall within the page (definitions.anchor_match, using the ids P2 verified). Per query: whether the 25- and 15-result pages are, id for id and in order, the first 25 and 15 of the 50-result page. Cost from x-ratelimit-cost-usd.",
+  "decision_rule": "Ship the largest per_page in {50, 25, 15} whose p95 latency is <= 2.0 s AND whose keyword-phrasing anchor recall within its own page is >= 50%. If no size passes both, none is chosen and the owner decides.",
+  "outputs": "Responses to data/eval/discovery-pools-openalex-a2.json.gz with a manifest (OpenAlex data, CC0); numbers under addendum_a2 in spike/results/19_discovery_analysis.json; a section in SPIKE-FINDINGS-M4.md. The spike's committed pools are not changed.",
+  "does_not_establish": [
+   "20 requests a size make p95 the 19th-ranked value; a size that passes narrowly may not pass on another day.",
+   "One day, from the development machine's network; a deployment elsewhere sees different network latency.",
+   "The latency of a whole search: dedup and ranking (phases 7 and 8) must fit the remaining 1.0 s, and phase 10's live run measures the whole request.",
+   "Anchor recall counts 20 famous papers and is blind to precision; a smaller page may drop useful papers that are not anchors."
+  ]
+ },
+ "caveat": "The pools reflect this protocol's query construction. If phase 2 changes it or the page size, the pools are re-recorded through the real adapters before any judging. Judgments attach to papers, not positions, so any already made carry over."
+}

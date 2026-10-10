@@ -52,13 +52,22 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from testcontainers.community.postgres import PostgresContainer
 
 from scholiast.api.app import create_app
+from scholiast.application.ports.discovery import SourcePage
 from scholiast.application.ports.llm import GenerationChunk
 from scholiast.application.ports.ml import TextRole
+from scholiast.application.ports.queue import JobPriority
 from scholiast.application.ports.tenancy import TenantContext
 from scholiast.application.ports.vector import EmptyRetrievalScope, VectorRecord
+from scholiast.application.use_cases.discover_papers import ConfiguredSource
 from scholiast.config.settings import Settings
 from scholiast.domain.chunking import CHUNKER_VERSION
 from scholiast.domain.conversation import Turn, TurnRole
+from scholiast.domain.discovery import (
+    LinkKind,
+    OpenAccessLink,
+    PaperCandidate,
+    normalise_arxiv_id,
+)
 from scholiast.domain.paper import (
     Chunk,
     ChunkRole,
@@ -86,6 +95,10 @@ pytestmark = [pytest.mark.integration]
 ROOT = Path(__file__).resolve().parents[2]
 DIMENSIONS = 32
 PASSWORD = "a-perfectly-adequate-password"
+
+#: One paper as search returns it. The isolation world's arXiv knows every id, so
+#: the owner's add succeeds and a refused one is refused for the workspace alone.
+ADD_BODY: dict[str, object] = {"papers": [{"source": "arxiv", "source_id": "2004.04906v3"}]}
 
 #: A body that clears `validate_upload` (size plus the `%PDF-` signature) so the
 #: upload endpoint reaches its workspace check. A body that failed validation
@@ -145,6 +158,13 @@ ENDPOINTS: tuple[Endpoint, ...] = (
         "POST",
         "/v1/workspaces/{workspace}/papers/upload",
         upload=True,
+        owner_status=202,
+    ),
+    Endpoint(
+        "add discovered papers",
+        "POST",
+        "/v1/workspaces/{workspace}/papers",
+        json=ADD_BODY,
         owner_status=202,
     ),
     Endpoint("read paper content", "GET", "/v1/workspaces/{workspace}/papers/{paper}/content"),
@@ -296,6 +316,40 @@ class SpyVectorIndex:
         return len(self.hits)
 
 
+class SpySource:
+    """arXiv as far as an add can tell: it knows every id, and counts each lookup.
+
+    A fake, because NFR-T3 forbids the network here (D133's stated cost); a spy,
+    because a refused add must be shown to have asked no source at all.
+    """
+
+    name = "arxiv"
+
+    def __init__(self) -> None:
+        self.lookups: list[list[str]] = []
+
+    def is_valid_id(self, source_id: str) -> bool:
+        return normalise_arxiv_id(source_id) is not None
+
+    async def search(self, query: str, *, limit: int) -> SourcePage:
+        raise AssertionError("the isolation suite never searches")
+
+    async def lookup(self, source_ids: Sequence[str]) -> dict[str, PaperCandidate]:
+        self.lookups.append(list(source_ids))
+        return {
+            source_id: PaperCandidate(
+                source="arxiv",
+                source_id=source_id,
+                rank=1,
+                title="A discovered paper",
+                arxiv_id=normalise_arxiv_id(source_id),
+                oa_links=(OpenAccessLink(f"https://arxiv.org/pdf/{source_id}", LinkKind.PDF),),
+                adapter_version="arxiv-2",
+            )
+            for source_id in source_ids
+        }
+
+
 class StubProvider:
     name = "stub"
     model = "stub-model"
@@ -331,6 +385,7 @@ def _lifespan(index: SpyVectorIndex) -> Any:
         app.state.embedder = DeterministicEmbedder()
         app.state.index = index
         app.state.providers = [StubProvider()]
+        app.state.discovery_sources = [ConfiguredSource(SpySource(), 25)]
         try:
             yield
         finally:
@@ -429,7 +484,7 @@ async def _seed(
     )
 
     job_id = await PostgresQueue(session, scope).enqueue(
-        workspace_id=workspace.id, paper_id=paper.id
+        priority=JobPriority.INTERACTIVE, workspace_id=workspace.id, paper_id=paper.id
     )
     await session.commit()
     return (
@@ -636,6 +691,27 @@ class TestIdentifiersMustAgreeWithTheirPath:
         assert (await world.alice.client.get(correct)).status_code == 200
 
 
+class TestARefusedAddNeverAsksASource:
+    """D133: the workspace check precedes every outbound call.
+
+    Otherwise anyone could make this server query a third party, and spend its
+    shared OpenAlex allowance, by naming a workspace that is not theirs.
+    """
+
+    async def test_adding_to_another_tenants_workspace_asks_nobody(self, world: World) -> None:
+        source: SpySource = world.app.state.discovery_sources[0].source
+        path = f"/v1/workspaces/{world.bob.ids.workspace_id}/papers"
+
+        refused = await world.alice.client.post(path, json=ADD_BODY)
+        assert refused.status_code == 404, refused.text
+        assert source.lookups == [], "a refused add made an outbound call"
+
+        # The positive control: the owner's identical request does ask.
+        accepted = await world.bob.client.post(path, json=ADD_BODY)
+        assert accepted.status_code == 202, accepted.text
+        assert source.lookups == [["2004.04906v3"]]
+
+
 class TestRefusedRequestsNeverReachRetrieval:
     """A 404 issued after an ANN query has already run is still a leak."""
 
@@ -747,4 +823,10 @@ class TestTheTableIsComplete:
         # The two routes with no owner to be a non-owner of — a listing and a
         # create — are covered by `TestListingsAndCreates` instead.
         covered |= {("GET", "/v1/workspaces"), ("POST", "/v1/workspaces")}
+        # Discovery reads no tenant's data: it asks external sources and writes no
+        # rows (§5.4.1), so there is no owner to be a non-owner of. Its one store
+        # is the per-user cache (D127), whose isolation, another user's identical
+        # search never being served from mine, is tested against a real Redis in
+        # test_discovery_cache_redis.py rather than assumed away here.
+        covered |= {("POST", "/v1/discovery/search")}
         assert routed - covered == set(), f"uncovered routes: {routed - covered}"

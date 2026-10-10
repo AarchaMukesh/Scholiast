@@ -42,3 +42,31 @@ whose parse behaviour is already characterised.
 
 `.env` holds live API keys and is gitignored. **Rotate them** — they were pasted into a
 chat transcript.
+
+## M4 discovery spike (D116, D117, D120, D125)
+
+Pre-registered: `m4-protocol.json` is hash-locked, and every script refuses to run if its
+canonical hash differs from the approved one. Findings in
+[`../SPIKE-FINDINGS-M4.md`](../SPIKE-FINDINGS-M4.md), with what they do not establish
+above the numbers.
+
+| Script | Pass | Outcome |
+|---|---|---|
+| `19_discovery_analysis.py selftest` | P0, offline | Address table, URL rules, pacer, budget, the fetch path against a mock transport, and the log checker; 14/14 mutants caught (11 before the first live call, 3 added for A2's rule) |
+| `17_discovery_search.py session1` | P1, P2 | OpenAlex and arXiv answered all 20 queries; S2 keyless 429ed 5/5 and was stopped; DEV-2 repeated 5 OpenAlex searches |
+| `18_oa_probe.py probe` | P3 | 151 of 180 works fetched a PDF (83.9%): **ASM-2 PASS** |
+| `18_oa_probe.py download` | P4 | 30/30 passed `validate_upload` and `preflight` |
+| `17_discovery_search.py session2 --wait` | P5 | 6 h 49 min later: top-10 overlap 0.97 (OpenAlex), 0.99 (arXiv); S2 keyless 429ed 5/5 again |
+| `19_discovery_analysis.py check / analyse / finalize / leakcheck` | P6 | **ASM-1 FAIL**; tracked outputs written S2-free |
+| `17_discovery_search.py addendum-a1`, then `19_discovery_analysis.py finalize-a1` | A1 (D120) | arXiv joined with OR vs a same-day AND: 4 vs 6 of 20 anchors in the top 50, so **AND stays**; its own pools file, the spike's left unchanged |
+| `17_discovery_search.py addendum-a2`, then `19_discovery_analysis.py finalize-a2` | A2 (D125) | OpenAlex at 50, 25 and 15 results per page: all inside the 2.0 s deadline, none at 50% of anchors because OpenAlex's ranking changed (D126), so the owner chose **25**; its own pools file |
+
+`m4_common.py`, `m4_http.py`, `m4_parse.py` and `m4_works.py` are shared by the three.
+They are throwaway too: phase 2 writes the real adapters, and phase 5 the D115 guard.
+
+**Every live command is resumable and never repeats a request.** A `sending` line is
+logged before each request leaves, and a rerun skips any request id already in the log.
+Run logs, S2 responses and downloaded PDFs stay under `var/spike/` (gitignored). The
+tracked outputs (`results/17_*`, `18_*`, `19_*` and `data/eval/discovery-pools.*`) hold
+no S2 content and no key, which `leakcheck` verifies. The live passes need
+`OPENALEX_API_KEY` in `.env` (see `.env.example`).

@@ -58,6 +58,10 @@ class Settings(BaseSettings):
     #: priority semaphore needs, once a reranker exists to contend for the GPU.
     embedding_batch_size: int = 32
     embedding_dimensions: int = 768
+    #: Load and run the encoder before the API accepts a request (D156). Loaded
+    #: on first use instead, the first search after a start took 16.2 s. Tests
+    #: that build the real lifespan with a stand-in embedder turn this off.
+    embedding_warm_at_startup: bool = True
 
     # -- ingestion worker --------------------------------------------------
     #: The cost of not having a broker (D47): with jobs in Postgres there is
@@ -84,6 +88,11 @@ class Settings(BaseSettings):
     #: whole index and object store (D102), so the cost is paid whether or not
     #: there is residue. Shorter means faster convergence and more scanning.
     reconcile_interval_seconds: float = 300.0
+    #: D141. How often beat wakes an ingestion worker in the Celery topology. A
+    #: judgement, not a measurement: the longest extra wait for a retry or a
+    #: crash redelivery nothing announced, against D48's 5-10 s backoff and
+    #: NFR-P6's 90 s. The in-process poller ignores it.
+    ingest_sweep_seconds: float = Field(default=30.0, gt=0.0)
 
     # -- rate limiting and the ops surface (NFR-SEC7, D112-D114) -----------
     #: Off switch for the limiter. Present so a load test can measure the system
@@ -102,6 +111,17 @@ class Settings(BaseSettings):
     #: Uploads, keyed by user. Bounded because each one costs a GROBID parse and
     #: an embedding pass, not because the HTTP request is expensive.
     rate_limit_upload_per_minute: int = 30
+    #: Discovery searches, keyed by user (D122). Each costs an OpenAlex search
+    #: from an allowance of about 1,000 a day shared by EVERY user, and an arXiv
+    #: request at arXiv's pace; one user at this limit would spend the OpenAlex
+    #: allowance in under two hours. A guess, with no traffic yet to fit it to.
+    rate_limit_discovery_per_minute: int = 10
+    #: Adding discovered papers, keyed by user and counted PER PAPER, not per
+    #: request (D133): each paper costs a share of a lookup, a paced fetch, a GROBID
+    #: parse and an embedding pass, and a batch of ten is ten of those. Twenty is two
+    #: full batches a minute. The floor is one full batch (10, the add's maximum),
+    #: or a full batch could never be accepted at all.
+    rate_limit_add_per_minute: int = Field(default=20, ge=10)
     #: When set, `/metrics` and `/health/ready` require it as a bearer token
     #: (D114). Empty leaves them open, which is the development default;
     #: `/health/live` is never gated, because an orchestrator's restart decision
@@ -124,6 +144,41 @@ class Settings(BaseSettings):
     #: A 429's `Retry-After` overrides this, because the provider has stated the
     #: answer and this number can only guess at it (D103).
     breaker_cooldown_seconds: float = 30.0
+
+    # -- discovery (M4 phase 3, D122-D125) -----------------------------------
+    #: OpenAlex requires a key beyond a test allowance (D116). Without one,
+    #: OpenAlex is absent rather than broken, as a provider with no credential is.
+    openalex_api_key: str | None = None
+    #: The sources' share of NFR-P1's 3.0 s; the rest is for dedup, ranking and the
+    #: response (D122). Every source is cut off at the same moment.
+    discovery_deadline_seconds: float = Field(default=2.0, gt=0.0)
+    #: Measured, not chosen: at 25 results addendum A2 found p95 1.58 s against the
+    #: 2.0 s deadline, with the same anchors as 50 (D125).
+    discovery_openalex_page_size: int = Field(default=25, ge=1, le=200)
+    discovery_arxiv_page_size: int = Field(default=50, ge=1, le=2000)
+    #: arXiv's API terms: one request every three seconds. The floor is the terms',
+    #: so a configuration cannot set a pace arXiv has asked us not to use (D123).
+    discovery_arxiv_min_gap_seconds: float = Field(default=3.0, ge=3.0)
+    #: The cache's own Redis (D128): capped and evicting, so it can never crowd out
+    #: the Celery broker on `redis_url`. Down or unreachable, discovery runs uncached.
+    discovery_cache_url: str = "redis://localhost:6380/0"
+    #: D127: a day, so repeat demos are fast and identical while results stay fresh
+    #: enough for a corpus that adds papers daily and a ranking that changed in three.
+    discovery_cache_ttl_seconds: int = Field(default=86_400, ge=1)
+    #: Bounds one Redis call. A healthy local Redis answers in well under a
+    #: millisecond; this only caps what a sick one can cost a search.
+    discovery_cache_timeout_seconds: float = Field(default=0.25, gt=0.0)
+
+    # -- fetching OA PDFs (M4 phase 5, D115, D129, D130) --------------------
+    #: D130: the measured minimum. www.aclweb.org is here only because ACL papers
+    #: reach aclanthology.org through it; every redirect hop is checked against
+    #: this list, so a host that only redirects must be on it too.
+    fetch_allowed_hosts: list[str] = ["arxiv.org", "aclanthology.org", "www.aclweb.org"]
+    #: arXiv's robots.txt Crawl-delay, as the spike kept it. The floor is arXiv's.
+    fetch_arxiv_min_gap_seconds: float = Field(default=15.0, ge=15.0)
+    fetch_min_gap_seconds: float = Field(default=5.0, ge=0.0)
+    #: One hop's connect, headers and body. The spike's download ceiling.
+    fetch_total_timeout_seconds: float = Field(default=60.0, gt=0.0)
 
     # -- generation --------------------------------------------------------
     #: Local carries sustained load; hosted quota is a deliberate spend (D26).

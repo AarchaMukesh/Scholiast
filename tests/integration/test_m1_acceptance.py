@@ -181,6 +181,8 @@ async def api(postgres: str, tmp_path: Path) -> AsyncIterator[Harness]:
         ollama_url=OLLAMA_URL,
         object_store_path=tmp_path / "objects",
         embedding_dimensions=DIMENSIONS,
+        # The stand-in embedder replaces the real one after startup (D156).
+        embedding_warm_at_startup=False,
         worker_in_process=False,
     )
     app = create_app(settings)

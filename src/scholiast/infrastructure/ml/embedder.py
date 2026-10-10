@@ -183,16 +183,36 @@ class LocalEmbedder:
 
         Constructing an adapter should not cost two seconds and half a gigabyte
         of VRAM — dependency wiring happens at import time, and tests that never
-        embed anything should not pay for a model.
+        embed anything should not pay for a model. The API calls `warm` at
+        startup instead (D156).
+
+        **From the local copy first** (D157). Without `local_files_only`, loading
+        bge-base asked huggingface.co 32 times whether a newer revision exists:
+        7.7-11.1 s against 1.2 s, and the way an upstream change would reach us
+        under an unchanged `version` (NFR-M5). The hub is asked only when the
+        model has never been downloaded, which is what the `OSError` means.
         """
         if self._model is None:
             from sentence_transformers import SentenceTransformer
 
-            model = SentenceTransformer(self._model_name, device=self._device)
+            try:
+                model = SentenceTransformer(
+                    self._model_name, device=self._device, local_files_only=True
+                )
+            except OSError:
+                model = SentenceTransformer(self._model_name, device=self._device)
             if self._precision is Precision.FP16:
                 model = model.half()
             self._model = model
         return self._model
+
+    async def warm(self) -> None:
+        """Load the model and encode one query, so no request pays for either (D156).
+
+        The encode as well as the load: the first encode after a load measured
+        0.24-0.29 s against 0.04 s for the next one.
+        """
+        await self.embed(["warm-up"], role=TextRole.QUERY)
 
     def _apply_prefix(self, texts: Sequence[str], role: TextRole) -> list[str]:
         if role is TextRole.QUERY and self._query_prefix:

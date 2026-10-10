@@ -443,3 +443,14 @@ class TestStaleGaugeLabelsAreCleared:
         await metrics.refresh_work_gauges(FakeSessions())
 
         assert 'scholiast_ingestion_queue_depth{state="queued"}' not in (metrics.render().decode())
+
+
+class TestJobAgeIsReportedPerPriority:
+    """D139: one number for both priorities would hide a starved backfill lane."""
+
+    async def test_both_priorities_are_reported_even_with_nothing_waiting(self) -> None:
+        await metrics.refresh_work_gauges(FakeSessions())
+
+        rendered = metrics.render().decode()
+        assert 'scholiast_ingestion_oldest_job_age_seconds{priority="interactive"} 0.0' in rendered
+        assert 'scholiast_ingestion_oldest_job_age_seconds{priority="backfill"} 0.0' in rendered

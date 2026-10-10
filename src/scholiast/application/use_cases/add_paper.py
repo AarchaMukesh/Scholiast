@@ -45,10 +45,11 @@ from __future__ import annotations
 
 import hashlib
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from scholiast.application.ports.queue import Queue
+from scholiast.application.ports.queue import JobPriority, Queue
 from scholiast.application.ports.repositories import (
     ChunkRepository,
     PaperRepository,
@@ -108,7 +109,14 @@ class AddPaperUseCase:
         content_hash = hashlib.sha256(data).hexdigest()
         existing = await self._papers.find_by_content_hash(content_hash)
         if existing is not None:
-            return await self._attach(workspace, existing)
+            return await attach_existing(
+                workspace,
+                existing,
+                papers=self._papers,
+                chunks=self._chunks,
+                queue=self._queue,
+                priority=JobPriority.INTERACTIVE,
+            )
 
         paper = Paper(
             id=str(uuid.uuid4()),
@@ -127,49 +135,72 @@ class AddPaperUseCase:
         # starts in; the repository only writes what it was told.
         membership = workspace.add_paper(stored.id, now=datetime.now(UTC))
         await self._papers.add_to_workspace(workspace_id, stored.id, membership.state)
-        job_id = await self._queue.enqueue(workspace_id=workspace_id, paper_id=stored.id)
+        # A user is watching an upload: it is claimed before discovered papers (D139).
+        job_id = await self._queue.enqueue(
+            workspace_id=workspace_id, paper_id=stored.id, priority=JobPriority.INTERACTIVE
+        )
 
         return AddPaperResult(
             paper_id=stored.id, state=membership.state, job_id=job_id, deduplicated=False
         )
 
-    async def _attach(self, workspace: Workspace, paper: Paper) -> AddPaperResult:
-        """Add an already-known paper to this workspace (FR-I7, §5.4.2).
 
-        Whether work is needed is decided by evidence, not by the parse status
-        alone: `parse_status = parsed` says the structure was extracted, and says
-        nothing about whether vectors exist. A paper whose chunks are stamped
-        with an embedder version has been through the whole pipeline, so the
-        membership starts INDEXED and no job is queued; anything else — parsed
-        but never embedded, failed, or still in flight — is queued and the
-        idempotent pipeline converges on the same rows.
-        """
-        member = next(
-            (
-                m
-                for m in workspace.memberships
-                if m.paper_id == paper.id and m.state is not PaperState.REMOVED
-            ),
-            None,
-        )
-        if member is not None:
-            # Already here. Re-uploading must not reset a paper mid-pipeline or
-            # re-queue one that is finished (FR-I7).
-            return AddPaperResult(
-                paper_id=paper.id, state=member.state, job_id=None, deduplicated=True
-            )
+async def attach_existing(
+    workspace: Workspace,
+    paper: Paper,
+    *,
+    papers: PaperRepository,
+    chunks: ChunkRepository,
+    queue: Queue,
+    priority: JobPriority,
+    source_links: Sequence[str] = (),
+) -> AddPaperResult:
+    """Add an already-known paper to this workspace (FR-I7, §5.4.2).
 
-        indexed = any(chunk.is_indexed for chunk in await self._chunks.list_for_paper(paper.id))
-        membership = workspace.add_paper(
-            paper.id,
-            now=datetime.now(UTC),
-            state=PaperState.INDEXED if indexed else PaperState.QUEUED,
-        )
-        await self._papers.add_to_workspace(workspace.id, paper.id, membership.state)
+    Shared by uploads and by discovered adds (D133), so a paper reused either way
+    joins by the same rules.
 
-        job_id: str | None = None
-        if membership.state is PaperState.QUEUED:
-            job_id = await self._queue.enqueue(workspace_id=workspace.id, paper_id=paper.id)
-        return AddPaperResult(
-            paper_id=paper.id, state=membership.state, job_id=job_id, deduplicated=True
+    Whether work is needed is decided by evidence, not by the parse status
+    alone: `parse_status = parsed` says the structure was extracted, and says
+    nothing about whether vectors exist. A paper whose chunks are stamped
+    with an embedder version has been through the whole pipeline, so the
+    membership starts INDEXED and no job is queued; anything else — parsed
+    but never embedded, failed, or still in flight — is queued and the
+    idempotent pipeline converges on the same rows.
+
+    `source_links` reach the job only for a paper still awaiting its PDF: its
+    job has to fetch (D134), and for any other paper links are irrelevant.
+    `priority` is the caller's: an upload's, or a discovered add's (D139).
+    """
+    member = next(
+        (
+            m
+            for m in workspace.memberships
+            if m.paper_id == paper.id and m.state is not PaperState.REMOVED
+        ),
+        None,
+    )
+    if member is not None:
+        # Already here. Re-adding must not reset a paper mid-pipeline or
+        # re-queue one that is finished (FR-I7).
+        return AddPaperResult(paper_id=paper.id, state=member.state, job_id=None, deduplicated=True)
+
+    indexed = any(chunk.is_indexed for chunk in await chunks.list_for_paper(paper.id))
+    membership = workspace.add_paper(
+        paper.id,
+        now=datetime.now(UTC),
+        state=PaperState.INDEXED if indexed else PaperState.QUEUED,
+    )
+    await papers.add_to_workspace(workspace.id, paper.id, membership.state)
+
+    job_id: str | None = None
+    if membership.state is PaperState.QUEUED:
+        job_id = await queue.enqueue(
+            workspace_id=workspace.id,
+            paper_id=paper.id,
+            priority=priority,
+            source_links=source_links if paper.content_hash is None else (),
         )
+    return AddPaperResult(
+        paper_id=paper.id, state=membership.state, job_id=job_id, deduplicated=True
+    )

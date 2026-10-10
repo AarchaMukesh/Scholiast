@@ -91,6 +91,20 @@ jobs:
         image: qdrant/qdrant:v1.18.0@sha256:b3063c673f3973877c038eeecc392bad5011f072ee7892b56c9a8e204a3bdea9
         ports:
           - 6333:6333
+      # D128. The discovery cache's tests, and the Redis GPU-gate tests that have
+      # skipped here since M3, gate on a live Redis at collection time. Same pinned
+      # image as compose. Service containers take no command arguments, so this is
+      # the image's defaults, not the cache's cap; nothing in the suite depends on
+      # the cap. The health check makes the runner wait for it before any step.
+      redis:
+        image: redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 15
     steps:
       - uses: actions/checkout@v4
 

@@ -12,6 +12,7 @@ and would test `asyncio.sleep`; advancing a fake clock tests the window.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 
 import pytest
@@ -21,6 +22,7 @@ from scholiast.application.ports.llm import (
     GenerationUnavailable,
     LLMProvider,
 )
+from scholiast.infrastructure.circuit import Admitted, Circuit, Refused
 from scholiast.infrastructure.llm.breaker import BreakerState, CircuitBreaker
 
 
@@ -313,6 +315,77 @@ class TestTheProbeBoundsTheBreakersOwnRisk:
         assert provider.calls == calls_when_opened + 1
 
 
+class TestAnAbandonedProbeDoesNotWedgeTheBreaker:
+    """A probe that ends with no verdict must not hold the probe slot forever (D122).
+
+    Found extracting the breaker's core for discovery, where the deadline cancels
+    slow calls routinely. Before the fix, a HALF-OPEN probe whose caller stopped
+    reading, or that was cancelled, never cleared the in-flight flag, so every
+    later call was refused as "probe in flight" until the process restarted: one
+    abandoned stream turned a recoverable provider into a permanent outage.
+    """
+
+    async def test_a_probe_its_caller_stops_reading_lets_the_next_call_probe(self) -> None:
+        provider = FakeProvider(fails=True)
+        breaker, clock = build(provider, threshold=1, cooldown=30.0)
+        await fail_times(breaker, 1)
+        clock.advance(31.0)
+
+        provider.fails = False
+        probe = breaker.stream(system="s", user="u")
+        await probe.__anext__()  # the probe is in flight...
+        await probe.aclose()  # ...and its caller walks away
+
+        assert await drain(breaker) == "t0", (
+            "an abandoned probe left the breaker refusing every call"
+        )
+
+    async def test_a_cancelled_probe_lets_the_next_call_probe(self) -> None:
+        class Moody:
+            name = "fake"
+            model = "m"
+
+            def __init__(self) -> None:
+                self.mode = "fail"
+
+            async def stream(self, *, system: str, user: str) -> AsyncIterator[GenerationChunk]:
+                if self.mode == "fail":
+                    raise GenerationUnavailable("fake", "down", retry_after=5.0)
+                if self.mode == "hang":
+                    await asyncio.Event().wait()
+                yield GenerationChunk(text="back")
+
+        provider = Moody()
+        breaker, clock = build(provider)  # type: ignore[arg-type]
+        await fail_times(breaker, 1)
+        clock.advance(6.0)
+
+        provider.mode = "hang"
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(drain(breaker), timeout=0.05)
+
+        provider.mode = "ok"
+        assert await drain(breaker) == "back", (
+            "a cancelled probe left the breaker refusing every call"
+        )
+
+    async def test_an_abandoned_probe_is_not_counted_as_a_failure(self) -> None:
+        # M3's rule stands: only `GenerationUnavailable` is a provider failure. A
+        # caller walking away says nothing about the provider's health.
+        provider = FakeProvider(fails=True, retry_after=1.0)
+        breaker, clock = build(provider, threshold=3, cooldown=30.0)
+        await fail_times(breaker, 1)
+        clock.advance(2.0)
+
+        provider.fails = False
+        probe = breaker.stream(system="s", user="u")
+        await probe.__anext__()
+        await probe.aclose()
+
+        assert breaker.failures == 1
+        assert breaker.state is BreakerState.HALF_OPEN
+
+
 class TestAMidStreamFailureIsStillRecorded:
     async def test_a_provider_that_dies_after_yielding_counts_as_a_failure(self) -> None:
         # The truncation case (§5.11's `generation_truncated`). The breaker must
@@ -332,3 +405,27 @@ class TestAMidStreamFailureIsStillRecorded:
             await drain(breaker)
 
         assert breaker.failures == 1
+
+
+class TestOnlyTheProbeCanReleaseTheProbeSlot:
+    """The shared core's ticket (D122): a late call cannot free a probe it does not hold."""
+
+    def test_a_call_admitted_before_the_breaker_opened_cannot_free_the_probe(self) -> None:
+        clock = FakeClock()
+        circuit = Circuit(failure_threshold=1, cooldown_seconds=30.0, clock=clock)
+        early = circuit.admit()  # admitted while CLOSED, still in flight
+        assert isinstance(early, Admitted)
+
+        circuit.failed(retry_after=None)  # another call fails: the breaker opens
+        clock.advance(31.0)
+        probe = circuit.admit()
+        assert isinstance(probe, Admitted) and probe.probe
+
+        circuit.abandoned(early)  # the early call finishes without a verdict
+
+        refused = circuit.admit()
+        assert isinstance(refused, Refused), "two probes in flight at once"
+        assert refused.reason == "circuit half-open, probe in flight"
+
+        circuit.abandoned(probe)
+        assert isinstance(circuit.admit(), Admitted), "the real probe's release was lost"

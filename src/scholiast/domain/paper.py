@@ -19,6 +19,7 @@ from datetime import datetime
 from enum import StrEnum, unique
 from typing import Self
 
+from scholiast.domain.discovery import ARXIV_DOI_PREFIX, normalise_arxiv_id, normalise_doi
 from scholiast.domain.errors import FailureClass, InvariantViolation
 
 
@@ -117,6 +118,19 @@ class PaperVisibility(StrEnum):
 
     PUBLIC = "public"
     PRIVATE = "private"
+
+
+@unique
+class PaperOrigin(StrEnum):
+    """How a paper entered the system, which decides whose metadata wins (D135).
+
+    A discovered paper keeps the title and authors its source reported, the ones
+    the user chose it by; GROBID only fills gaps. An upload has nothing but a
+    filename, so GROBID's header is the best title it will get.
+    """
+
+    UPLOAD = "upload"
+    DISCOVERY = "discovery"
 
 
 @unique
@@ -289,10 +303,15 @@ class Paper:
 
     Identity is content-addressed: `content_hash` makes ingestion idempotent
     (FR-I7) and drives the visibility-scoped deduplication in doc 4 §4.4.2.
+
+    **A discovered paper exists before its PDF does** (D132): it is added by its
+    DOI or arXiv id, and its hash is written when the FETCHING stage has the bytes
+    (D134). Until then `content_hash` is None, which is allowed only while nothing
+    has been parsed and the paper has an identifier to deduplicate on.
     """
 
     id: str
-    content_hash: str
+    content_hash: str | None
     visibility: PaperVisibility
     title: str
     authors: tuple[str, ...] = ()
@@ -313,6 +332,11 @@ class Paper:
     #: that produced today's chunks rather than re-running a GROBID that may
     #: have moved underneath it.
     tei_key: str | None = None
+    #: Identity by external id (FR-I7, D132), one spelling each: a publisher DOI,
+    #: never arXiv's DataCite one, and an unversioned, lowercase arXiv id.
+    doi: str | None = None
+    arxiv_id: str | None = None
+    origin: PaperOrigin = PaperOrigin.UPLOAD
     created_at: datetime | None = None
 
     def __post_init__(self) -> None:
@@ -332,6 +356,21 @@ class Paper:
             raise InvariantViolation(
                 f"parse_failure_class must be set iff parse_status is FAILED "
                 f"(status={self.parse_status}, class={self.parse_failure_class})"
+            )
+        # D132, mirrored by ck_papers_hash_or_awaiting: no bytes means nothing has
+        # been parsed, and the paper must be findable by an identifier meanwhile.
+        if self.content_hash is None:
+            if self.parse_status is not ParseStatus.PENDING:
+                raise InvariantViolation("a paper without its PDF cannot have been parsed")
+            if self.doi is None and self.arxiv_id is None:
+                raise InvariantViolation("a paper without its PDF needs a DOI or an arXiv id")
+        if self.doi is not None and (
+            normalise_doi(self.doi) != self.doi or self.doi.startswith(ARXIV_DOI_PREFIX)
+        ):
+            raise InvariantViolation(f"paper DOI must be a normalised publisher DOI: {self.doi!r}")
+        if self.arxiv_id is not None and normalise_arxiv_id(self.arxiv_id) != self.arxiv_id:
+            raise InvariantViolation(
+                f"paper arXiv id must be normalised and unversioned: {self.arxiv_id!r}"
             )
 
     @property

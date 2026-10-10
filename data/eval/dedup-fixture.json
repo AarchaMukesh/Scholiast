@@ -1,0 +1,5401 @@
+{
+ "dataset": "scholiast-m4-dedup-fixture",
+ "decision": "D146",
+ "pools": {
+  "file": "discovery-pools.json.gz",
+  "sha256": "d0f65e842ccb4860efaa406a1822fe7dde0156a601ba6acd5bdf0bc5a309f3d1"
+ },
+ "selection": "Pass P1, kind search, keyword phrasing, both sources, 10 topics. Every within-topic pair of records that shares an arXiv id or a DOI after paper_identity, or whose normalise_title word sets have Jaccard >= 0.55.",
+ "records": "a and b name a record by source and source_id within the pair's topic; the record is the one the real adapters parse from the pools (parse_works, parse_feed).",
+ "label_rule": "same: one paper in any version (preprint, camera-ready, journal extension, or a duplicate record of it), FR-D3. different: two papers. unsure: the labeller could not decide; excluded from precision and recall and reviewed by the owner.",
+ "split": "odd-numbered topics train (thresholds are fitted here), even-numbered topics are held out (scores are reported here). Fixed before labelling.",
+ "labelled_by": "Claude, before any matcher existed (2026-10-08); owner spot-check pending",
+ "limits": [
+  "Pairs below 0.55 title overlap with no shared identifier are assumed different and are not in the fixture: recall is recall within the candidate set.",
+  "One labeller wrote both these labels and the matcher; the hash below is taken before the matcher is written, and the owner reviews a random 40 and every unsure pair."
+ ],
+ "pairs": [
+  {
+   "pair": "t01-000",
+   "topic": "t01",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2305.06983v2"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2401.15884v3"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t01-001",
+   "topic": "t01",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2305.06983v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4389519118"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t01-002",
+   "topic": "t01",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2305.06983v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4410705984"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t01-003",
+   "topic": "t01",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2305.06983v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4410929991"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t01-004",
+   "topic": "t01",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2305.06983v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4391418506"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t01-005",
+   "topic": "t01",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2401.15884v3"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4389519118"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t01-006",
+   "topic": "t01",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2401.15884v3"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4410705984"
+   },
+   "label": "same",
+   "note": "SSRN posting a year after the arXiv preprint"
+  },
+  {
+   "pair": "t01-007",
+   "topic": "t01",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2401.15884v3"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4410929991"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t01-008",
+   "topic": "t01",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2401.15884v3"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4391418506"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t01-009",
+   "topic": "t01",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2509.21237v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4411120544"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t01-010",
+   "topic": "t01",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2601.04377v5"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4410929991"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t01-011",
+   "topic": "t01",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2512.20626v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4411119292"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t01-012",
+   "topic": "t01",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4389984066"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4411203672"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t01-013",
+   "topic": "t01",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4389519118"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4410705984"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t01-014",
+   "topic": "t01",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4389519118"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4410929991"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t01-015",
+   "topic": "t01",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4389519118"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4391418506"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t01-016",
+   "topic": "t01",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W3015883388"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3176182290"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t01-017",
+   "topic": "t01",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W3015883388"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3039017601"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t01-018",
+   "topic": "t01",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4411630045"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4406771321"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t01-019",
+   "topic": "t01",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4393147129"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4388778348"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t01-020",
+   "topic": "t01",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4393147129"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4389518671"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t01-021",
+   "topic": "t01",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4388778348"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4389518671"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t01-022",
+   "topic": "t01",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4410705984"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4410929991"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t01-023",
+   "topic": "t01",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4410705984"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4391418506"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t01-024",
+   "topic": "t01",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4406771321"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4226069413"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t01-025",
+   "topic": "t01",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4317898419"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3176182290"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t01-026",
+   "topic": "t01",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4411120544"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4411119292"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t01-027",
+   "topic": "t01",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4410929991"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4391418506"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t02-028",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2403.16187v2"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2508.21810v1"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t02-029",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2403.16187v2"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2408.10280v2"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t02-030",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2403.16187v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4404781224"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t02-031",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2403.16187v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4401042811"
+   },
+   "label": "same",
+   "note": "first author spelled Zequan Liu by arXiv, Zhaojia Liu by OpenAlex"
+  },
+  {
+   "pair": "t02-032",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2405.00361v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4404781224"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t02-033",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2410.04060v3"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2106.09685v2"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t02-034",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2410.04060v3"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2604.18124v1"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t02-035",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2410.04060v3"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2505.23808v1"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t02-036",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2410.04060v3"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2406.01775v2"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t02-037",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2409.05976v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4415798642"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t02-038",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2409.05976v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4403591916"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t02-039",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2508.21810v1"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2106.09685v2"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t02-040",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2508.21810v1"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2505.18877v4"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t02-041",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2508.21810v1"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2408.10280v2"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t02-042",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2508.21810v1"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2601.16991v3"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t02-043",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2508.21810v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4404781224"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t02-044",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2508.21810v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4401042811"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t02-045",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2106.09685v2"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2604.18124v1"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t02-046",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2106.09685v2"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2505.23808v1"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t02-047",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2106.09685v2"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2406.01775v2"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t02-048",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2106.09685v2"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2309.14717v2"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t02-049",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2106.09685v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3168867926"
+   },
+   "label": "unsure",
+   "note": "OpenAlex record carries LoRA's arXiv id and authors under an unrelated title: a corrupted record, not a version",
+   "owner_label": "same"
+  },
+  {
+   "pair": "t02-050",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2505.18877v4"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2408.10280v2"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t02-051",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2505.18877v4"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2601.16991v3"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t02-052",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2505.18877v4"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4404781224"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t02-053",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2604.18124v1"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2505.23808v1"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t02-054",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2604.18124v1"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2406.01775v2"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t02-055",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2604.18124v1"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2309.14717v2"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t02-056",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2408.10280v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4404781224"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t02-057",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2408.10280v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4401042811"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t02-058",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2408.10774v5"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2502.14482v1"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t02-059",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2505.23808v1"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2406.01775v2"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t02-060",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2501.15361v5"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2601.16991v3"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t02-061",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2501.15361v5"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4404781224"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t02-062",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2311.11696v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4389524340"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t02-063",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2601.16991v3"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4404781224"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t02-064",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4362515116"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4384389802"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t02-065",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4362515116"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4391766565"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t02-066",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4362515116"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4388994228"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t02-067",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4415798642"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4403591916"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t02-068",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4404781224"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4401042811"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t02-069",
+   "topic": "t02",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4391766565"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4388994228"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t03-070",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2004.04906v3"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2110.01599v1"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t03-071",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2004.04906v3"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2010.08191v2"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t03-072",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2004.04906v3"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2106.00882v1"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t03-073",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2004.04906v3"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2110.15439v1"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t03-074",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2004.04906v3"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2401.13463v3"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t03-075",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2004.04906v3"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3015883388"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t03-076",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2004.04906v3"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3168875417"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t03-077",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2004.04906v3"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3039017601"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t03-078",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2004.04906v3"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3092683697"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t03-079",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2004.04906v3"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3176182290"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t03-080",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2004.04906v3"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3177415603"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t03-081",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2004.04906v3"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3209717315"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t03-082",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2004.04906v3"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3203595782"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t03-083",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2004.04906v3"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4404818474"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t03-084",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2004.04906v3"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4385571484"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t03-085",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2110.01599v1"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2110.15439v1"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t03-086",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2110.01599v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3015883388"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t03-087",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2110.01599v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3209717315"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t03-088",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2110.01599v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3203595782"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t03-089",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2010.08191v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3015883388"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t03-090",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2010.08191v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3168875417"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t03-091",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2010.08191v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3092683697"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t03-092",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2106.00882v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3015883388"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t03-093",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2106.00882v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3039017601"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t03-094",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2106.00882v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3177415603"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t03-095",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2110.15439v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3015883388"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t03-096",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2110.15439v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3176182290"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t03-097",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2110.15439v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3209717315"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t03-098",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2110.15439v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3203595782"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t03-099",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2110.15439v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4385571484"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t03-100",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2401.13463v3"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3015883388"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t03-101",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2408.08444v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W2947497897"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t03-102",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2309.11392v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4386942346"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t03-103",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2103.12011v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3138967041"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t03-104",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2012.15156v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3118027562"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t03-105",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2109.08535v3"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3201233724"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t03-106",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2206.10658v4"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4381686872"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t03-107",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2108.12139v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3198691721"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t03-108",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W3015883388"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3168875417"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t03-109",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W3015883388"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3039017601"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t03-110",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W3015883388"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3092683697"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t03-111",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W3015883388"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3176182290"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t03-112",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W3015883388"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3177415603"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t03-113",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W3015883388"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3209717315"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t03-114",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W3015883388"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3203595782"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t03-115",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W3015883388"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4404818474"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t03-116",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W3015883388"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4385571484"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t03-117",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W3168875417"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3092683697"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t03-118",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W3039017601"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3177415603"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t03-119",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4317898419"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3176182290"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t03-120",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W3176182290"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3209717315"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t03-121",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W3176182290"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4385571484"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t03-122",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W3209717315"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3203595782"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t03-123",
+   "topic": "t03",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W3209717315"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4385571484"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t04-124",
+   "topic": "t04",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2402.03190v4"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4402671735"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t04-125",
+   "topic": "t04",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2402.03190v4"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4405596328"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t04-126",
+   "topic": "t04",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2407.04121v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4387848774"
+   },
+   "label": "same",
+   "note": "the published version (2023) precedes the arXiv record (2024)"
+  },
+  {
+   "pair": "t04-127",
+   "topic": "t04",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2609.11878v1"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2601.06196v3"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t04-128",
+   "topic": "t04",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2609.11878v1"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2601.09929v1"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t04-129",
+   "topic": "t04",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2601.06196v3"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2601.09929v1"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t04-130",
+   "topic": "t04",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2508.01862v1"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2601.09929v1"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t04-131",
+   "topic": "t04",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2406.10185v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4393160204"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t04-132",
+   "topic": "t04",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2502.15844v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4411449748"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t04-133",
+   "topic": "t04",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2403.06448v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4402670272"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t04-134",
+   "topic": "t04",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2510.06265v3"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4362515116"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t04-135",
+   "topic": "t04",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2510.06265v3"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4404356490"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t04-136",
+   "topic": "t04",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2510.06265v3"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4390490761"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t04-137",
+   "topic": "t04",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2510.06265v3"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4390602555"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t04-138",
+   "topic": "t04",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2601.09929v1"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2507.22915v1"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t04-139",
+   "topic": "t04",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2407.00488v1"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2401.06855v4"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t04-140",
+   "topic": "t04",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2408.05767v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4404782092"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t04-141",
+   "topic": "t04",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4389520749"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4327810286"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t04-142",
+   "topic": "t04",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4404534210"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4388585881"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t04-143",
+   "topic": "t04",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4362515116"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4404356490"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t04-144",
+   "topic": "t04",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4362515116"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4390490761"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t04-145",
+   "topic": "t04",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4404356490"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4390490761"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t04-146",
+   "topic": "t04",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4386501849"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4412158322"
+   },
+   "label": "same",
+   "note": "journal version two years after the preprint; title gains an emoji"
+  },
+  {
+   "pair": "t04-147",
+   "topic": "t04",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4402671735"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4405596328"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t05-148",
+   "topic": "t05",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2111.00396v3"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3209374680"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t05-149",
+   "topic": "t05",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2208.04933v3"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2410.03464v1"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t05-150",
+   "topic": "t05",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2404.16112v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4412524449"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t05-151",
+   "topic": "t05",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2404.16112v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4401694694"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t05-152",
+   "topic": "t05",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2312.00752v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4389326242"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t05-153",
+   "topic": "t05",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W2508429489"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W2951183276"
+   },
+   "label": "same",
+   "note": "technical report (2014) and its TPAMI extension (2016): two years apart"
+  },
+  {
+   "pair": "t05-154",
+   "topic": "t05",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4412524449"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4401694694"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t06-155",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2606.20906v1"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2012.02089v1"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t06-156",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2606.20906v1"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2005.13607v3"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t06-157",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2606.20906v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3034231628"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t06-158",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "1909.00259v2"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2012.02089v1"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t06-159",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "1909.00259v2"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2005.13607v3"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t06-160",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "1909.00259v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4413224864"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t06-161",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "1909.00259v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4210313485"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t06-162",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "1909.00259v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3034231628"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t06-163",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2008.12187v1"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2405.02628v1"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t06-164",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2008.12187v1"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2405.05205v1"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t06-165",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2008.12187v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3138215796"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t06-166",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2208.04852v1"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2012.02089v1"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t06-167",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2208.04852v1"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2107.04119v2"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t06-168",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2208.04852v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4309258819"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t06-169",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2208.04852v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4390591490"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t06-170",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2012.02089v1"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2005.13607v3"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t06-171",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2012.02089v1"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2410.11323v2"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t06-172",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2012.02089v1"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2207.13779v1"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t06-173",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2012.02089v1"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2107.04119v2"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t06-174",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2012.02089v1"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2202.09891v2"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t06-175",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2012.02089v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4413224864"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t06-176",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2012.02089v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4309258819"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t06-177",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2012.02089v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4210313485"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t06-178",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2012.02089v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4321793135"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t06-179",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2012.02089v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3034231628"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t06-180",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2012.02089v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4390591490"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t06-181",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2405.02628v1"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2405.05205v1"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t06-182",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2405.02628v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3138215796"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t06-183",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2005.13607v3"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4413224864"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t06-184",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2005.13607v3"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4210313485"
+   },
+   "label": "different",
+   "note": "same author list, different paper"
+  },
+  {
+   "pair": "t06-185",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2005.13607v3"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3034231628"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t06-186",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2410.11323v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4413224864"
+   },
+   "label": "same",
+   "note": "journal version drops the 'KA-GNN:' prefix; one year apart"
+  },
+  {
+   "pair": "t06-187",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2207.13779v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4321793135"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t06-188",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2208.13994v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4311584330"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t06-189",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2107.04119v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4309258819"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t06-190",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2107.04119v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4390591490"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t06-191",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2405.05205v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3138215796"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t06-192",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2007.03196v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3041085747"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t06-193",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2106.01829v3"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3212512279"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t06-194",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2012.01981v3"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3120618935"
+   },
+   "label": "same",
+   "note": "preprint (2020) and journal version (2022): two years apart"
+  },
+  {
+   "pair": "t06-195",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2106.06130v4"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4213077304"
+   },
+   "label": "same",
+   "note": "journal version drops the 'ChemRL-GEM:' prefix; shares the arXiv id"
+  },
+  {
+   "pair": "t06-196",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4413224864"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4210313485"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t06-197",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4413224864"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3034231628"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t06-198",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4309258819"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4390591490"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t06-199",
+   "topic": "t06",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4210313485"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3034231628"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t07-200",
+   "topic": "t07",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2007.01922v1"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "1811.05072v1"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t07-201",
+   "topic": "t07",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2007.01922v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W2963514416"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t07-202",
+   "topic": "t07",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2007.01922v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3038907258"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t07-203",
+   "topic": "t07",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2007.01922v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W2901719623"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t07-204",
+   "topic": "t07",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2011.07449v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3105082838"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t07-205",
+   "topic": "t07",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2011.07449v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4290714886"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t07-206",
+   "topic": "t07",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "1908.09355v1"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2012.02911v1"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t07-207",
+   "topic": "t07",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "1908.09355v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W2969515962"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t07-208",
+   "topic": "t07",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2305.10010v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4382119231"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t07-209",
+   "topic": "t07",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "1811.05072v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W2963514416"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t07-210",
+   "topic": "t07",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "1811.05072v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3038907258"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t07-211",
+   "topic": "t07",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "1811.05072v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W2901719623"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t07-212",
+   "topic": "t07",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2012.02911v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W2969515962"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t07-213",
+   "topic": "t07",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2012.02911v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4285269381"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t07-214",
+   "topic": "t07",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2012.01266v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3173256823"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t07-215",
+   "topic": "t07",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "1904.09636v1"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "1910.08381v1"
+   },
+   "label": "different",
+   "note": "same authors and year, different paper"
+  },
+  {
+   "pair": "t07-216",
+   "topic": "t07",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "1904.09636v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W2996834012"
+   },
+   "label": "different",
+   "note": "same authors, different paper"
+  },
+  {
+   "pair": "t07-217",
+   "topic": "t07",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "1904.09636v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W2938227057"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t07-218",
+   "topic": "t07",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "1910.08381v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W2996834012"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t07-219",
+   "topic": "t07",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "1910.08381v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W2938227057"
+   },
+   "label": "different",
+   "note": "same authors and year, different paper"
+  },
+  {
+   "pair": "t07-220",
+   "topic": "t07",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2505.20237v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4386895277"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t07-221",
+   "topic": "t07",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W3034368386"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4404212170"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t07-222",
+   "topic": "t07",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W2963514416"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3038907258"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t07-223",
+   "topic": "t07",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W2963514416"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W2901719623"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t07-224",
+   "topic": "t07",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W2996834012"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W2938227057"
+   },
+   "label": "different",
+   "note": "same authors, different paper"
+  },
+  {
+   "pair": "t07-225",
+   "topic": "t07",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W3038907258"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W2901719623"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t07-226",
+   "topic": "t07",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W3105082838"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4290714886"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t07-227",
+   "topic": "t07",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W2766839578"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4324057834"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t08-228",
+   "topic": "t08",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2201.09865v4"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3036167779"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t08-229",
+   "topic": "t08",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2201.09865v4"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4312497550"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t08-230",
+   "topic": "t08",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2302.02398v1"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2406.09161v1"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t08-231",
+   "topic": "t08",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2405.14802v3"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4372336638"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t08-232",
+   "topic": "t08",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2405.14802v3"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4409883006"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t08-233",
+   "topic": "t08",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2405.14802v3"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4308614811"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t08-234",
+   "topic": "t08",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2209.06167v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4387296387"
+   },
+   "label": "same",
+   "note": "'model' against 'models'; one year apart"
+  },
+  {
+   "pair": "t08-235",
+   "topic": "t08",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2301.10227v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4391971771"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t08-236",
+   "topic": "t08",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2308.08339v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4386426777"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t08-237",
+   "topic": "t08",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2206.05039v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4387360324"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t08-238",
+   "topic": "t08",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2211.12500v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4386076520"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t08-239",
+   "topic": "t08",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4312933868"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4226317937"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t08-240",
+   "topic": "t08",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W3036167779"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4312497550"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t08-241",
+   "topic": "t08",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W3036167779"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4402716100"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t08-242",
+   "topic": "t08",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W3036167779"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3092442149"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t08-243",
+   "topic": "t08",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4372336638"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4409883006"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t08-244",
+   "topic": "t08",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4372336638"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4308614811"
+   },
+   "label": "same",
+   "note": "published version drops the 'Medical Diffusion:' prefix"
+  },
+  {
+   "pair": "t08-245",
+   "topic": "t08",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4409883006"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4308614811"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t08-246",
+   "topic": "t08",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4402716100"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3092442149"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-247",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2204.10298v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4224313754"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t09-248",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2204.10298v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4385571485"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-249",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2305.15077v2"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2305.01918v3"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-250",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2305.15077v2"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2104.08821v4"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-251",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2305.15077v2"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2204.10931v1"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-252",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2305.15077v2"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2311.03881v1"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-253",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2305.15077v2"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2305.17746v2"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-254",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2305.15077v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3156636935"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-255",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2305.15077v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3213189520"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-256",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2305.15077v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4224950137"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-257",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2305.15077v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4385572035"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-258",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2305.15077v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4389518752"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t09-259",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2210.06432v3"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2311.03881v1"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-260",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2210.06432v3"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4385574084"
+   },
+   "label": "same",
+   "note": "OpenAlex's first author (Desheng Dash Wu) is a disambiguation error for Xing Wu"
+  },
+  {
+   "pair": "t09-261",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2305.01918v3"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4385572035"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t09-262",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2305.01918v3"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4389518752"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-263",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2104.08821v4"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2204.10931v1"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-264",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2104.08821v4"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2311.03881v1"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-265",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2104.08821v4"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2305.17746v2"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-266",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2104.08821v4"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3156636935"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t09-267",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2104.08821v4"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3213189520"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t09-268",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2104.08821v4"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4224950137"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-269",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2104.08821v4"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4389518752"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-270",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2204.10931v1"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2311.03881v1"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-271",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2204.10931v1"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2305.17746v2"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-272",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2204.10931v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3156636935"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-273",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2204.10931v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3213189520"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-274",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2204.10931v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4224950137"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t09-275",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2204.10931v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4389518752"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-276",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2201.12093v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4385573552"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t09-277",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2311.03881v1"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2109.12599v1"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-278",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2311.03881v1"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2305.17746v2"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-279",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2311.03881v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3156636935"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-280",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2311.03881v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3213189520"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-281",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2311.03881v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3202125623"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-282",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2311.03881v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4385574084"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-283",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2311.03881v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4224950137"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-284",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2311.03881v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4385570119"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-285",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2311.03881v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4389518752"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-286",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2203.05877v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4226186836"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t09-287",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2201.05979v3"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4385392860"
+   },
+   "label": "same",
+   "note": "LNCS version lists 2 authors against arXiv's 6; same title and first author"
+  },
+  {
+   "pair": "t09-288",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2211.06127v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4385574070"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t09-289",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2109.12599v1"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2305.17746v2"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-290",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2109.12599v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3202125623"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t09-291",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2109.12599v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4385570119"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-292",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2203.06875v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4385573468"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t09-293",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2205.04260v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4287889465"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t09-294",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2305.17746v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3156636935"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-295",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2305.17746v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3213189520"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-296",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2305.17746v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3202125623"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-297",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2305.17746v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4224950137"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-298",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2305.17746v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4385570119"
+   },
+   "label": "same",
+   "note": "published version adds a 'WhitenedCSE:' prefix"
+  },
+  {
+   "pair": "t09-299",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2305.17746v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4389518752"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-300",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2109.04380v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3196790170"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t09-301",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W3156636935"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W3213189520"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t09-302",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W3156636935"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4224950137"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-303",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W3156636935"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4389518752"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-304",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4224313754"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4385571485"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-305",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4288089799"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W2981852735"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t09-306",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W3213189520"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4224950137"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-307",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W3213189520"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4389518752"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-308",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W3202125623"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4385570119"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-309",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4224950137"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4389518752"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t09-310",
+   "topic": "t09",
+   "split": "train",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4385572035"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4389518752"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-311",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2201.11903v6"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2404.14812v2"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-312",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2201.11903v6"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2210.03493v1"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-313",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2201.11903v6"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W7133224126"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t10-314",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2201.11903v6"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4304194220"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-315",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2201.11903v6"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4409363623"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-316",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2201.11903v6"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4221143046"
+   },
+   "label": "unsure",
+   "note": "OpenAlex record carries chain-of-thought's arXiv id and authors under an unrelated title: a corrupted record, not a version",
+   "owner_label": "same"
+  },
+  {
+   "pair": "t10-317",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2201.11903v6"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4319165821"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-318",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2311.09277v1"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2402.10200v2"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-319",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2311.09277v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4415797312"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-320",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2311.09277v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4391901232"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-321",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2404.14812v2"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2210.03493v1"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-322",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2404.14812v2"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2507.13362v1"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-323",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2404.14812v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W7133224126"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-324",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2404.14812v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4304194220"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-325",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2404.14812v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4409363623"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t10-326",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2402.10200v2"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2305.11255v4"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-327",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2402.10200v2"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2301.13379v3"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-328",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2402.10200v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4385571452"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-329",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2402.10200v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4415797312"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t10-330",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2402.10200v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4391901232"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t10-331",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2402.10200v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4392637287"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-332",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2402.10200v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4377299539"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-333",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2310.14799v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4389523853"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t10-334",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2310.16436v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W7133189340"
+   },
+   "label": "same",
+   "note": "author name order differs (Ge Zheng / Zheng Ge)"
+  },
+  {
+   "pair": "t10-335",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2310.16436v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4387994822"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t10-336",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2310.16436v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4319165821"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-337",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2304.11556v1"
+   },
+   "b": {
+    "source": "arxiv",
+    "source_id": "2305.14215v2"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-338",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2304.11556v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4389524197"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-339",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2305.14215v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4389524197"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t10-340",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2210.03493v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W7133224126"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-341",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2210.03493v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4304194220"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t10-342",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2210.03493v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4409363623"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-343",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2210.03493v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4402671980"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-344",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2203.11171v4"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4221161695"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t10-345",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2203.11171v4"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4319165821"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-346",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2305.11255v4"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4385571452"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t10-347",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2305.11255v4"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4415797312"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-348",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2305.11255v4"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4391901232"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-349",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2305.11255v4"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4377299539"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t10-350",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2305.04091v3"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4385570088"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t10-351",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2305.04091v3"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4375957723"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t10-352",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2301.13379v3"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4415797312"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-353",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2301.13379v3"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4391901232"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-354",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2301.13379v3"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4392637287"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t10-355",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2507.13362v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4409363623"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-356",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2310.13552v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4389519175"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t10-357",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2302.00618v1"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4402671980"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-358",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2508.12587v2"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4319165821"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-359",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "arxiv",
+    "source_id": "2203.08383v3"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4385572867"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t10-360",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W7133224126"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4304194220"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-361",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W7133224126"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4409363623"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-362",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W7133224126"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4319165821"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-363",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4385570088"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4375957723"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t10-364",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4385571452"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4415797312"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-365",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4385571452"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4391901232"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-366",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4385571452"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4377299539"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t10-367",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4221161695"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4319165821"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-368",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4415797312"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4391901232"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t10-369",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4415797312"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4392637287"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-370",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4415797312"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4377299539"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-371",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4304194220"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4409363623"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-372",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4304194220"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4402671980"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-373",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4391901232"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4392637287"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-374",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4391901232"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4377299539"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-375",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W7133189340"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4387994822"
+   },
+   "label": "same"
+  },
+  {
+   "pair": "t10-376",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W7133189340"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4319165821"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-377",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4387994822"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4319165821"
+   },
+   "label": "different"
+  },
+  {
+   "pair": "t10-378",
+   "topic": "t10",
+   "split": "held_out",
+   "a": {
+    "source": "openalex",
+    "source_id": "W4402727624"
+   },
+   "b": {
+    "source": "openalex",
+    "source_id": "W4402671980"
+   },
+   "label": "different"
+  }
+ ],
+ "owner_review": {
+  "date": "2026-10-08",
+  "labels_frozen_sha256": "3aa8b15e9fb78a3b389d4e4f4db8e565ce7dc6487eff7aabcedf0cf88e6c1bb8",
+  "sample_seed": 146,
+  "sample": [
+   "t01-004",
+   "t01-016",
+   "t01-019",
+   "t01-020",
+   "t02-033",
+   "t02-037",
+   "t02-043",
+   "t02-068",
+   "t02-069",
+   "t03-072",
+   "t03-080",
+   "t03-082",
+   "t03-100",
+   "t03-110",
+   "t03-113",
+   "t04-145",
+   "t05-148",
+   "t06-157",
+   "t06-169",
+   "t06-171",
+   "t06-173",
+   "t06-178",
+   "t06-199",
+   "t07-200",
+   "t07-202",
+   "t07-212",
+   "t07-219",
+   "t07-225",
+   "t08-228",
+   "t08-232",
+   "t08-240",
+   "t09-275",
+   "t09-289",
+   "t09-297",
+   "t09-307",
+   "t10-321",
+   "t10-334",
+   "t10-339",
+   "t10-364",
+   "t10-372"
+  ],
+  "sample_disagreements": 0,
+  "unsure_resolved": {
+   "t02-049": "same",
+   "t10-316": "same"
+  },
+  "rule": "Where present, owner_label is the label scored; label is the labeller's, kept so the frozen hash still verifies."
+ }
+}

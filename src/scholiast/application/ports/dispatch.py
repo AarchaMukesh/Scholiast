@@ -29,6 +29,8 @@ from __future__ import annotations
 
 from typing import Protocol, runtime_checkable
 
+from scholiast.application.ports.queue import JobPriority
+
 
 @runtime_checkable
 class JobDispatcher(Protocol):
@@ -49,8 +51,13 @@ class JobDispatcher(Protocol):
         """
         ...
 
-    async def dispatch(self, job_id: str) -> bool:
+    async def dispatch(
+        self, job_id: str, *, priority: JobPriority = JobPriority.INTERACTIVE
+    ) -> bool:
         """Best-effort wake-up for one committed job.
+
+        `priority` lets a broker carry bulk work apart from a user's (D140), so an
+        operator can see the two; which job runs is still the claim's decision.
 
         Returns whether the broker accepted it, for logging and tests. **Never
         raises for a broker failure**: the caller is past the point where failing

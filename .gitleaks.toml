@@ -1,0 +1,19 @@
+# Gitleaks configuration: every default rule, plus one allowlisted placeholder.
+#
+# `test-key-0123456789` is the OpenAlex key the discovery tests pass to the
+# adapters (M4 phases 2-4). It is not a credential: it never reaches OpenAlex,
+# because every test that uses it mocks the transport, and the real key lives
+# only in spike/.env, which is gitignored and was checked against every flagged
+# line. Gitleaks' generic-api-key rule matches it by shape.
+#
+# Allowlisted by its exact value, not by path or fingerprint: a path allowlist
+# would hide a real key pasted into a test, and a fingerprint names a commit, so
+# a squash-merge into main would turn the same placeholder into new findings.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Placeholder API key used by the discovery tests; not a credential"
+regexTarget = "secret"
+regexes = ['''test-key-0123456789''']

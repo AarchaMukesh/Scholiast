@@ -25,6 +25,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from testcontainers.community.postgres import PostgresContainer
 
+from scholiast.application.ports.queue import JobPriority, QueuedJob
 from scholiast.application.ports.tenancy import (
     WORKER_CLAIM_REASON,
     SystemContext,
@@ -33,6 +34,8 @@ from scholiast.application.ports.tenancy import (
 )
 from scholiast.domain.errors import FailureClass
 from scholiast.domain.workspace import PaperState
+from scholiast.infrastructure.db.pending import PENDING_BACKFILL_DISPATCH, PENDING_DISPATCH
+from scholiast.infrastructure.observability import metrics
 from scholiast.infrastructure.queue.postgres import PostgresQueue, retry_delay
 
 pytestmark = [pytest.mark.integration]
@@ -106,11 +109,13 @@ async def seed_paper(factory: async_sessionmaker[AsyncSession]) -> tuple[str, st
     return user_id, workspace_id, paper_id
 
 
-async def enqueue(factory: async_sessionmaker[AsyncSession]) -> tuple[str, str, str]:
+async def enqueue(
+    factory: async_sessionmaker[AsyncSession], priority: JobPriority = JobPriority.INTERACTIVE
+) -> tuple[str, str, str]:
     user_id, workspace_id, paper_id = await seed_paper(factory)
     async with factory() as session:
         job_id = await PostgresQueue(session, SYSTEM).enqueue(
-            workspace_id=workspace_id, paper_id=paper_id
+            workspace_id=workspace_id, paper_id=paper_id, priority=priority
         )
         await session.commit()
     return job_id, workspace_id, user_id
@@ -440,7 +445,7 @@ class TestTheJobRowIsCommittedWithItsPaper:
                 {"w": workspace_id, "p": paper_id},
             )
             await PostgresQueue(session, SYSTEM).enqueue(
-                workspace_id=workspace_id, paper_id=paper_id
+                priority=JobPriority.INTERACTIVE, workspace_id=workspace_id, paper_id=paper_id
             )
             await session.rollback()
 
@@ -450,3 +455,172 @@ class TestTheJobRowIsCommittedWithItsPaper:
                 await session.execute(text("SELECT count(*) FROM workspace_papers"))
             ).scalar_one()
         assert (jobs, members) == (0, 0)
+
+
+async def claim(factory: async_sessionmaker[AsyncSession], *, limit: int = 1) -> list[QueuedJob]:
+    async with factory() as session:
+        jobs = await PostgresQueue(session, SYSTEM).claim(limit=limit)
+        await session.commit()
+    return jobs
+
+
+async def seconds_until_visible(factory: async_sessionmaker[AsyncSession], job_id: str) -> float:
+    async with factory() as session:
+        return float(
+            (
+                await session.execute(
+                    text(
+                        "SELECT extract(epoch FROM visible_at - now()) "
+                        "FROM ingestion_jobs WHERE id = :id"
+                    ),
+                    {"id": job_id},
+                )
+            ).scalar_one()
+        )
+
+
+async def fail_transient(
+    factory: async_sessionmaker[AsyncSession], job_id: str, retry_after: float | None
+) -> PaperState:
+    async with factory() as session:
+        landed = await PostgresQueue(session, SYSTEM).fail(
+            job_id,
+            failure_class=FailureClass.TRANSIENT,
+            detail="links tried: status:429",
+            retry_after=retry_after,
+        )
+        await session.commit()
+    return landed
+
+
+class TestUploadsAreClaimedBeforeDiscoveredPapers:
+    """D139. Under D95 a wake-up claims whatever is due, so the claim is where
+    priority has to live: anywhere else it changes nothing."""
+
+    async def test_a_due_upload_goes_before_an_older_due_discovered_paper(
+        self, sessions: async_sessionmaker[AsyncSession]
+    ) -> None:
+        discovered, _, _ = await enqueue(sessions, JobPriority.BACKFILL)
+        await expire_lease(sessions, discovered)  # due for an hour: it has waited longest
+        upload, _, _ = await enqueue(sessions, JobPriority.INTERACTIVE)
+
+        first = await claim(sessions)
+        second = await claim(sessions)
+
+        assert [job.id for job in first] == [upload]
+        assert first[0].priority is JobPriority.INTERACTIVE
+        assert [job.id for job in second] == [discovered]
+        assert second[0].priority is JobPriority.BACKFILL
+
+    async def test_within_a_priority_the_longest_waiting_goes_first(
+        self, sessions: async_sessionmaker[AsyncSession]
+    ) -> None:
+        # The old promise, narrowed (D139): a redelivered job is not starved
+        # behind newer arrivals OF ITS PRIORITY.
+        await enqueue(sessions, JobPriority.BACKFILL)
+        older, _, _ = await enqueue(sessions, JobPriority.BACKFILL)
+        await expire_lease(sessions, older)
+
+        assert [job.id for job in await claim(sessions)] == [older]
+
+    async def test_a_batch_runs_its_uploads_first(
+        self, sessions: async_sessionmaker[AsyncSession]
+    ) -> None:
+        # `UPDATE ... RETURNING` promises no order, whatever the subquery said.
+        discovered = [(await enqueue(sessions, JobPriority.BACKFILL))[0] for _ in range(3)]
+        upload, _, _ = await enqueue(sessions, JobPriority.INTERACTIVE)
+
+        batch = await claim(sessions, limit=4)
+
+        assert batch[0].id == upload
+        assert {job.id for job in batch[1:]} == set(discovered)
+
+    async def test_a_backfill_job_is_announced_for_the_backfill_queue(
+        self, sessions: async_sessionmaker[AsyncSession]
+    ) -> None:
+        # D140: the wake-up's queue is decided at commit time from this key.
+        _, workspace_id, paper_id = await seed_paper(sessions)
+        async with sessions() as session:
+            job_id = await PostgresQueue(session, SYSTEM).enqueue(
+                workspace_id=workspace_id, paper_id=paper_id, priority=JobPriority.BACKFILL
+            )
+            assert session.info.get(PENDING_BACKFILL_DISPATCH) == [job_id]
+            assert PENDING_DISPATCH not in session.info
+            await session.rollback()
+
+    async def test_job_age_is_reported_per_priority(
+        self, sessions: async_sessionmaker[AsyncSession]
+    ) -> None:
+        # The starvation alarm (D139): a backfill job waiting an hour must not be
+        # averaged away by an upload lane that is draining.
+        waiting, _, _ = await enqueue(sessions, JobPriority.BACKFILL)
+        await enqueue(sessions, JobPriority.INTERACTIVE)
+        async with sessions() as session:
+            await session.execute(
+                text(
+                    "UPDATE ingestion_jobs SET created_at = now() - interval '1 hour' "
+                    "WHERE id = :id"
+                ),
+                {"id": waiting},
+            )
+            await session.commit()
+
+        await metrics.refresh_work_gauges(sessions)
+
+        name = "scholiast_ingestion_oldest_job_age_seconds"
+        backfill = metrics.REGISTRY.get_sample_value(name, {"priority": "backfill"})
+        interactive = metrics.REGISTRY.get_sample_value(name, {"priority": "interactive"})
+        assert backfill is not None and interactive is not None
+        assert 3590 < backfill < 3700
+        assert interactive < 60
+
+
+class TestAStatedWaitIsHonoured:
+    """D142: a host that said when to come back is not asked before then."""
+
+    async def test_a_retry_waits_at_least_as_long_as_the_host_said(
+        self, sessions: async_sessionmaker[AsyncSession]
+    ) -> None:
+        job_id, _, _ = await enqueue(sessions)
+        await claim(sessions)
+
+        assert await fail_transient(sessions, job_id, retry_after=600.0) is PaperState.QUEUED
+
+        # D48's first backoff is about 5 s; the host's 600 s wins.
+        assert 590 < await seconds_until_visible(sessions, job_id) <= 600
+
+    async def test_a_stated_wait_shorter_than_the_backoff_does_not_shorten_it(
+        self, sessions: async_sessionmaker[AsyncSession]
+    ) -> None:
+        job_id, _, _ = await enqueue(sessions)
+        await claim(sessions)
+
+        await fail_transient(sessions, job_id, retry_after=0.5)
+
+        # retry_delay(1) is 5 s +/- 20%.
+        assert 3.5 < await seconds_until_visible(sessions, job_id) <= 6.0
+
+    async def test_a_wait_over_an_hour_fails_the_paper_now(
+        self, sessions: async_sessionmaker[AsyncSession]
+    ) -> None:
+        job_id, _, _ = await enqueue(sessions)
+        await claim(sessions)
+
+        assert await fail_transient(sessions, job_id, retry_after=7200.0) is PaperState.FAILED
+
+        row = await job_row(sessions, job_id)
+        assert row.state == "failed"
+        assert "7200" in row.last_error, "the reason it gave up was not recorded"
+
+    async def test_every_retry_still_spends_an_attempt(
+        self, sessions: async_sessionmaker[AsyncSession]
+    ) -> None:
+        # The bound is what makes a host that always says "later" end (D142).
+        job_id, _, _ = await enqueue(sessions)
+        landed = []
+        for _ in range(3):
+            await expire_lease(sessions, job_id)
+            await claim(sessions)
+            landed.append(await fail_transient(sessions, job_id, retry_after=1.0))
+
+        assert landed == [PaperState.QUEUED, PaperState.QUEUED, PaperState.FAILED]
