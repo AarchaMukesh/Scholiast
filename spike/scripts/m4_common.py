@@ -52,13 +52,15 @@ POOLS_MANIFEST_PATH = ROOT / "data" / "eval" / "discovery-pools.manifest.json"
 #: addendum A2 on 2026-10-04 (D125, da128b48...) and addendum A3 on 2026-10-08
 #: (D150, 7f9ee365...), addendum A4 on 2026-10-09 (D159, e83027ac...), approved by the
 #: owner before any A4 request, A4's deviation DEV-A4-1 (D160, 1da1a928...), approved by
-#: the owner after A4 stopped part-way, and addendum A5 on 2026-10-10 (D162), approved
-#: by the owner before any A5 request. A protocol that hashes to anything else is not
-#: the approved protocol, and nothing runs. Each run line in the log records the hash it
-#: ran under: the first 15 requests ran under the original, the rest of the spike under
-#: DEV-2's, A1 under b23f235e..., A2 under da128b48..., A3 under 7f9ee365..., A4's first
-#: part under e83027ac..., its remainder under 1da1a928..., and A5 under this one.
-APPROVED_PROTOCOL_SHA256 = "497284c5beaf0ba08692cb8f48ef3ae8c0537d22e2a62e8c6c832a0517ee6a91"
+#: the owner after A4 stopped part-way, addendum A5 on 2026-10-10 (D162, 497284c5...),
+#: approved by the owner before any A5 request, and addendum A6-multiday on 2026-10-10
+#: (D165), approved by the owner before any A6-multiday request. A protocol that hashes
+#: to anything else is not the approved protocol, and nothing runs. Each run line in the
+#: log records the hash it ran under: the first 15 requests ran under the original, the
+#: rest of the spike under DEV-2's, A1 under b23f235e..., A2 under da128b48..., A3 under
+#: 7f9ee365..., A4's first part under e83027ac..., its remainder under 1da1a928..., A5
+#: under 497284c5..., and A6-multiday under this one.
+APPROVED_PROTOCOL_SHA256 = "c26d383f86bccb4751edcfcf599292613821b75a82661b7367c442207c1cf491"
 ORIGINAL_PROTOCOL_SHA256 = "6a2809025626b29b96119cd4d06639fd3341cd325c74c121e82ba5e9e8677a34"
 
 #: Addendum A2's OpenAlex page sizes (D125), largest first.

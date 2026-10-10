@@ -1,0 +1,195 @@
+{
+ "what": "nDCG@10 of the shipped ranker when each source's page is cut to its first k records, against the full pool's judgments (A3 pools, D149 judgments, D153 weights)",
+ "embedder_version": "BAAI/bge-base-en-v1.5/fp16/1.0.0",
+ "seed": "20260930/A6-multiday/truncation",
+ "per_search": {
+  "openalex25/arxiv50": {
+   "t01-keyword": 0.8743705652481897,
+   "t01-natural_language": 0.6485956689063029,
+   "t02-keyword": 0.9477344873475498,
+   "t02-natural_language": 0.8280830839570048,
+   "t03-keyword": 0.9537125187088151,
+   "t03-natural_language": 0.863443834987606,
+   "t04-keyword": 0.955830517697074,
+   "t04-natural_language": 0.955830517697074,
+   "t05-keyword": 1.0,
+   "t05-natural_language": 0.8091026734983537,
+   "t06-keyword": 1.0,
+   "t06-natural_language": 1.0,
+   "t07-keyword": 0.8988252059479765,
+   "t07-natural_language": 0.9510907186004267,
+   "t08-keyword": 0.8254612838486163,
+   "t08-natural_language": 0.7934623375569916,
+   "t09-keyword": 1.0,
+   "t09-natural_language": 0.8943938982876649,
+   "t10-keyword": 1.0,
+   "t10-natural_language": 0.9575861412006988
+  },
+  "openalex15/arxiv50": {
+   "t01-keyword": 0.9432379215722527,
+   "t01-natural_language": 0.6485956689063029,
+   "t02-keyword": 0.9477344873475498,
+   "t02-natural_language": 0.7734390045175163,
+   "t03-keyword": 0.9510907186004267,
+   "t03-natural_language": 0.863443834987606,
+   "t04-keyword": 0.9537125187088151,
+   "t04-natural_language": 1.0,
+   "t05-keyword": 1.0,
+   "t05-natural_language": 0.8069846745100949,
+   "t06-keyword": 1.0,
+   "t06-natural_language": 1.0,
+   "t07-keyword": 0.8800456786592187,
+   "t07-natural_language": 0.9510907186004267,
+   "t08-keyword": 0.7830474250493152,
+   "t08-natural_language": 0.8314393152098817,
+   "t09-keyword": 1.0,
+   "t09-natural_language": 0.8611375561264454,
+   "t10-keyword": 1.0,
+   "t10-natural_language": 0.9575861412006988
+  },
+  "openalex25/arxiv25": {
+   "t01-keyword": 0.8319567064488885,
+   "t01-natural_language": 0.544610794872989,
+   "t02-keyword": 0.9432379215722527,
+   "t02-natural_language": 0.8280830839570048,
+   "t03-keyword": 0.9575861412006988,
+   "t03-natural_language": 0.863443834987606,
+   "t04-keyword": 1.0,
+   "t04-natural_language": 0.9053206285482487,
+   "t05-keyword": 0.9575861412006988,
+   "t05-natural_language": 0.8108582970019786,
+   "t06-keyword": 1.0,
+   "t06-natural_language": 1.0,
+   "t07-keyword": 0.8988252059479765,
+   "t07-natural_language": 0.9477344873475498,
+   "t08-keyword": 0.7559835875381317,
+   "t08-natural_language": 0.7934623375569916,
+   "t09-keyword": 1.0,
+   "t09-natural_language": 0.9368077570869661,
+   "t10-keyword": 1.0,
+   "t10-natural_language": 0.9575861412006988
+  },
+  "openalex15/arxiv25": {
+   "t01-keyword": 0.8990684392693267,
+   "t01-natural_language": 0.5463664183766138,
+   "t02-keyword": 0.9432379215722527,
+   "t02-natural_language": 0.7734390045175163,
+   "t03-keyword": 0.955830517697074,
+   "t03-natural_language": 0.863443834987606,
+   "t04-keyword": 1.0,
+   "t04-natural_language": 0.9510907186004267,
+   "t05-keyword": 0.9575861412006988,
+   "t05-natural_language": 0.8069846745100949,
+   "t06-keyword": 1.0,
+   "t06-natural_language": 1.0,
+   "t07-keyword": 0.8800456786592187,
+   "t07-natural_language": 0.9432379215722527,
+   "t08-keyword": 0.7542279640345068,
+   "t08-natural_language": 0.8314393152098817,
+   "t09-keyword": 1.0,
+   "t09-natural_language": 0.9074250374176303,
+   "t10-keyword": 0.9575861412006988,
+   "t10-natural_language": 0.9575861412006988
+  }
+ },
+ "all": {
+  "openalex25/arxiv50": {
+   "n": 20,
+   "mean": 0.9079,
+   "difference": 0.0,
+   "interval": [
+    0.0,
+    0.0
+   ],
+   "searches_worse": 0,
+   "relevant_lost": 0,
+   "relevant_in_full": 1142
+  },
+  "openalex15/arxiv50": {
+   "n": 20,
+   "mean": 0.9076,
+   "difference": -0.0002,
+   "interval": [
+    -0.0117,
+    0.012
+   ],
+   "searches_worse": 7,
+   "relevant_lost": 111,
+   "relevant_in_full": 1142
+  },
+  "openalex25/arxiv25": {
+   "n": 20,
+   "mean": 0.8967,
+   "difference": -0.0112,
+   "interval": [
+    -0.0268,
+    0.0033
+   ],
+   "searches_worse": 7,
+   "relevant_lost": 378,
+   "relevant_in_full": 1142
+  },
+  "openalex15/arxiv25": {
+   "n": 20,
+   "mean": 0.8964,
+   "difference": -0.0114,
+   "interval": [
+    -0.0273,
+    0.0029
+   ],
+   "searches_worse": 10,
+   "relevant_lost": 500,
+   "relevant_in_full": 1142
+  }
+ },
+ "held_out": {
+  "openalex25/arxiv50": {
+   "n": 10,
+   "mean": 0.9264,
+   "difference": 0.0,
+   "interval": [
+    0.0,
+    0.0
+   ],
+   "searches_worse": 0,
+   "relevant_lost": 0,
+   "relevant_in_full": 602
+  },
+  "openalex15/arxiv50": {
+   "n": 10,
+   "mean": 0.9247,
+   "difference": -0.0017,
+   "interval": [
+    -0.0198,
+    0.0156
+   ],
+   "searches_worse": 3,
+   "relevant_lost": 59,
+   "relevant_in_full": 602
+  },
+  "openalex25/arxiv25": {
+   "n": 10,
+   "mean": 0.9184,
+   "difference": -0.008,
+   "interval": [
+    -0.027,
+    0.0084
+   ],
+   "searches_worse": 3,
+   "relevant_lost": 208,
+   "relevant_in_full": 602
+  },
+  "openalex15/arxiv25": {
+   "n": 10,
+   "mean": 0.9169,
+   "difference": -0.0095,
+   "interval": [
+    -0.0316,
+    0.0117
+   ],
+   "searches_worse": 5,
+   "relevant_lost": 272,
+   "relevant_in_full": 602
+  }
+ }
+}
