@@ -24,7 +24,12 @@ from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
 from scholiast.api import schemas
-from scholiast.api.deps import AnswerDep, ConversationsDep, QaRateLimit, WorkspacesDep
+from scholiast.api.deps import (
+    ConversationsDep,
+    QaRateLimit,
+    StreamingAnswerDep,
+    StreamingWorkspacesDep,
+)
 from scholiast.application.ports.llm import TokenUsage
 from scholiast.application.use_cases.answer_question import (
     AnswerComplete,
@@ -93,8 +98,8 @@ async def ask(
     workspace_id: str,
     conversation_id: str,
     body: schemas.AskQuestion,
-    use_case: AnswerDep,
-    workspaces: WorkspacesDep,
+    use_case: StreamingAnswerDep,
+    workspaces: StreamingWorkspacesDep,
 ) -> StreamingResponse:
     """Ask a question; stream the grounded answer (FR-Q1, FR-Q2, FR-Q5).
 
@@ -102,6 +107,10 @@ async def ask(
     assembly *before* `StreamingResponse` is constructed, so anything that goes
     wrong there is still an ordinary exception that the problem-document handlers
     can turn into a 404 or a 409.
+
+    Its repositories are the streaming ones (D166): the turns are written while the
+    body streams, after this handler has returned, so they need the session that
+    lives until the response ends, not the one every other route commits on return.
     """
     if await workspaces.get(workspace_id) is None:
         raise WorkspaceNotAvailable(workspace_id)

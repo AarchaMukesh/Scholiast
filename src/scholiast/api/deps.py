@@ -29,6 +29,12 @@ shared one would serialise every caller through one transaction.
 `auth_session` commits on `AuthenticationFailed` as well, because a refused
 authentication can still have written the security response to it (D86). Only
 the two authentication repositories take the second one.
+
+**Both commit before the response is sent** (D166): `SessionDep` and
+`AuthSessionDep` are function-scoped, so a client that receives a 2xx can read
+what it wrote on its very next request. The one exception is the streamed
+answer, whose turns are written while the body streams; it has its own
+request-scoped session, `stream_session`, and its own repositories built on it.
 """
 
 from __future__ import annotations
@@ -37,7 +43,7 @@ from collections.abc import AsyncIterator, Callable
 from typing import Annotated
 
 import structlog
-from fastapi import Depends, Request
+from fastapi import BackgroundTasks, Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -93,13 +99,56 @@ from scholiast.infrastructure.storage.local import LocalObjectStore
 log = structlog.get_logger(__name__)
 
 
-async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
+async def get_session(
+    request: Request, background_tasks: BackgroundTasks
+) -> AsyncIterator[AsyncSession]:
     """One unit of work per request: commit on success, roll back on failure.
 
     The commit lives here rather than in each route so no handler can forget it
     — and so `AddPaperUseCase`'s single-transaction guarantee (the paper, the
     membership and the job row committing together, D47) holds by construction
     rather than by every caller remembering to.
+
+    **The commit runs before the response is sent** (D166), because `SessionDep`
+    declares this function-scoped: FastAPI closes it when the handler returns,
+    not after the response, which is when a request-scoped dependency closes.
+    Committed after the response, a 2xx could reach a client before its write
+    did, and the client's next request could read the state before it. Seen: the
+    workspace counter that stayed at "0/1 ready" after a paper was added. Possible
+    by the same race: a workspace the first-login flow creates twice, a login
+    refused just after registering, and a commit that fails after a success was
+    already sent.
+
+    **Waking a worker still happens after the response**, as a background task:
+    with a broker that is down, `send_task` waits out its publish retries, and
+    that wait belongs to no user's request (D95). The pending ids are taken here,
+    while the session is open; only the publishing is deferred.
+    """
+    factory = request.app.state.sessions
+    async with factory() as session:
+        try:
+            yield session
+        except Exception:
+            await session.rollback()
+            raise
+        else:
+            await session.commit()
+            jobs, deletions = _take_committed(session)
+            if jobs or deletions:
+                background_tasks.add_task(_publish, request.app.state.dispatcher, jobs, deletions)
+
+
+async def stream_session(request: Request) -> AsyncIterator[AsyncSession]:
+    """The unit of work for a streamed response: it lives until the stream ends.
+
+    The one deliberate exception to D166. The answer route returns a
+    `StreamingResponse` and only afterwards, while the body streams, does the use
+    case record the question and the answer (`AnswerQuestionUseCase._persist`); a
+    session closed when the handler returned would be gone by then. So this one is
+    request-scoped, and the streaming route builds every repository it uses from
+    it, so one request still holds exactly one session. Its commit follows the
+    stream, as every commit did before D166; what it commits is the record of an
+    answer the client has already read in full.
     """
     factory = request.app.state.sessions
     async with factory() as session:
@@ -111,6 +160,20 @@ async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
         else:
             await session.commit()
             await _dispatch_committed_jobs(request, session)
+
+
+def _take_committed(
+    session: AsyncSession,
+) -> tuple[list[tuple[str, JobPriority]], list[str]]:
+    """The jobs and deletions this transaction committed, taken off the session."""
+    jobs = [
+        (job_id, JobPriority.INTERACTIVE)
+        for job_id in pending.drain(session, pending.PENDING_DISPATCH)
+    ] + [
+        (job_id, JobPriority.BACKFILL)
+        for job_id in pending.drain(session, pending.PENDING_BACKFILL_DISPATCH)
+    ]
+    return jobs, pending.drain(session, pending.PENDING_DELETION_DISPATCH)
 
 
 async def _dispatch_committed_jobs(request: Request, session: AsyncSession) -> None:
@@ -141,17 +204,16 @@ async def _dispatch_committed_jobs(request: Request, session: AsyncSession) -> N
     it. The result is still not raised — logging it is the useful thing available
     here, and failing the request is not.
     """
-    jobs = [
-        (job_id, JobPriority.INTERACTIVE)
-        for job_id in pending.drain(session, pending.PENDING_DISPATCH)
-    ] + [
-        (job_id, JobPriority.BACKFILL)
-        for job_id in pending.drain(session, pending.PENDING_BACKFILL_DISPATCH)
-    ]
-    deletions = pending.drain(session, pending.PENDING_DELETION_DISPATCH)
-    if not jobs and not deletions:
-        return
-    dispatcher: JobDispatcher = request.app.state.dispatcher
+    jobs, deletions = _take_committed(session)
+    await _publish(request.app.state.dispatcher, jobs, deletions)
+
+
+async def _publish(
+    dispatcher: JobDispatcher,
+    jobs: list[tuple[str, JobPriority]],
+    deletions: list[str],
+) -> None:
+    """Publish one wake-up per committed job and deletion; log, never raise."""
     for job_id, priority in jobs:
         published = await dispatcher.dispatch(job_id, priority=priority)
         if dispatcher.publishes and not published:
@@ -268,10 +330,14 @@ def get_store(request: Request) -> LocalObjectStore:
     return store
 
 
-SessionDep = Annotated[AsyncSession, Depends(get_session)]
+#: Function-scoped (D166): committed when the handler returns, before the response.
+SessionDep = Annotated[AsyncSession, Depends(get_session, scope="function")]
 #: D86: the same session type, a different commit rule. Only the two
-#: authentication repositories take it.
-AuthSessionDep = Annotated[AsyncSession, Depends(auth_session)]
+#: authentication repositories take it. Function-scoped for the same reason (D166):
+#: a client that registers and then logs in must find its account committed.
+AuthSessionDep = Annotated[AsyncSession, Depends(auth_session, scope="function")]
+#: Request-scoped on purpose: only the streamed answer takes it (D166).
+StreamSessionDep = Annotated[AsyncSession, Depends(stream_session)]
 TenantDep = Annotated[TenantContext, Depends(current_tenant)]
 
 
@@ -499,30 +565,40 @@ def remove_paper_use_case(
     )
 
 
-def answer_use_case(
-    session: SessionDep,
+def streaming_workspaces(session: StreamSessionDep, scope: TenantDep) -> SqlWorkspaceRepository:
+    """`workspaces`, on the streamed answer's one session (D166)."""
+    return SqlWorkspaceRepository(session, scope)
+
+
+def streaming_answer_use_case(
+    session: StreamSessionDep,
     scope: TenantDep,
     embedder: EmbedderDep,
     index: IndexDep,
     providers: ProvidersDep,
-    workspace_repo: WorkspacesDep,
-    paper_repo: PapersDep,
-    conversation_repo: ConversationsDep,
 ) -> AnswerQuestionUseCase:
+    """`answer_use_case`, every repository on the one session that outlives the stream.
+
+    Built here rather than from `WorkspacesDep` and its siblings, which are on
+    `SessionDep`: that session closes when the handler returns, before the turns
+    are written, and a request would otherwise hold two sessions.
+    """
     return AnswerQuestionUseCase(
-        workspaces=workspace_repo,
-        papers=paper_repo,
+        workspaces=SqlWorkspaceRepository(session, scope),
+        papers=SqlPaperRepository(session, scope),
         chunks=SqlChunkRepository(session, scope),
-        conversations=conversation_repo,
+        conversations=SqlConversationRepository(session, scope),
         embedder=embedder,
         index=index,
         providers=providers,
     )
 
 
+StreamingWorkspacesDep = Annotated[SqlWorkspaceRepository, Depends(streaming_workspaces)]
+StreamingAnswerDep = Annotated[AnswerQuestionUseCase, Depends(streaming_answer_use_case)]
+
 AddPaperDep = Annotated[AddPaperUseCase, Depends(add_paper_use_case)]
 RemovePaperDep = Annotated[RemovePaperUseCase, Depends(remove_paper_use_case)]
-AnswerDep = Annotated[AnswerQuestionUseCase, Depends(answer_use_case)]
 
 
 def get_discovery_sources(request: Request) -> list[ConfiguredSource]:
