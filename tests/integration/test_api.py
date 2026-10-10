@@ -17,13 +17,14 @@ import uuid
 from collections.abc import AsyncIterator, Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
 import pytest_asyncio
 from asgi_lifespan import LifespanManager
 from fastapi import FastAPI
-from sqlalchemy import text
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import create_async_engine
 from testcontainers.community.postgres import PostgresContainer
 
@@ -190,6 +191,73 @@ async def drain(app: FastAPI, limit: int = 6) -> int:
             break
         total += ran
     return total
+
+
+def _order_of(app: FastAPI, log: list[str]) -> Any:
+    """The app, writing each database commit and the response's start to one log."""
+
+    async def asgi(scope: Any, receive: Any, send: Any) -> None:
+        async def logging_send(message: dict[str, Any]) -> None:
+            if message["type"] == "http.response.start":
+                log.append("response:start")
+            await send(message)
+
+        await app(scope, receive, logging_send)
+
+    return asgi
+
+
+@needs_qdrant
+class TestAWriteIsCommittedBeforeItsResponse:
+    """D166 on the real stack: the engine's commit precedes the response's first byte.
+
+    The UI's counter stuck at "0/1 ready" because an add answered before it
+    committed, and the page's follow-up read found nothing in flight.
+    """
+
+    async def _post(
+        self, api: Harness, path: str, **kwargs: Any
+    ) -> tuple[httpx.Response, list[str]]:
+        log: list[str] = []
+
+        def on_commit(connection: Any) -> None:
+            log.append("commit")
+
+        engine = api.app.state.engine.sync_engine
+        event.listen(engine, "commit", on_commit)
+        try:
+            transport = httpx.ASGITransport(app=_order_of(api.app, log))
+            async with httpx.AsyncClient(
+                transport=transport, base_url="http://test", headers=api.client.headers
+            ) as client:
+                response = await client.post(path, **kwargs)
+        finally:
+            event.remove(engine, "commit", on_commit)
+        return response, log
+
+    async def test_a_new_workspace_is_committed_before_the_response(self, api: Harness) -> None:
+        response, log = await self._post(api, "/v1/workspaces", json={"name": "Committed first"})
+
+        assert response.status_code == 201
+        assert "commit" in log
+        assert log.index("commit") < log.index("response:start"), log
+
+    @needs_fixtures
+    async def test_an_uploaded_paper_is_committed_before_the_response(self, api: Harness) -> None:
+        workspace_id = (await api.client.post("/v1/workspaces", json={"name": "W"})).json()["id"]
+        pdf = (FIXTURES / "attention-is-all-you-need.pdf").read_bytes()
+
+        response, log = await self._post(
+            api,
+            f"/v1/workspaces/{workspace_id}/papers/upload",
+            files={"file": ("a.pdf", pdf, "application/pdf")},
+        )
+
+        assert response.status_code == 202
+        assert log.index("commit") < log.index("response:start"), log
+        # And so the very next read sees it, which is what the UI's counter needed.
+        listed = await api.client.get(f"/v1/workspaces/{workspace_id}/papers")
+        assert [p["paper_id"] for p in listed.json()] == [response.json()["paper_id"]]
 
 
 @needs_qdrant
