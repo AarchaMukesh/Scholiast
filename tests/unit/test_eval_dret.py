@@ -128,15 +128,55 @@ class TestTheSnapshotIsVendoredNotFetched:
     def test_a_partial_fetch_refuses_to_write(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # A partial snapshot that looks complete is the failure vendoring exists
         # to prevent, so `limit` must never be able to produce one.
+        #
+        # Offline (NFR-T3). Until 2026-10-11 this called the real hub: two live
+        # requests on every default run, and a failure whenever Hugging Face
+        # answered 502 or moved its conversion branch, neither of which says
+        # anything about this code. Both endpoints are now served by a mock
+        # transport, and any real socket fails the test, as in the test above.
+        import httpx
+
         from scholiast.eval import snapshot as snapshot_module
 
+        seen: list[httpx.Request] = []
+
+        def hub(request: httpx.Request) -> httpx.Response:
+            seen.append(request)
+            if request.url.host == "huggingface.co":
+                return httpx.Response(200, json={"sha": snapshot_module.QASPER_PARQUET_REVISION})
+            row = {
+                "id": "x",
+                "title": "t",
+                "abstract": "a",
+                "full_text": {},
+                "qas": {"question": [], "question_id": [], "answers": []},
+            }
+            return httpx.Response(200, json={"rows": [{"row": row}]})
+
+        real_client = httpx.Client
+        monkeypatch.setattr(
+            httpx,
+            "Client",
+            lambda **kwargs: real_client(transport=httpx.MockTransport(hub), **kwargs),
+        )
+
+        def forbidden(*args: object, **kwargs: object) -> None:
+            raise AssertionError("this test must not reach the network")
+
+        monkeypatch.setattr(socket, "socket", forbidden)
+        monkeypatch.setattr(socket, "create_connection", forbidden)
         monkeypatch.setattr(
             snapshot_module.SNAPSHOT_PATH.__class__,
             "write_bytes",
             lambda self, data: pytest.fail("a limited fetch must not write the snapshot"),
         )
+
         with pytest.raises(SnapshotError, match="will not write a partial snapshot"):
             fetch_snapshot(limit=1)
+        # The probe path really ran, both endpoints asking for exactly one row, so
+        # the refusal above is the limit's and not an earlier failure's.
+        assert [r.url.host for r in seen] == ["huggingface.co", "datasets-server.huggingface.co"]
+        assert seen[1].url.params["length"] == "1"
 
 
 class TestEveryJudgmentPointsAtSomethingReal:
