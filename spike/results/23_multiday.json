@@ -20,6 +20,16 @@
     1791690083.67
    ],
    "cost_usd": 0.06
+  },
+  "3": {
+   "date": "2026-10-12",
+   "t_start": 1791784533.2533715,
+   "local_start": "2026-10-12T11:25:33",
+   "protocol_sha256": "c26d383f86bccb4751edcfcf599292613821b75a82661b7367c442207c1cf491",
+   "standby_entries": [
+    1791784822.213
+   ],
+   "cost_usd": 0.059
   }
  },
  "records": [
@@ -2902,6 +2912,1447 @@
    "last_byte_s": 15.5651,
    "cost_usd": null,
    "void": false
+  },
+  {
+   "day": 3,
+   "source": "arxiv",
+   "page": 50,
+   "query_id": "t10-natural_language",
+   "pass": null,
+   "t_start": 1791784533.527838,
+   "t_end": 1791784534.5609818,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 115880,
+   "headers_s": 0.9747,
+   "last_byte_s": 1.0334,
+   "cost_usd": null,
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 25,
+   "query_id": "t10-natural_language",
+   "pass": 1,
+   "t_start": 1791784533.2543702,
+   "t_end": 1791784536.1879406,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 282423,
+   "headers_s": 2.1273,
+   "last_byte_s": 2.9332,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 15,
+   "query_id": "t02-keyword",
+   "pass": 1,
+   "t_start": 1791784539.2686265,
+   "t_end": 1791784540.3632555,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 131515,
+   "headers_s": 0.4961,
+   "last_byte_s": 1.0953,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 25,
+   "query_id": "t04-reversed_keyword",
+   "pass": 1,
+   "t_start": 1791784545.261684,
+   "t_end": 1791784546.7864604,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 232908,
+   "headers_s": 0.4258,
+   "last_byte_s": 1.5246,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "arxiv",
+   "page": 50,
+   "query_id": "t02-keyword",
+   "pass": null,
+   "t_start": 1791784545.261684,
+   "t_end": 1791784546.9536517,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 114389,
+   "headers_s": 1.6206,
+   "last_byte_s": 1.6911,
+   "cost_usd": null,
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 15,
+   "query_id": "t03-keyword",
+   "pass": 1,
+   "t_start": 1791784551.2705228,
+   "t_end": 1791784552.3602996,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 151892,
+   "headers_s": 0.4989,
+   "last_byte_s": 1.0903,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "arxiv",
+   "page": 50,
+   "query_id": "t04-reversed_keyword",
+   "pass": null,
+   "t_start": 1791784557.2584648,
+   "t_end": 1791784558.4502642,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 120179,
+   "headers_s": 1.13,
+   "last_byte_s": 1.1921,
+   "cost_usd": null,
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 25,
+   "query_id": "t05-keyword",
+   "pass": 1,
+   "t_start": 1791784557.257456,
+   "t_end": 1791784559.243499,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 247442,
+   "headers_s": 1.1798,
+   "last_byte_s": 1.9862,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 15,
+   "query_id": "t01-reversed_keyword",
+   "pass": 1,
+   "t_start": 1791784563.2666855,
+   "t_end": 1791784564.748713,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 129689,
+   "headers_s": 0.8854,
+   "last_byte_s": 1.4826,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "arxiv",
+   "page": 50,
+   "query_id": "t03-keyword",
+   "pass": null,
+   "t_start": 1791784569.2575448,
+   "t_end": 1791784570.2969053,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 111028,
+   "headers_s": 0.9565,
+   "last_byte_s": 1.0392,
+   "cost_usd": null,
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 25,
+   "query_id": "t01-keyword",
+   "pass": 1,
+   "t_start": 1791784569.2565513,
+   "t_end": 1791784570.694549,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 227787,
+   "headers_s": 0.4368,
+   "last_byte_s": 1.4381,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 15,
+   "query_id": "t08-keyword",
+   "pass": 1,
+   "t_start": 1791784575.2647445,
+   "t_end": 1791784576.2892385,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 184140,
+   "headers_s": 0.4151,
+   "last_byte_s": 1.024,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "arxiv",
+   "page": 50,
+   "query_id": "t05-keyword",
+   "pass": null,
+   "t_start": 1791784581.2607477,
+   "t_end": 1791784582.2269511,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 118652,
+   "headers_s": 0.9074,
+   "last_byte_s": 0.9659,
+   "cost_usd": null,
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 25,
+   "query_id": "t03-reversed_keyword",
+   "pass": 1,
+   "t_start": 1791784581.2617552,
+   "t_end": 1791784582.8192527,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 245328,
+   "headers_s": 0.8823,
+   "last_byte_s": 1.5582,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 15,
+   "query_id": "t08-natural_language",
+   "pass": 1,
+   "t_start": 1791784587.2606971,
+   "t_end": 1791784589.1076083,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 204067,
+   "headers_s": 1.0455,
+   "last_byte_s": 1.847,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "arxiv",
+   "page": 50,
+   "query_id": "t01-reversed_keyword",
+   "pass": null,
+   "t_start": 1791784593.2642436,
+   "t_end": 1791784594.2224286,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 118258,
+   "headers_s": 0.9028,
+   "last_byte_s": 0.9582,
+   "cost_usd": null,
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 25,
+   "query_id": "t02-natural_language",
+   "pass": 1,
+   "t_start": 1791784593.2637393,
+   "t_end": 1791784594.8788888,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 253105,
+   "headers_s": 0.9459,
+   "last_byte_s": 1.6154,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 15,
+   "query_id": "t10-keyword",
+   "pass": 1,
+   "t_start": 1791784599.2666,
+   "t_end": 1791784600.534015,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 137145,
+   "headers_s": 0.469,
+   "last_byte_s": 1.2674,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "arxiv",
+   "page": 50,
+   "query_id": "t01-keyword",
+   "pass": null,
+   "t_start": 1791784605.2617643,
+   "t_end": 1791784606.280887,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 118258,
+   "headers_s": 0.9414,
+   "last_byte_s": 1.0194,
+   "cost_usd": null,
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 25,
+   "query_id": "t06-keyword",
+   "pass": 1,
+   "t_start": 1791784605.2625425,
+   "t_end": 1791784607.0251653,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 299995,
+   "headers_s": 0.4978,
+   "last_byte_s": 1.7633,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 15,
+   "query_id": "t07-keyword",
+   "pass": 1,
+   "t_start": 1791784611.266075,
+   "t_end": 1791784612.5892575,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 142547,
+   "headers_s": 0.423,
+   "last_byte_s": 1.3227,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "arxiv",
+   "page": 50,
+   "query_id": "t08-keyword",
+   "pass": null,
+   "t_start": 1791784617.262809,
+   "t_end": 1791784618.5939708,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 122014,
+   "headers_s": 1.253,
+   "last_byte_s": 1.3314,
+   "cost_usd": null,
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 25,
+   "query_id": "t06-natural_language",
+   "pass": 1,
+   "t_start": 1791784617.262809,
+   "t_end": 1791784619.6822197,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 325330,
+   "headers_s": 0.8301,
+   "last_byte_s": 2.4192,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 15,
+   "query_id": "t07-natural_language",
+   "pass": 1,
+   "t_start": 1791784623.2572005,
+   "t_end": 1791784624.3220935,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 163207,
+   "headers_s": 0.4548,
+   "last_byte_s": 1.0645,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "arxiv",
+   "page": 50,
+   "query_id": "t03-reversed_keyword",
+   "pass": null,
+   "t_start": 1791784629.2685623,
+   "t_end": 1791784630.8650615,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 111028,
+   "headers_s": 1.5283,
+   "last_byte_s": 1.5967,
+   "cost_usd": null,
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 25,
+   "query_id": "t09-keyword",
+   "pass": 1,
+   "t_start": 1791784629.2685623,
+   "t_end": 1791784631.0051568,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 238614,
+   "headers_s": 0.9352,
+   "last_byte_s": 1.7367,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 15,
+   "query_id": "t05-reversed_keyword",
+   "pass": 1,
+   "t_start": 1791784635.2601292,
+   "t_end": 1791784636.6336858,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 151319,
+   "headers_s": 0.7643,
+   "last_byte_s": 1.3735,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "arxiv",
+   "page": 50,
+   "query_id": "t08-natural_language",
+   "pass": null,
+   "t_start": 1791784641.2637262,
+   "t_end": 1791784642.135812,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 123285,
+   "headers_s": 0.8148,
+   "last_byte_s": 0.8722,
+   "cost_usd": null,
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 25,
+   "query_id": "t04-keyword",
+   "pass": 1,
+   "t_start": 1791784641.2637262,
+   "t_end": 1791784642.5460362,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 232714,
+   "headers_s": 0.4746,
+   "last_byte_s": 1.2819,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 15,
+   "query_id": "t02-reversed_keyword",
+   "pass": 1,
+   "t_start": 1791784647.268046,
+   "t_end": 1791784648.3607957,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 132342,
+   "headers_s": 0.4932,
+   "last_byte_s": 1.0934,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "arxiv",
+   "page": 50,
+   "query_id": "t02-natural_language",
+   "pass": null,
+   "t_start": 1791784653.264088,
+   "t_end": 1791784653.7699964,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 8137,
+   "headers_s": 0.5051,
+   "last_byte_s": 0.5059,
+   "cost_usd": null,
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 25,
+   "query_id": "t05-natural_language",
+   "pass": 1,
+   "t_start": 1791784653.2633152,
+   "t_end": 1791784655.356797,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 279758,
+   "headers_s": 0.6882,
+   "last_byte_s": 2.0936,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 15,
+   "query_id": "t04-natural_language",
+   "pass": 1,
+   "t_start": 1791784659.255726,
+   "t_end": 1791784660.5377188,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 190896,
+   "headers_s": 0.4802,
+   "last_byte_s": 1.2822,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "arxiv",
+   "page": 50,
+   "query_id": "t10-keyword",
+   "pass": null,
+   "t_start": 1791784665.2677586,
+   "t_end": 1791784666.025713,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 115771,
+   "headers_s": 0.7301,
+   "last_byte_s": 0.7579,
+   "cost_usd": null,
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 25,
+   "query_id": "t03-natural_language",
+   "pass": 1,
+   "t_start": 1791784665.2685273,
+   "t_end": 1791784666.7807822,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 265241,
+   "headers_s": 0.5085,
+   "last_byte_s": 1.5121,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 15,
+   "query_id": "t06-reversed_keyword",
+   "pass": 1,
+   "t_start": 1791784671.2572746,
+   "t_end": 1791784672.7900255,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 192660,
+   "headers_s": 0.9284,
+   "last_byte_s": 1.5332,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "arxiv",
+   "page": 50,
+   "query_id": "t06-keyword",
+   "pass": null,
+   "t_start": 1791784677.2642236,
+   "t_end": 1791784678.475929,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 116943,
+   "headers_s": 1.1908,
+   "last_byte_s": 1.212,
+   "cost_usd": null,
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 25,
+   "query_id": "t08-reversed_keyword",
+   "pass": 1,
+   "t_start": 1791784677.2642236,
+   "t_end": 1791784679.244585,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 296205,
+   "headers_s": 1.1704,
+   "last_byte_s": 1.9799,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 15,
+   "query_id": "t07-reversed_keyword",
+   "pass": 1,
+   "t_start": 1791784683.255888,
+   "t_end": 1791784684.6865165,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 135519,
+   "headers_s": 0.8302,
+   "last_byte_s": 1.4308,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "arxiv",
+   "page": 50,
+   "query_id": "t07-keyword",
+   "pass": null,
+   "t_start": 1791784689.269166,
+   "t_end": 1791784689.9673653,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 116347,
+   "headers_s": 0.6768,
+   "last_byte_s": 0.6985,
+   "cost_usd": null,
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 25,
+   "query_id": "t09-reversed_keyword",
+   "pass": 1,
+   "t_start": 1791784689.269166,
+   "t_end": 1791784690.8133812,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 253909,
+   "headers_s": 0.8813,
+   "last_byte_s": 1.5444,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 15,
+   "query_id": "t09-natural_language",
+   "pass": 1,
+   "t_start": 1791784695.2567604,
+   "t_end": 1791784696.7791007,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 144226,
+   "headers_s": 0.9186,
+   "last_byte_s": 1.5217,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "arxiv",
+   "page": 50,
+   "query_id": "t06-natural_language",
+   "pass": null,
+   "t_start": 1791784701.2602952,
+   "t_end": 1791784702.3353612,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 116378,
+   "headers_s": 1.0583,
+   "last_byte_s": 1.0749,
+   "cost_usd": null,
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 25,
+   "query_id": "t01-natural_language",
+   "pass": 1,
+   "t_start": 1791784701.2610042,
+   "t_end": 1791784702.9760036,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 276591,
+   "headers_s": 0.5126,
+   "last_byte_s": 1.7157,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 15,
+   "query_id": "t10-reversed_keyword",
+   "pass": 1,
+   "t_start": 1791784707.2556906,
+   "t_end": 1791784708.2862372,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 139543,
+   "headers_s": 0.4228,
+   "last_byte_s": 1.031,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "arxiv",
+   "page": 50,
+   "query_id": "t07-natural_language",
+   "pass": null,
+   "t_start": 1791784713.2693212,
+   "t_end": 1791784714.2719269,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 119459,
+   "headers_s": 0.948,
+   "last_byte_s": 1.0024,
+   "cost_usd": null,
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 15,
+   "query_id": "t10-natural_language",
+   "pass": 2,
+   "t_start": 1791784713.2683446,
+   "t_end": 1791784714.4187782,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 161493,
+   "headers_s": 0.5443,
+   "last_byte_s": 1.1497,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 25,
+   "query_id": "t02-keyword",
+   "pass": 2,
+   "t_start": 1791784719.2627592,
+   "t_end": 1791784720.5748208,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 219936,
+   "headers_s": 0.5096,
+   "last_byte_s": 1.3126,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 15,
+   "query_id": "t04-reversed_keyword",
+   "pass": 2,
+   "t_start": 1791784725.2634351,
+   "t_end": 1791784726.300445,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 139123,
+   "headers_s": 0.4313,
+   "last_byte_s": 1.0366,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "arxiv",
+   "page": 50,
+   "query_id": "t09-keyword",
+   "pass": null,
+   "t_start": 1791784725.2634351,
+   "t_end": 1791784726.3823686,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 108382,
+   "headers_s": 1.0592,
+   "last_byte_s": 1.1185,
+   "cost_usd": null,
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 25,
+   "query_id": "t03-keyword",
+   "pass": 2,
+   "t_start": 1791784731.2677052,
+   "t_end": 1791784732.768865,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 247598,
+   "headers_s": 0.8566,
+   "last_byte_s": 1.501,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "arxiv",
+   "page": 50,
+   "query_id": "t05-reversed_keyword",
+   "pass": null,
+   "t_start": 1791784737.263935,
+   "t_end": 1791784738.236215,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 118652,
+   "headers_s": 0.9148,
+   "last_byte_s": 0.9715,
+   "cost_usd": null,
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 15,
+   "query_id": "t05-keyword",
+   "pass": 2,
+   "t_start": 1791784737.263935,
+   "t_end": 1791784739.0303543,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 151321,
+   "headers_s": 1.1655,
+   "last_byte_s": 1.7663,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 25,
+   "query_id": "t01-reversed_keyword",
+   "pass": 2,
+   "t_start": 1791784743.263818,
+   "t_end": 1791784744.807718,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 224979,
+   "headers_s": 0.8603,
+   "last_byte_s": 1.5434,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "arxiv",
+   "page": 50,
+   "query_id": "t04-keyword",
+   "pass": null,
+   "t_start": 1791784749.2669952,
+   "t_end": 1791784750.0456896,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 120846,
+   "headers_s": 0.7646,
+   "last_byte_s": 0.7791,
+   "cost_usd": null,
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 15,
+   "query_id": "t01-keyword",
+   "pass": 2,
+   "t_start": 1791784749.2669952,
+   "t_end": 1791784750.3232315,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 129690,
+   "headers_s": 0.4531,
+   "last_byte_s": 1.0564,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 25,
+   "query_id": "t08-keyword",
+   "pass": 2,
+   "t_start": 1791784755.2581837,
+   "t_end": 1791784755.8868592,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 296276,
+   "headers_s": 0.6014,
+   "last_byte_s": 0.6289,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "arxiv",
+   "page": 50,
+   "query_id": "t02-reversed_keyword",
+   "pass": null,
+   "t_start": 1791784761.2586133,
+   "t_end": 1791784762.2384653,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 114389,
+   "headers_s": 0.9601,
+   "last_byte_s": 0.9797,
+   "cost_usd": null,
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 15,
+   "query_id": "t03-reversed_keyword",
+   "pass": 2,
+   "t_start": 1791784761.25961,
+   "t_end": 1791784763.0433404,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 148853,
+   "headers_s": 1.1441,
+   "last_byte_s": 1.784,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 25,
+   "query_id": "t08-natural_language",
+   "pass": 2,
+   "t_start": 1791784767.269002,
+   "t_end": 1791784768.794375,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 313630,
+   "headers_s": 0.7158,
+   "last_byte_s": 1.5251,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "arxiv",
+   "page": 50,
+   "query_id": "t05-natural_language",
+   "pass": null,
+   "t_start": 1791784773.262987,
+   "t_end": 1791784773.9885416,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 71672,
+   "headers_s": 0.7165,
+   "last_byte_s": 0.7251,
+   "cost_usd": null,
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 15,
+   "query_id": "t02-natural_language",
+   "pass": 2,
+   "t_start": 1791784773.262987,
+   "t_end": 1791784774.3196137,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 139801,
+   "headers_s": 0.4551,
+   "last_byte_s": 1.0554,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 25,
+   "query_id": "t10-keyword",
+   "pass": 2,
+   "t_start": 1791784779.262885,
+   "t_end": 1791784780.837567,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 213234,
+   "headers_s": 0.9299,
+   "last_byte_s": 1.575,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 15,
+   "query_id": "t06-keyword",
+   "pass": 2,
+   "t_start": 1791784785.2632318,
+   "t_end": 1791784786.364005,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 188090,
+   "headers_s": 0.4604,
+   "last_byte_s": 1.1006,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "arxiv",
+   "page": 50,
+   "query_id": "t04-natural_language",
+   "pass": null,
+   "t_start": 1791784785.2632318,
+   "t_end": 1791784786.4634302,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 117780,
+   "headers_s": 1.1363,
+   "last_byte_s": 1.1999,
+   "cost_usd": null,
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 25,
+   "query_id": "t07-keyword",
+   "pass": 2,
+   "t_start": 1791784791.2581773,
+   "t_end": 1791784792.7617912,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 227401,
+   "headers_s": 0.8332,
+   "last_byte_s": 1.5037,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "arxiv",
+   "page": 50,
+   "query_id": "t03-natural_language",
+   "pass": null,
+   "t_start": 1791784797.2698972,
+   "t_end": 1791784797.9808104,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 40434,
+   "headers_s": 0.6843,
+   "last_byte_s": 0.7107,
+   "cost_usd": null,
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 15,
+   "query_id": "t06-natural_language",
+   "pass": 2,
+   "t_start": 1791784797.2698972,
+   "t_end": 1791784798.7694647,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 197511,
+   "headers_s": 0.8835,
+   "last_byte_s": 1.4999,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 25,
+   "query_id": "t07-natural_language",
+   "pass": 2,
+   "t_start": 1791784803.256061,
+   "t_end": 1791784805.0905838,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 270271,
+   "headers_s": 1.0309,
+   "last_byte_s": 1.8344,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 15,
+   "query_id": "t09-keyword",
+   "pass": 2,
+   "t_start": 1791784809.2560575,
+   "t_end": 1791784810.5136564,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 148194,
+   "headers_s": 0.4604,
+   "last_byte_s": 1.257,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 25,
+   "query_id": "t05-reversed_keyword",
+   "pass": 2,
+   "t_start": 1791784815.2551677,
+   "t_end": 1791784817.2816763,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 247440,
+   "headers_s": 1.2276,
+   "last_byte_s": 2.0267,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "arxiv",
+   "page": 50,
+   "query_id": "t06-reversed_keyword",
+   "pass": null,
+   "t_start": 1791784809.2560575,
+   "t_end": 1791784819.009435,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 116943,
+   "headers_s": 9.7237,
+   "last_byte_s": 9.7536,
+   "cost_usd": null,
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 15,
+   "query_id": "t04-keyword",
+   "pass": 2,
+   "t_start": 1791784821.2640133,
+   "t_end": 1791785664.5144317,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 130122,
+   "headers_s": 0.7756,
+   "last_byte_s": 843.2501,
+   "cost_usd": "0.001",
+   "void": true
+  },
+  {
+   "day": 3,
+   "source": "arxiv",
+   "page": 50,
+   "query_id": "t08-reversed_keyword",
+   "pass": null,
+   "t_start": 1791784822.012587,
+   "t_end": 1791785664.5239425,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 122014,
+   "headers_s": 842.4699,
+   "last_byte_s": 842.5114,
+   "cost_usd": null,
+   "void": true
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 25,
+   "query_id": "t02-reversed_keyword",
+   "pass": 2,
+   "t_start": 1791785664.517349,
+   "t_end": 1791785667.8614345,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 219939,
+   "headers_s": 2.7509,
+   "last_byte_s": 3.3444,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "arxiv",
+   "page": 50,
+   "query_id": "t07-reversed_keyword",
+   "pass": null,
+   "t_start": 1791785667.5445757,
+   "t_end": 1791785668.4362118,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 116347,
+   "headers_s": 0.8358,
+   "last_byte_s": 0.8922,
+   "cost_usd": null,
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 15,
+   "query_id": "t05-natural_language",
+   "pass": 2,
+   "t_start": 1791785667.862434,
+   "t_end": 1791785669.356972,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 162149,
+   "headers_s": 1.0151,
+   "last_byte_s": 1.4942,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 25,
+   "query_id": "t04-natural_language",
+   "pass": 2,
+   "t_start": 1791785669.356972,
+   "t_end": 1791785670.552202,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 315905,
+   "headers_s": 0.7723,
+   "last_byte_s": 1.1948,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "arxiv",
+   "page": 50,
+   "query_id": "t09-reversed_keyword",
+   "pass": null,
+   "t_start": 1791785671.448275,
+   "t_end": 1791785672.1983767,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 108382,
+   "headers_s": 0.6965,
+   "last_byte_s": 0.75,
+   "cost_usd": null,
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 15,
+   "query_id": "t03-natural_language",
+   "pass": 2,
+   "t_start": 1791785670.552202,
+   "t_end": 1791785672.849092,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 162942,
+   "headers_s": 1.6564,
+   "last_byte_s": 2.297,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 25,
+   "query_id": "t06-reversed_keyword",
+   "pass": 2,
+   "t_start": 1791785672.8500905,
+   "t_end": 1791785674.2996025,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 291789,
+   "headers_s": 0.8163,
+   "last_byte_s": 1.4493,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 15,
+   "query_id": "t08-reversed_keyword",
+   "pass": 2,
+   "t_start": 1791785674.3006058,
+   "t_end": 1791785675.49856,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 189403,
+   "headers_s": 0.8725,
+   "last_byte_s": 1.1983,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "arxiv",
+   "page": 50,
+   "query_id": "t09-natural_language",
+   "pass": null,
+   "t_start": 1791785675.1984525,
+   "t_end": 1791785676.579008,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 113822,
+   "headers_s": 1.3088,
+   "last_byte_s": 1.3794,
+   "cost_usd": null,
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 25,
+   "query_id": "t07-reversed_keyword",
+   "pass": 2,
+   "t_start": 1791785675.4990792,
+   "t_end": 1791785676.9300485,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 226095,
+   "headers_s": 0.7805,
+   "last_byte_s": 1.431,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 15,
+   "query_id": "t09-reversed_keyword",
+   "pass": 2,
+   "t_start": 1791785676.9300485,
+   "detail": "ReadError",
+   "t_end": 1791785678.7026823,
+   "outcome": "error",
+   "status": null,
+   "bytes": null,
+   "headers_s": 0.9288,
+   "last_byte_s": 1.7717,
+   "cost_usd": null,
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 25,
+   "query_id": "t09-natural_language",
+   "pass": 2,
+   "t_start": 1791785678.7026823,
+   "t_end": 1791785680.1587696,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 238146,
+   "headers_s": 1.1876,
+   "last_byte_s": 1.4558,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "arxiv",
+   "page": 50,
+   "query_id": "t01-natural_language",
+   "pass": null,
+   "t_start": 1791785679.588241,
+   "t_end": 1791785681.4783106,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 123313,
+   "headers_s": 1.828,
+   "last_byte_s": 1.8906,
+   "cost_usd": null,
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 15,
+   "query_id": "t01-natural_language",
+   "pass": 2,
+   "t_start": 1791785680.1587696,
+   "t_end": 1791785681.5526025,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 171561,
+   "headers_s": 0.8909,
+   "last_byte_s": 1.3936,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "openalex",
+   "page": 25,
+   "query_id": "t10-reversed_keyword",
+   "pass": 2,
+   "t_start": 1791785681.5534115,
+   "t_end": 1791785682.9877195,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 222011,
+   "headers_s": 0.8576,
+   "last_byte_s": 1.4354,
+   "cost_usd": "0.001",
+   "void": false
+  },
+  {
+   "day": 3,
+   "source": "arxiv",
+   "page": 50,
+   "query_id": "t10-reversed_keyword",
+   "pass": null,
+   "t_start": 1791785684.5012958,
+   "t_end": 1791785685.5009065,
+   "outcome": "ok",
+   "status": 200,
+   "bytes": 115771,
+   "headers_s": 0.9408,
+   "last_byte_s": 0.9996,
+   "cost_usd": null,
+   "void": false
   }
  ],
  "days": {
@@ -3237,6 +4688,411 @@
      "timeout": 2
     }
    }
+  },
+  "3": {
+   "openalex25": {
+    "n": 30,
+    "within": {
+     "1.5": {
+      "k": 9,
+      "n": 30,
+      "rate": 0.3,
+      "lo": 0.1666,
+      "hi": 0.4788
+     },
+     "2.0": {
+      "k": 25,
+      "n": 30,
+      "rate": 0.8333,
+      "lo": 0.6644,
+      "hi": 0.9266
+     },
+     "2.5": {
+      "k": 28,
+      "n": 30,
+      "rate": 0.9333,
+      "lo": 0.7868,
+      "hi": 0.9815
+     },
+     "3.0": {
+      "k": 29,
+      "n": 30,
+      "rate": 0.9667,
+      "lo": 0.8333,
+      "hi": 0.9941
+     }
+    },
+    "headers_s": {
+     "p50": 0.8332,
+     "p95": 2.1273
+    },
+    "last_byte_s": {
+     "p50": 1.5434,
+     "p95": 2.9332
+    },
+    "outcomes": {
+     "ok": 30
+    },
+    "by_pass": {
+     "1": {
+      "k": 12,
+      "n": 15,
+      "rate": 0.8,
+      "lo": 0.5481,
+      "hi": 0.9295
+     },
+     "2": {
+      "k": 13,
+      "n": 15,
+      "rate": 0.8667,
+      "lo": 0.6212,
+      "hi": 0.9626
+     }
+    }
+   },
+   "openalex15": {
+    "n": 29,
+    "within": {
+     "1.5": {
+      "k": 22,
+      "n": 29,
+      "rate": 0.7586,
+      "lo": 0.5789,
+      "hi": 0.8778
+     },
+     "2.0": {
+      "k": 27,
+      "n": 29,
+      "rate": 0.931,
+      "lo": 0.7804,
+      "hi": 0.9809
+     },
+     "2.5": {
+      "k": 28,
+      "n": 29,
+      "rate": 0.9655,
+      "lo": 0.8282,
+      "hi": 0.9939
+     },
+     "3.0": {
+      "k": 28,
+      "n": 29,
+      "rate": 0.9655,
+      "lo": 0.8282,
+      "hi": 0.9939
+     }
+    },
+    "headers_s": {
+     "p50": 0.4989,
+     "p95": 1.1655
+    },
+    "last_byte_s": {
+     "p50": 1.2674,
+     "p95": 1.847
+    },
+    "outcomes": {
+     "error": 1,
+     "ok": 28
+    },
+    "by_pass": {
+     "1": {
+      "k": 15,
+      "n": 15,
+      "rate": 1.0,
+      "lo": 0.7961,
+      "hi": 1.0
+     },
+     "2": {
+      "k": 12,
+      "n": 14,
+      "rate": 0.8571,
+      "lo": 0.6006,
+      "hi": 0.9599
+     }
+    }
+   },
+   "arxiv50": {
+    "n": 29,
+    "within": {
+     "1.5": {
+      "k": 25,
+      "n": 29,
+      "rate": 0.8621,
+      "lo": 0.6944,
+      "hi": 0.945
+     },
+     "2.0": {
+      "k": 28,
+      "n": 29,
+      "rate": 0.9655,
+      "lo": 0.8282,
+      "hi": 0.9939
+     },
+     "2.5": {
+      "k": 28,
+      "n": 29,
+      "rate": 0.9655,
+      "lo": 0.8282,
+      "hi": 0.9939
+     },
+     "3.0": {
+      "k": 28,
+      "n": 29,
+      "rate": 0.9655,
+      "lo": 0.8282,
+      "hi": 0.9939
+     }
+    },
+    "headers_s": {
+     "p50": 0.948,
+     "p95": 1.828
+    },
+    "last_byte_s": {
+     "p50": 1.0024,
+     "p95": 1.8906
+    },
+    "outcomes": {
+     "ok": 29
+    }
+   }
   }
+ },
+ "verdict": {
+  "configurations": {
+   "as shipped": {
+    "openalex_page": 25,
+    "deadline_s": 2.0,
+    "days": {
+     "1": {
+      "sources": {
+       "openalex": {
+        "k": 28,
+        "n": 30,
+        "floor": 24,
+        "passes": true
+       },
+       "arxiv": {
+        "k": 26,
+        "n": 29,
+        "floor": 24,
+        "passes": true
+       }
+      },
+      "passes": true
+     },
+     "2": {
+      "sources": {
+       "openalex": {
+        "k": 28,
+        "n": 30,
+        "floor": 24,
+        "passes": true
+       },
+       "arxiv": {
+        "k": 0,
+        "n": 29,
+        "floor": 24,
+        "passes": false
+       }
+      },
+      "passes": false
+     },
+     "3": {
+      "sources": {
+       "openalex": {
+        "k": 25,
+        "n": 30,
+        "floor": 24,
+        "passes": true
+       },
+       "arxiv": {
+        "k": 28,
+        "n": 29,
+        "floor": 24,
+        "passes": true
+       }
+      },
+      "passes": true
+     }
+    },
+    "passes": false
+   },
+   "longer deadline": {
+    "openalex_page": 25,
+    "deadline_s": 2.5,
+    "days": {
+     "1": {
+      "sources": {
+       "openalex": {
+        "k": 30,
+        "n": 30,
+        "floor": 24,
+        "passes": true
+       },
+       "arxiv": {
+        "k": 27,
+        "n": 29,
+        "floor": 24,
+        "passes": true
+       }
+      },
+      "passes": true
+     },
+     "2": {
+      "sources": {
+       "openalex": {
+        "k": 30,
+        "n": 30,
+        "floor": 24,
+        "passes": true
+       },
+       "arxiv": {
+        "k": 0,
+        "n": 29,
+        "floor": 24,
+        "passes": false
+       }
+      },
+      "passes": false
+     },
+     "3": {
+      "sources": {
+       "openalex": {
+        "k": 28,
+        "n": 30,
+        "floor": 24,
+        "passes": true
+       },
+       "arxiv": {
+        "k": 28,
+        "n": 29,
+        "floor": 24,
+        "passes": true
+       }
+      },
+      "passes": true
+     }
+    },
+    "passes": false
+   },
+   "smaller page": {
+    "openalex_page": 15,
+    "deadline_s": 2.0,
+    "days": {
+     "1": {
+      "sources": {
+       "openalex": {
+        "k": 28,
+        "n": 29,
+        "floor": 24,
+        "passes": true
+       },
+       "arxiv": {
+        "k": 26,
+        "n": 29,
+        "floor": 24,
+        "passes": true
+       }
+      },
+      "passes": true
+     },
+     "2": {
+      "sources": {
+       "openalex": {
+        "k": 30,
+        "n": 30,
+        "floor": 24,
+        "passes": true
+       },
+       "arxiv": {
+        "k": 0,
+        "n": 29,
+        "floor": 24,
+        "passes": false
+       }
+      },
+      "passes": false
+     },
+     "3": {
+      "sources": {
+       "openalex": {
+        "k": 27,
+        "n": 29,
+        "floor": 24,
+        "passes": true
+       },
+       "arxiv": {
+        "k": 28,
+        "n": 29,
+        "floor": 24,
+        "passes": true
+       }
+      },
+      "passes": true
+     }
+    },
+    "passes": false
+   },
+   "both": {
+    "openalex_page": 15,
+    "deadline_s": 2.5,
+    "days": {
+     "1": {
+      "sources": {
+       "openalex": {
+        "k": 29,
+        "n": 29,
+        "floor": 24,
+        "passes": true
+       },
+       "arxiv": {
+        "k": 27,
+        "n": 29,
+        "floor": 24,
+        "passes": true
+       }
+      },
+      "passes": true
+     },
+     "2": {
+      "sources": {
+       "openalex": {
+        "k": 30,
+        "n": 30,
+        "floor": 24,
+        "passes": true
+       },
+       "arxiv": {
+        "k": 0,
+        "n": 29,
+        "floor": 24,
+        "passes": false
+       }
+      },
+      "passes": false
+     },
+     "3": {
+      "sources": {
+       "openalex": {
+        "k": 28,
+        "n": 29,
+        "floor": 24,
+        "passes": true
+       },
+       "arxiv": {
+        "k": 28,
+        "n": 29,
+        "floor": 24,
+        "passes": true
+       }
+      },
+      "passes": true
+     }
+    },
+    "passes": false
+   }
+  },
+  "chosen": null,
+  "meaning": "none passes: NFR-P1's cold half cannot be met with these sources inside 3.0 s; the owner decides"
  }
 }
