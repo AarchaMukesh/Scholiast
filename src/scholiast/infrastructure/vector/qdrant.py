@@ -62,6 +62,21 @@ def point_id_for(chunk_id: str) -> str:
 _NO_SUCH_PAPER = "__no_live_papers__"
 
 
+class CollectionSchemaMismatch(Exception):
+    """An existing collection lacks a vector this adapter reads, or its shape is unreadable.
+
+    Raised by `existing_count`, whose callers read a collection exactly as it was
+    built (D168): querying one that is missing the lexical vector, or that has a
+    dense vector of the wrong form, would fail or silently differ, so it is
+    refused before anything is read from it.
+    """
+
+    def __init__(self, collection: str, problems: Sequence[str]) -> None:
+        self.collection = collection
+        self.problems = tuple(problems)
+        super().__init__(f"collection {collection!r}: " + "; ".join(self.problems))
+
+
 class QdrantVectorIndex:
     """The `VectorIndex` adapter."""
 
@@ -183,6 +198,64 @@ class QdrantVectorIndex:
             existing = getattr(params, "size", None)
         if isinstance(existing, int) and existing != self._dimensions:
             raise VectorDimensionMismatch(self._collection, existing, self._dimensions)
+
+    def _assert_schema(self, info: models.CollectionInfo) -> None:
+        """Strictly: the collection holds exactly the vectors this adapter reads.
+
+        For `existing_count`. `_assert_dimensions`, which `ensure_ready` uses, is
+        left lenient on purpose, so production's path is unchanged; this one
+        refuses an unreadable shape instead of passing it, because a check that
+        finds nothing must not look like validation.
+
+        - Dense-only: one unnamed vector of `dimensions`, what `search` queries.
+        - Sparse: a named `dense` vector of `dimensions` and a named `lexical`
+          sparse vector with Qdrant's IDF modifier (D73), what `search` and
+          `search_lexical` query. Without the modifier the lexical arm would score
+          by term frequency alone and not be the arm M2 measured.
+        """
+        params = getattr(info.config, "params", None)
+        vectors = getattr(params, "vectors", None)
+        problems: list[str] = []
+        if self._sparse:
+            dense = vectors.get(DENSE_VECTOR) if isinstance(vectors, dict) else None
+            if dense is None:
+                problems.append(f"no named {DENSE_VECTOR!r} vector")
+            lexical = (getattr(params, "sparse_vectors", None) or {}).get(SPARSE_VECTOR)
+            if lexical is None:
+                problems.append(f"no {SPARSE_VECTOR!r} sparse vector")
+            elif getattr(lexical, "modifier", None) != models.Modifier.IDF:
+                problems.append(f"the {SPARSE_VECTOR!r} sparse vector is not IDF-weighted (D73)")
+        else:
+            dense = None if isinstance(vectors, dict) else vectors
+            if dense is None:
+                problems.append("no unnamed dense vector")
+        size = getattr(dense, "size", None)
+        if dense is not None and not isinstance(size, int):
+            problems.append("its dense vector size is unreadable")
+        if problems:
+            raise CollectionSchemaMismatch(self._collection, problems)
+        # No problems means a dense vector with an integer size was found above.
+        if isinstance(size, int) and size != self._dimensions:
+            raise VectorDimensionMismatch(self._collection, size, self._dimensions)
+
+    async def existing_count(self) -> int | None:
+        """The collection's exact point count, or None if it does not exist. Read-only.
+
+        For a caller that must not create or alter a collection, which
+        `ensure_ready` does: it creates a missing collection and re-asserts the
+        `paper_id` payload index on every call. This makes three reads and no
+        write: `GET .../exists`, then `GET /collections/{name}` for a strict
+        schema check (`_assert_schema`: every vector this adapter reads is
+        present, including the hybrid collection's lexical vector, at the right
+        size; a collection built otherwise is refused, not read), then
+        `POST .../points/count`. Existence is asked first rather than inferred
+        from `count()` failing, so what the server does when counting a missing
+        collection never matters (D168).
+        """
+        if not await self._client.collection_exists(self._collection):
+            return None
+        self._assert_schema(await self._client.get_collection(self._collection))
+        return await self.count()
 
     async def upsert(self, records: Sequence[VectorRecord]) -> int:
         if not records:
