@@ -31,7 +31,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from scholiast.config.settings import get_settings
 from scholiast.eval.contention import (
@@ -45,6 +45,20 @@ from scholiast.eval.dedup import DedupReport, run_dedup
 from scholiast.eval.dedup import render as _render_dedup
 from scholiast.eval.dret import DRet, Query, build_dret, verify_core, verify_split
 from scholiast.eval.fusion import FusionFit, fit_dense_weight, training_queries
+from scholiast.eval.gate import (
+    DECIDING_SIZE,
+    DEPTH,
+    DRAWS,
+    GATE_KEY,
+    RULE,
+    SIZES,
+    ScopedRuns,
+    compare_with_archive,
+    decide,
+    drawn,
+    measure_scoped,
+    whole_corpus,
+)
 from scholiast.eval.harness import (
     EmbedderLike,
     IndexReport,
@@ -91,6 +105,11 @@ from scholiast.eval.smoke import (
     save_baseline,
 )
 from scholiast.eval.snapshot import load_snapshot
+
+if TYPE_CHECKING:
+    # For the annotation only: at runtime the adapter is imported inside
+    # `_build_dependencies`, so `--help` and the pure-logic tests stay light.
+    from scholiast.infrastructure.vector.qdrant import QdrantVectorIndex
 
 #: Where a run lands. Date-stamped rather than overwritten (§9.13): the trend line
 #: across milestones is itself a deliverable, and it cannot exist if each run
@@ -332,7 +351,7 @@ def _render(report: EvalReport) -> str:
 
 def _build_dependencies(
     dataset: DRet, spec: EmbedderSpec, *, sparse: bool = False
-) -> tuple[EmbedderLike, Any, str]:
+) -> tuple[EmbedderLike, QdrantVectorIndex, str]:
     """Wire the real adapters for one encoder. Imported here, not at module load.
 
     Importing the embedder pulls in torch and sentence-transformers, which costs
@@ -1199,6 +1218,274 @@ async def run_smoke() -> tuple[dict[str, Any], dict[str, dict[str, float]]]:
     return report, metrics
 
 
+#: The arms run D168's precondition must reproduce, and the blocks it compares.
+#: Named, not discovered: "the latest arms artifact" would quietly move the
+#: reference the day anyone re-ran `--compare-arms`.
+GATE_REPRODUCES = DEFAULT_REPORT_DIR / "arms-20260924T053549+0000.json"
+GATE_DENSE_BLOCK = "dense (bge-base-en-v1.5)"
+GATE_HYBRID_BLOCK = "hybrid (bge-base-en-v1.5)"
+#: SHA-256 of that file's bytes, pinned. `var/` is gitignored, so the name alone
+#: says which file and not what is in it: an edited or replaced copy would make
+#: the precondition reproduce that copy rather than the numbers M2 published.
+GATE_REFERENCE_SHA256 = "53accec29c820489d9d7290a56aa8b3dd5e72ce49b161567df57f694cc4d51b8"
+
+
+def _load_reference(path: Path) -> dict[str, Any]:
+    """The arms artifact the precondition reproduces, read before anything is measured.
+
+    Refused unless its bytes hash to `GATE_REFERENCE_SHA256`, and the gate calls
+    this first, so a modified or replaced reference stops the run before any
+    Qdrant call or measurement.
+    """
+    if not path.exists():
+        raise FileNotFoundError(
+            f"{path} is the arms run D168's precondition reproduces, and it is missing"
+        )
+    raw = path.read_bytes()
+    digest = hashlib.sha256(raw).hexdigest()
+    if digest != GATE_REFERENCE_SHA256:
+        raise ValueError(
+            f"{path} does not match the pinned M2 reference (D168): sha256 {digest}, "
+            f"expected {GATE_REFERENCE_SHA256}. The precondition reproduces the arms "
+            "run M2 published, not whatever file now has its name."
+        )
+    loaded: dict[str, Any] = json.loads(raw.decode("utf-8"))
+    return loaded
+
+
+def _identity_mismatches(
+    archived: dict[str, Any], *, collections: dict[str, str], embedder_version: str
+) -> list[str]:
+    """Where the collections this run would read differ from the ones M2's arms read.
+
+    D168 (as amended): each arm is reproduced against the collection the archive
+    records for it. The names are derived from the dataset and embedder versions,
+    so a changed precision or device setting names a different collection; this
+    says so before any Qdrant call, instead of letting the run refuse later for a
+    reason that would look like a missing build.
+    """
+    blocks = archived.get("blocks", {})
+    found: list[str] = []
+    for arm, label in (("dense", GATE_DENSE_BLOCK), ("hybrid", GATE_HYBRID_BLOCK)):
+        recorded = blocks.get(label, {})
+        for key, ours in (("collection", collections[arm]), ("embedder_version", embedder_version)):
+            theirs = recorded.get(key)
+            if ours != theirs:
+                found.append(f"{arm}: {key} would be {ours!r}, the archive records {theirs!r}")
+    return found
+
+
+def _gate_block(runs: ScopedRuns, *, graded: bool) -> dict[str, Any]:
+    """One query set at one scope size: both arms, the paired deltas, the spread."""
+
+    def quality(run: RunReport) -> dict[str, Any]:
+        summary = _summarise(run, graded=graded)
+        # The gate measures quality only (gate.py); its clocks include per-call
+        # warm-ups and would be misread as retrieval latency.
+        summary.pop("retrieve_latency_ms")
+        return summary
+
+    spread = {
+        metric: {"per_draw": values, "min": min(values), "max": max(values)}
+        for metric, values in runs.draw_deltas.items()
+        if values and (graded or metric == "recall@10")
+    }
+    return {
+        "dense": quality(runs.dense),
+        "hybrid": quality(runs.hybrid),
+        "deltas_hybrid_vs_dense": _deltas(runs.hybrid, runs.dense, graded=graded),
+        "draw_spread_of_delta": spread,
+    }
+
+
+async def run_workspace_gate(*, reproduces: Path = GATE_REPRODUCES) -> EvalReport:
+    """D167's gate, as D168 fixed it: the precondition first, then three scope sizes.
+
+    **Read-only against Qdrant.** Dense reads the dense-only collection and hybrid
+    the sparse one, exactly as `--compare-arms` did, and nothing is created,
+    indexed or written:
+
+    1. The collection names and the embedder version are checked against the ones
+       the archive records for each arm (D168 as amended) before any Qdrant call.
+    2. Each collection is checked with `existing_count`, which only reads. Not
+       `ensure_ready`, which creates a missing collection and re-asserts its
+       payload index; a missing or incomplete collection is refused, never built,
+       because a rebuilt one is not the one M2 measured.
+    3. If the precondition fails, no scoped measurement runs: there is no verdict,
+       and no scoped number exists to be mistaken for a result.
+    """
+    archived = _load_reference(reproduces)
+
+    dataset = build_dret(load_snapshot())
+    verify_split(dataset)
+    verify_core(dataset)
+    base = next(s for s in COMPARED_EMBEDDERS if s.baseline)
+    embedder, dense_index, dense_collection = _build_dependencies(dataset, base)
+    _, hybrid_index, hybrid_collection = _build_dependencies(dataset, base, sparse=True)
+    collections = {"dense": dense_collection, "hybrid": hybrid_collection}
+    # Constructing the adapters made no Qdrant call (it connects on first use), so
+    # this refusal happens before the gate has touched the store at all.
+    wrong = _identity_mismatches(
+        archived, collections=collections, embedder_version=embedder.version
+    )
+    if wrong:
+        raise ValueError(
+            "the gate would not read the collections M2's arms read (D168):\n  "
+            + "\n  ".join(wrong)
+            + "\nThe names derive from the dataset and embedder versions, so check the "
+            "embedding precision and device settings before anything else."
+        )
+    for index, collection in ((dense_index, dense_collection), (hybrid_index, hybrid_collection)):
+        present = await index.existing_count()
+        if present is None:
+            raise ValueError(
+                f"{collection} does not exist. The gate reads the collections M2's arms "
+                "measured and never creates one (D168); a new collection would not be "
+                "the one the archive was measured on."
+            )
+        if present != len(dataset.chunks):
+            raise ValueError(
+                f"{collection} holds {present} of {len(dataset.chunks)} chunks. The gate "
+                "reads the collections M2's arms measured and must not build them; a "
+                "rebuilt one would make the reproduction precondition compare different "
+                "vectors (D168)."
+            )
+
+    async def measure(name: str, attribute: str, **how: Any) -> ScopedRuns:
+        queries: list[Query] = getattr(dataset, attribute)
+        return await measure_scoped(
+            dataset, queries, dense_index, hybrid_index, embedder, label=name, **how
+        )
+
+    # The precondition: M2's scope, one draw (every draw of the whole corpus is the
+    # same scope), compared with the archived numbers exactly.
+    reproduction: dict[str, dict[str, Any]] = {"dense": {}, "hybrid": {}, "deltas": {}}
+    for name, attribute, graded, _note in QUERY_SETS:
+        runs = await measure(name, attribute, scope=whole_corpus(dataset), draws=1)
+        reproduction["dense"][name] = _summarise(runs.dense, graded=graded)
+        reproduction["hybrid"][name] = _summarise(runs.hybrid, graded=graded)
+        reproduction["deltas"][name] = _deltas(runs.hybrid, runs.dense, graded=graded)
+    # Through JSON, as the archive went: tuples become lists and nothing else moves.
+    mismatches = compare_with_archive(
+        json.loads(json.dumps(reproduction)),
+        archived,
+        dense=GATE_DENSE_BLOCK,
+        hybrid=GATE_HYBRID_BLOCK,
+    )
+
+    # A failed precondition stops here (D168): the scoped runs would rest on
+    # retrieval that does not reproduce M2, so none is measured, and the artifact
+    # carries no scoped number that could be quoted without its verdict.
+    sizes: dict[str, Any] = {}
+    deciding: dict[str, Any] = {}
+    if not mismatches:
+        for size in SIZES:
+            sizes[f"N={size}"] = {
+                name: _gate_block(
+                    await measure(name, attribute, scope=drawn(dataset, size=size), draws=DRAWS),
+                    graded=graded,
+                )
+                for name, attribute, graded, _note in QUERY_SETS
+            }
+        deciding = {
+            name: block["deltas_hybrid_vs_dense"]
+            for name, block in sizes[f"N={DECIDING_SIZE}"].items()
+        }
+
+    return EvalReport(
+        generated_at=datetime.now(UTC).isoformat(timespec="seconds"),
+        config={
+            "comparison": "D167's workspace-scale gate (D168): RRF hybrid vs dense-only, "
+            "each query ranked against its own paper plus papers drawn by hash",
+            "dataset_versions": dataset.versions,
+            "grade_scale": dataset.grade_scale,
+            "corpus_papers": len(dataset.papers),
+            "corpus_chunks": len(dataset.chunks),
+            "embedder_version": embedder.version,
+            "collections": {"dense": dense_collection, "hybrid": hybrid_collection},
+            "scope": {
+                "sizes": list(SIZES),
+                "deciding_size": DECIDING_SIZE,
+                "draws_per_query": DRAWS,
+                "draw": "uniform over every other corpus paper: rank each by "
+                f'sha256("{GATE_KEY}:{{draw}}:{{query_id}}:{{paper_id}}"), take the '
+                "first N - 1; sizes nested; a query's metric is the mean over its draws",
+            },
+            "depth": DEPTH,
+            "fusion": "rrf",
+            "rule": RULE,
+            "reproduces": str(reproduces),
+            "latency_measured": "not measured: the gate measures retrieval quality only",
+            "does_not_establish": [
+                "LaTeX-derived corpus with BIBREF tokens (T12); binary 2/0 judgments (D69)",
+                "a random scope is not a real user's single-topic workspace",
+                "recall@10 stands in for QA's 8 evidence passages",
+                "retrieval quality, not answer quality",
+            ],
+        },
+        blocks={
+            "reproduction": {
+                "reproduced": not mismatches,
+                "mismatches": mismatches,
+                "compared_against": [GATE_DENSE_BLOCK, GATE_HYBRID_BLOCK],
+            },
+            "scoped_measurement": {
+                "run": not mismatches,
+                "reason": None if not mismatches else "the precondition failed (D168)",
+            },
+            "sizes": sizes,
+            "verdict": decide(not mismatches, deciding),
+        },
+    )
+
+
+def _render_gate(report: EvalReport) -> str:
+    """The verdict first, then each size with its deciding metrics marked."""
+    cfg, blocks = report.config, report.blocks
+    verdict, reproduction = blocks["verdict"], blocks["reproduction"]
+    out = [
+        f"D167 workspace-scale gate  ({report.generated_at})",
+        f"  dataset    {cfg['dataset_versions']}",
+        f"  grades     {cfg['grade_scale']}",
+        f"  scope      {cfg['scope']['draw']}",
+        f"  rule       {cfg['rule']}",
+        "",
+        f"  precondition: whole-corpus run vs {cfg['reproduces']}: "
+        + ("REPRODUCED exactly" if reproduction["reproduced"] else "NOT REPRODUCED"),
+    ]
+    out.extend(f"    {line}" for line in reproduction["mismatches"][:20])
+    if len(reproduction["mismatches"]) > 20:
+        out.append(f"    ... and {len(reproduction['mismatches']) - 20} more")
+    out.append(f"  VERDICT: {verdict['outcome']}")
+    for key in ("significantly_worse", "significantly_better", "within_noise"):
+        if verdict.get(key):
+            out.append(f"    {key.replace('_', ' ')}: {', '.join(verdict[key])}")
+    scoped = blocks.get("scoped_measurement", {"run": True})
+    if not scoped["run"]:
+        out.append(f"  scoped measurement: not run, {scoped['reason']}")
+    out.append("")
+    for size, by_set in blocks["sizes"].items():
+        deciding = size == f"N={DECIDING_SIZE}"
+        out.append(f"=== {size}" + ("  [DECIDES]" if deciding else "  (reported only)"))
+        for name, block in by_set.items():
+            out.append(f"  {name}  (n={block['dense']['n']})")
+            for metric, delta in sorted(block["deltas_hybrid_vs_dense"].items()):
+                low, high = delta["ci95"]
+                dense = block["dense"]["metrics"][metric]["point"]
+                hybrid = block["hybrid"]["metrics"][metric]["point"]
+                flag = "within noise" if delta["within_noise"] else "SIGNIFICANT"
+                out.append(
+                    f"    {metric:<12}dense {dense:.3f}  hybrid {hybrid:.3f}   "
+                    f"d {delta['delta']:+.3f} [{low:+.3f}, {high:+.3f}] {flag}"
+                )
+            for metric, spread in block["draw_spread_of_delta"].items():
+                out.append(
+                    f"    {metric} delta by draw: {spread['min']:+.3f} .. {spread['max']:+.3f}"
+                )
+        out.append("")
+    return "\n".join(out)
+
+
 def _render_pdf_check(report: EvalReport) -> str:
     """Two builds side by side, with what each one's evidence did."""
     cfg = report.config
@@ -1377,6 +1664,18 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--workspace-gate",
+        action="store_true",
+        help=(
+            f"D167's gate (D168): RRF hybrid vs dense with each query ranked against its "
+            f"own paper plus papers drawn by hash, at {' / '.join(str(s) for s in SIZES)} "
+            f"papers ({DECIDING_SIZE} decides), {DRAWS} draws per query. First reproduces "
+            f"{GATE_REPRODUCES} exactly, or stops with no verdict. Read-only: checks "
+            "that the collections are the archive's and complete, and never creates, "
+            "indexes or writes either."
+        ),
+    )
+    parser.add_argument(
         "--dedup",
         action="store_true",
         help=(
@@ -1444,6 +1743,11 @@ def main(argv: list[str] | None = None) -> int:
         # retrieval configurations, so it has its own runner and its own view.
         report = asyncio.run(run_contention())
         print(_render_contention(report))
+    elif args.workspace_gate:
+        # A verdict under a rule fixed in advance (D168), so it leads with the
+        # verdict and the precondition rather than with a table.
+        report = asyncio.run(run_workspace_gate())
+        print(_render_gate(report))
     else:
         report = asyncio.run(
             _run(
@@ -1468,6 +1772,7 @@ def main(argv: list[str] | None = None) -> int:
                     ("dedup", args.dedup),
                     ("pdf-check", args.pdf_check),
                     ("contention", args.contention),
+                    ("gate", args.workspace_gate),
                     ("depths", args.compare_depths),
                     ("fusion", args.compare_fusion),
                     ("arms", args.compare_arms),

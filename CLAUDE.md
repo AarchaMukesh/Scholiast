@@ -134,6 +134,7 @@ uv run eval --compare-fusion     # RRF vs weighted, weight fitted on the TRAIN s
 uv run eval --contention         # rerank latency with the GPU gate on and off (D79)
 uv run eval --pdf-check          # D68's real-PDF validity check — fetches from arXiv
 uv run eval --smoke              # FR-E6's CI gate; exits 1 on a regression (D82)
+uv run eval --workspace-gate     # D167's gate, fixed by D168: hybrid vs dense on workspace-sized scopes
 ```
 
 Reruns are cheap: a complete collection is never rebuilt, and the PDF cache is reused.

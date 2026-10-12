@@ -10,12 +10,18 @@ real Qdrant.
 from __future__ import annotations
 
 import uuid
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
+from qdrant_client import models
 
-from scholiast.application.ports.vector import EmptyRetrievalScope
+from scholiast.application.ports.vector import EmptyRetrievalScope, VectorDimensionMismatch
 from scholiast.infrastructure.vector.qdrant import (
+    DENSE_VECTOR,
     POINT_NAMESPACE,
+    SPARSE_VECTOR,
+    CollectionSchemaMismatch,
     QdrantVectorIndex,
     point_id_for,
 )
@@ -82,3 +88,165 @@ class TestTheFilterIsMandatory:
         condition = built.must[0]  # type: ignore[index]
         assert condition.key == "paper_id"  # type: ignore[union-attr]
         assert condition.match.any == ["a", "b"]  # type: ignore[union-attr]
+
+
+def _dense(size: int = 768) -> models.VectorParams:
+    return models.VectorParams(size=size, distance=models.Distance.COSINE)
+
+
+def _lexical(modifier: models.Modifier | None = models.Modifier.IDF) -> models.SparseVectorParams:
+    return models.SparseVectorParams(modifier=modifier)
+
+
+#: What `ensure_ready` builds, as Qdrant reports it back: the dense-only
+#: collection's one unnamed vector, and the hybrid collection's named dense
+#: vector plus its IDF-weighted lexical sparse vector (D73).
+DENSE_ONLY: dict[str, Any] = {"vectors": _dense()}
+HYBRID: dict[str, Any] = {
+    "vectors": {DENSE_VECTOR: _dense()},
+    "sparse_vectors": {SPARSE_VECTOR: _lexical()},
+}
+
+
+class ReadOnlyClient:
+    """A Qdrant client stand-in that permits three reads and fails on anything else.
+
+    Any other attribute, `create_collection` and `create_payload_index` among
+    them, fails the test the moment it is looked up, so a method that writes or
+    creates cannot pass by accident. The collection's configuration is built from
+    qdrant-client's own models, so the schema check reads the shapes a real
+    server returns.
+    """
+
+    def __init__(
+        self, *, exists: bool, params: dict[str, Any] | None = None, points: int = 7854
+    ) -> None:
+        self.reads: list[str] = []
+        self._exists = exists
+        self._params = DENSE_ONLY if params is None else params
+        self._points = points
+
+    def __getattr__(self, name: str) -> Any:
+        raise AssertionError(f"existing_count used {name!r}; only reads are allowed")
+
+    async def collection_exists(self, collection: str) -> bool:
+        self.reads.append("collection_exists")
+        return self._exists
+
+    async def get_collection(self, collection: str) -> object:
+        self.reads.append("get_collection")
+        return SimpleNamespace(config=SimpleNamespace(params=SimpleNamespace(**self._params)))
+
+    async def count(self, collection: str, **kwargs: object) -> object:
+        self.reads.append("count")
+        return SimpleNamespace(count=self._points)
+
+
+def _index_over(client: ReadOnlyClient, *, sparse: bool = False) -> QdrantVectorIndex:
+    index = QdrantVectorIndex("http://qdrant.invalid:6333", collection="eval", sparse=sparse)
+    index._connection = client  # type: ignore[assignment]
+    return index
+
+
+class TestCheckingACollectionWithoutCreatingIt:
+    """`existing_count` is the read-only check the workspace gate relies on (D168).
+
+    `ensure_ready` creates a missing collection and re-asserts its payload index
+    on every call, so a caller that must leave the store exactly as it found it
+    needs a check that only reads. Every test here also proves nothing was
+    created or modified: the stand-in client fails on any method but three reads.
+    """
+
+    async def test_a_missing_collection_is_reported_not_created(self) -> None:
+        client = ReadOnlyClient(exists=False)
+
+        assert await _index_over(client).existing_count() is None
+        assert client.reads == ["collection_exists"]
+
+    async def test_an_existing_dense_collection_is_counted_by_reads_alone(self) -> None:
+        client = ReadOnlyClient(exists=True, points=7854)
+
+        assert await _index_over(client).existing_count() == 7854
+        assert client.reads == ["collection_exists", "get_collection", "count"]
+
+    async def test_a_complete_hybrid_collection_is_counted_by_reads_alone(self) -> None:
+        client = ReadOnlyClient(exists=True, params=HYBRID, points=7854)
+
+        assert await _index_over(client, sparse=True).existing_count() == 7854
+        assert client.reads == ["collection_exists", "get_collection", "count"]
+
+    async def test_a_hybrid_collection_missing_its_lexical_vector_is_refused(self) -> None:
+        # The lexical arm queries the `lexical` sparse vector; without it the
+        # hybrid arm is not the one M2 measured, so nothing is read from it.
+        client = ReadOnlyClient(exists=True, params={"vectors": {DENSE_VECTOR: _dense()}})
+
+        with pytest.raises(CollectionSchemaMismatch) as refused:
+            await _index_over(client, sparse=True).existing_count()
+
+        assert refused.value.problems == ("no 'lexical' sparse vector",)
+        assert client.reads == ["collection_exists", "get_collection"]
+
+    async def test_a_lexical_vector_without_idf_is_refused(self) -> None:
+        # D73: IDF comes from Qdrant's modifier. Without it BM25 is term
+        # frequency alone, a different lexical arm under the same name.
+        params = {**HYBRID, "sparse_vectors": {SPARSE_VECTOR: _lexical(models.Modifier.NONE)}}
+        client = ReadOnlyClient(exists=True, params=params)
+
+        with pytest.raises(CollectionSchemaMismatch, match="not IDF-weighted"):
+            await _index_over(client, sparse=True).existing_count()
+        assert "count" not in client.reads
+
+    async def test_a_hybrid_collection_without_a_named_dense_vector_is_refused(self) -> None:
+        # An unnamed vector is the dense-only form; `search` on the hybrid
+        # collection asks for the vector named `dense`.
+        params = {**HYBRID, "vectors": _dense()}
+        client = ReadOnlyClient(exists=True, params=params)
+
+        with pytest.raises(CollectionSchemaMismatch, match="no named 'dense' vector"):
+            await _index_over(client, sparse=True).existing_count()
+        assert "count" not in client.reads
+
+    async def test_a_dense_only_adapter_refuses_a_named_vector_collection(self) -> None:
+        client = ReadOnlyClient(exists=True, params=HYBRID)
+
+        with pytest.raises(CollectionSchemaMismatch, match="no unnamed dense vector"):
+            await _index_over(client).existing_count()
+        assert "count" not in client.reads
+
+    async def test_an_unreadable_vector_configuration_is_refused_not_passed(self) -> None:
+        # The lenient check `ensure_ready` keeps would pass this, having found
+        # nothing to compare; a check that finds nothing must not look like one.
+        client = ReadOnlyClient(exists=True, params={"vectors": None})
+
+        with pytest.raises(CollectionSchemaMismatch, match="no unnamed dense vector"):
+            await _index_over(client).existing_count()
+        assert "count" not in client.reads
+
+    @pytest.mark.parametrize("sparse", [False, True])
+    async def test_a_dense_vector_whose_size_cannot_be_read_is_refused(self, sparse: bool) -> None:
+        # The vector is there but carries no readable size: nothing to compare
+        # with the encoder's dimensions, so it is refused rather than assumed.
+        sizeless = SimpleNamespace(size=None)
+        params = (
+            {**HYBRID, "vectors": {DENSE_VECTOR: sizeless}} if sparse else {"vectors": sizeless}
+        )
+        client = ReadOnlyClient(exists=True, params=params)
+
+        with pytest.raises(CollectionSchemaMismatch, match="size is unreadable"):
+            await _index_over(client, sparse=sparse).existing_count()
+        assert "count" not in client.reads
+
+    @pytest.mark.parametrize("sparse", [False, True])
+    async def test_a_collection_built_for_another_embedder_is_refused_before_counting(
+        self, sparse: bool
+    ) -> None:
+        params = (
+            {**HYBRID, "vectors": {DENSE_VECTOR: _dense(384)}}
+            if sparse
+            else {"vectors": _dense(384)}
+        )
+        client = ReadOnlyClient(exists=True, params=params)
+
+        with pytest.raises(VectorDimensionMismatch):
+            await _index_over(client, sparse=sparse).existing_count()
+        assert client.reads == ["collection_exists", "get_collection"]
