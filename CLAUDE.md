@@ -19,15 +19,21 @@ tests, five gates green.** M5 is next: grounding and comparison.
 Milestone logs are the only tracked files under `docs/` (D67), and each one's "what this
 does **not** establish" section sits above its findings on purpose.
 
-**M4 criterion 1 (NFR-P1) is NOT MET AS WRITTEN — do not report it as met** (D158, D160).
-Cached searches meet 400 ms easily (p95 42 ms, zero outbound calls); cold searches do not
-meet 3.0 s at p95, because 4 of 29 lost both sources and OpenAlex answered inside the
-2.0 s deadline on only 15 of 29. The limiter is OpenAlex's own time: headers ~0.5–1.0 s,
-then a ~0.8–0.9 s streamed body, which fits 2.0 s on a good day and not on a bad one.
-**Connection pooling was tested (A5, D163) and REJECTED**: connect is 6 ms and TLS 9 ms, the
-body is as slow on a reused connection, and at 90 s gaps pooling was worse. The levers
-left (a smaller OpenAlex page, a longer source deadline, several days of measurement) are
-the owner's, each pre-registered — not a retry slipped into something else.
+**M4 criterion 1 (NFR-P1) is NOT MET AS WRITTEN, and closed as not met under the tested
+conditions — do not report it as met** (D158, D160, D170). Cached searches meet 400 ms
+easily (p95 42 ms, zero outbound calls); cold searches did not meet 3.0 s at p95 in A4,
+because 4 of 29 lost both sources and OpenAlex answered inside the 2.0 s deadline on only
+15 of 29. **Measured since:** OpenAlex's headers take ~0.5–1.0 s and its body a further
+~0.8–0.9 s, streamed; **connection pooling was tested (A5, D163) and REJECTED** (connect
+6 ms, TLS 9 ms, the body as slow on a reused connection, and pooling worse at 90 s gaps);
+and on three more days (A6-multiday, D169) no configuration of page size and deadline
+passed every day, all four failing on the one day arXiv refused every request.
+**Concluded:** the misses are the sources' own latency and availability, which D158
+counts on purpose, and the levers our code holds are spent against them. **Closed, not
+amended:** no further latency levers or live runs for it now, and the requirement is not
+changed after the fact. That does not show the bound cannot be met: a requirement change
+or a different source mix, fixed in advance and judged by a new end-to-end run, remains
+the owner's option (D170, M4 log §3).
 
 **Live calls to the sources go through `spike/m4-protocol.json`**: every M4 live pass (the
 spike, A1–A4) was pre-registered with its rule and budget and approved by hash before its
@@ -276,6 +282,7 @@ Quote these, with their caveats. Full detail in the M4 milestone log; live resul
 | **NFR-P1, live (A4)** | **cached p95 42 ms** ✅, zero outbound calls · **cold: not met** ❌ — 4/29 lost both sources; the 25 that answered p50 2.28 s, max 2.44 s |
 | Source completion inside 2.0 s (A4) | OpenAlex **15/29** (52%) · arXiv **22/29** (76%). A3 the day before had OpenAlex at 18/20 and A5 the day after **29/30** — it varies by day more than anything we control |
 | OpenAlex's own time | A4: headers p50 0.99 s, body a near-constant **0.80 s** (290–330 KB). A5: connect **6 ms**, TLS **9 ms**, body **0.93 s new vs 0.92 s reused** — server streaming, not TCP slow start; pooling rejected (D163) |
+| The sources on three more days (A6-multiday, D169) | inside 2.0 s: OpenAlex@25 **28/30 · 28/30 · 25/30**, arXiv@50 **26/29 · 0/29 · 28/29** (day 2: 27 HTTP 429s). No configuration passed every day |
 | A cold search's own cost | dense ranking p50 0.29 s, p95 0.42 s; everything outside the use case p50 4 ms |
 | First search after a start | **0.59–0.82 s** with the encoder warmed at boot (D156), against 16.2 s before; boot 7.6–11.5 s |
 | Model load | 32 requests to huggingface.co and 7.7–11.1 s without `local_files_only`; 1.2 s from the local copy (D157) |
