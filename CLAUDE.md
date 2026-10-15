@@ -35,9 +35,10 @@ changed after the fact. That does not show the bound cannot be met: a requiremen
 or a different source mix, fixed in advance and judged by a new end-to-end run, remains
 the owner's option (D170, M4 log §3).
 
-**Live calls to the sources go through `spike/m4-protocol.json`**: every M4 live pass (the
-spike, A1–A4) was pre-registered with its rule and budget and approved by hash before its
-first request (`APPROVED_PROTOCOL_SHA256` in `spike/scripts/m4_common.py`). Keep doing that.
+**Live calls to the sources go through `spike/m4-protocol.json`**: every live pass under it
+(the spike, A1–A5, A6-multiday) was pre-registered with its rule and budget and approved by
+hash before its first request (`APPROVED_PROTOCOL_SHA256` in `spike/scripts/m4_common.py`).
+Keep doing that.
 
 **Two earlier criteria were amended rather than met**, both because a design document
 described behaviour the code could not perform: M3's §5.11 rungs (D105, D106; M3 log §3).
@@ -47,8 +48,10 @@ FR-O4 tracing is deferred (D109). Do not re-argue these.
 negative.** Do not re-argue any of these — they cost a phase each:
 
 - **Hybrid beats dense-only** on D-RET-CORE: recall@10 **+0.088** [+0.004, +0.177],
-  nDCG@10 **+0.061**, significant on four of five metrics. Adopted? **Not yet** — FR-Q3's
-  decision is deliberately open and production is still dense-only.
+  nDCG@10 **+0.061**, significant on four of five metrics. Adopted? **Decided, not live**:
+  D167 adopts hybrid RRF without reranking and amends FR-Q3, unless D168's workspace-scale
+  gate (`uv run eval --workspace-gate`) finds hybrid significantly worse. The gate has not
+  been run, so production is still dense-only.
 - **Reranking is a null against hybrid**, and the cause is measured: at the adopted top-50
   budget **two-thirds of relevant chunks never reach the cross-encoder**, and the
   pre-rerank ceiling still climbs at depth 100 (CORE 0.342 → 0.417). It is a starved
@@ -61,7 +64,7 @@ negative.** Do not re-argue any of these — they cost a phase each:
 
 ## Read this first
 
-**`docs/00-decisions-log.md` is the source of truth.** D1–D160, and several *reverse*
+**`docs/00-decisions-log.md` is the source of truth.** D1–D170, and several *reverse*
 what the earlier design docs say — including two that reverse *other decisions*.
 Reading doc 5, 6 or 7 without the log will lead you to recommend things already
 measured against:
@@ -99,9 +102,9 @@ measurements against a specific commit, so it belongs in history with it.
 
 | File | What it holds |
 |---|---|
-| `docs/00-decisions-log.md` | D1–D160 + measured hardware baseline. **Start here.** |
+| `docs/00-decisions-log.md` | D1–D170 + measured hardware baseline. **Start here.** |
 | `docs/milestone-logs/M4-MILESTONE-LOG.md` | M4's close-out: 6/7 criteria as written and **1 not met (NFR-P1 cold) with its cause measured**, its defects and what found them, 305 mutations, debt to M5/M6 |
-| `SPIKE-FINDINGS-M4.md` · `spike/m4-protocol.json` | M4's live-source spike and its pre-registered addenda A1–A4, with their results under `spike/results/` |
+| `SPIKE-FINDINGS-M4.md` · `spike/m4-protocol.json` | M4's live-source spike and its pre-registered addenda A1–A5 and A6-multiday, with their results under `spike/results/`. The spike findings write up the spike, A1 and A2; A3 and A4 are reported in the M4 log, A5 and A6-multiday in its §3 addendum (D163, D169) |
 | `docs/milestone-logs/M3-MILESTONE-LOG.md` | M3's close-out: 7/8 criteria as written and 1 amended with cause, 15 defects and what found them, 96 mutations, debt to M4/M6 |
 | `docs/milestone-logs/M2-MILESTONE-LOG.md` | M2's close-out: 8/8 criteria, every measurement with its interval, 16 defects and what found them, debt to M3/M5/M6 |
 | `docs/milestone-logs/M1-MILESTONE-LOG.md` | M1's close-out: 7/7 criteria, what is *not* measured, debt to M2/M3/M5 |
