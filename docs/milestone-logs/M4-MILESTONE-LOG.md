@@ -180,6 +180,47 @@ check, the first-after-start sample and the cached numbers.
 D158 says a source that is slow for everyone on the day fails the bar for a reason the code
 cannot fix, and the log says so rather than choosing a better afternoon.
 
+### Addendum (2026-10-12, after M4 closed): the cause investigated, and the criterion closed
+
+Written after this log was closed; the run above and its verdict are unchanged. The
+decisions are D163, D169 and D170.
+
+**Measured since.** Each run timed the sources alone, through the production adapters, on
+this machine and network:
+
+| Run | Date | OpenAlex @25 inside 2.0 s | arXiv @50 inside 2.0 s |
+|---|---|---|---|
+| A5, new connection per request (D163) | 2026-10-10 | 29/30 | 23/30 (at a 15 s gap) |
+| A6-multiday day 1 (D169) | 2026-10-10 | 28/30 | 26/29 |
+| A6-multiday day 2 | 2026-10-11 | 28/30 | **0/29** (27 HTTP 429s, 2 timeouts) |
+| A6-multiday day 3 | 2026-10-12 | 25/30 | 28/29 |
+
+- **The slow-start hypothesis above is refuted** (A5). OpenAlex's TCP connect took p50
+  6 ms and its TLS handshake p50 9 ms, and its body took p50 0.93 s on a new connection
+  against 0.92 s on a reused one. The body is OpenAlex streaming its response, not our
+  connection handling. Pooling was not adopted, by its own pre-registered rule.
+- **A6-multiday tested four configurations**, OpenAlex at 25 or 15 results × a 2.0 or
+  2.5 s deadline. None cleared the 80% bar on all three days: all four failed on day 2
+  alone, when arXiv refused every request, and passed on days 1 and 3.
+
+**Concluded.** The cold misses are the sources' own latency and availability: OpenAlex on
+slow days (A4), arXiv on a day it refused every request and on days it ran at about 76–77%
+against the bar's 80% (A4, A5). D158 counts a source that is slow or down for everyone as
+a miss, on purpose, so the criterion records the product's dependence on them. The levers
+our code holds are spent against them: pooling is refuted, and a smaller page or a longer
+deadline was unnecessary for OpenAlex at the shipped settings on A6-multiday's three days
+and does nothing against a refusal.
+
+**Not concluded.** That NFR-P1's cold bound cannot be met. The evidence covers two
+sources, one machine and network, five days and the shipped configuration. A5 and
+A6-multiday timed the sources alone and do not re-judge criterion 1; only a new
+pre-registered end-to-end run can.
+
+**Closed (D170).** Criterion 1 stays NOT MET AS WRITTEN, now closed under the tested
+conditions. The requirement is not changed after the fact, and no further latency levers
+or live runs are pursued for it now. A requirement change or a different source mix, fixed
+in advance and judged by a new end-to-end run, remains the owner's option.
+
 ---
 
 ## 4. Amendments to earlier decisions and documents
@@ -312,10 +353,10 @@ produced under protocol hash `1da1a928...` by `spike/scripts/20_discovery_live.p
 
 | Debt | Owner | Why it is not done |
 |---|---|---|
-| **NFR-P1 cold** (criterion 1) | Before M6, its own change | The measured cause is the sources on a fresh connection (§3). A pooled connection per source is the hypothesis; it, a smaller OpenAlex page and a longer deadline each trade against D122, and each needs a pre-registered measurement |
+| **NFR-P1 cold** (criterion 1) | Before M6, its own change | The measured cause is the sources on a fresh connection (§3). A pooled connection per source is the hypothesis; it, a smaller OpenAlex page and a longer deadline each trade against D122, and each needs a pre-registered measurement. **Update, 2026-10-12:** all three were measured in pre-registered runs. Pooling was refuted (A5, D163), and the three-day measurement of page size and deadline found no configuration that passed every day (A6-multiday, D169). The debt is closed as not met under the tested conditions, not shown impossible to meet (D170, §3's addendum) |
 | **The UI's status line after a 503** | The next front-end change | Found by A4's UI check; the 503 path does not clear `#search-status` |
 | **arXiv's 503 reads as rate limiting** | Any phase touching the arXiv adapter | arXiv throttles with 503 and `Retry-After`, so phase 2 maps every 503 to `rate_limited`; a real outage that answers 503 inside the deadline is shown to the user as throttling |
-| **A fresh-process effect** on the first search after a start | With the pooling measurement | Suggestive at 4/12 against 3/46, contradicted by 0/6 on kill starts; not established |
+| **A fresh-process effect** on the first search after a start | With the pooling measurement | Suggestive at 4/12 against 3/46, contradicted by 0/6 on kill starts; not established. **Update, 2026-10-12:** the pooling measurement (A5, D163) timed the adapters, not fresh app processes, so it did not test this; it stays not established |
 | **The reranker still asks the model hub on every load** | Whichever phase enables reranking | `CrossEncoder` is constructed without D157's local-first rule; production does not rerank today, so only the eval pays it |
 | **A containerised API needs the model in its image** | M6 | D156 loads the encoder at boot; a container without it fails to start, or downloads 419 MB |
 | **A second API process needs a shared arXiv pacer** | M6 | D123's pacer is per process; two processes would double arXiv's rate |
@@ -344,6 +385,12 @@ every score is explainable, which is the same discipline M5's grounding needs.
 measured. The pooling experiment is small and self-contained; whether it runs before M5 or
 alongside it is the owner's call, but it should run as its own pre-registered change, not
 as a side effect of M5's work, so that its before and after stay separable.
+
+**Update, 2026-10-12.** The pooling experiment ran before M5's work, as its own
+pre-registered change, and was refuted (A5, D163); a three-day measurement of the other
+levers followed (A6-multiday, D169). Criterion 1's cold half, named above as open, is now
+closed as NOT MET under the tested conditions (D170, §3's addendum). That is not a finding
+that it cannot be met.
 
 **One thing M5 should resist**, unchanged from M3: FR-Q3's adoption decision is still open
 and production is still dense-only for QA. Hybrid and the reranker are adoption decisions
