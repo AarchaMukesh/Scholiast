@@ -751,14 +751,7 @@ class SqlConversationRepository(ScopedRepository):
             # Stored as the scored chunks the model was shown, which is what
             # FR-Q6 makes inspectable — not the rendered passages, which are
             # reconstructable from the chunk rows and would duplicate them.
-            evidence={
-                "chunks": [
-                    {"chunk_id": c.chunk_id, "paper_id": c.paper_id, "score": c.score}
-                    for c in turn.evidence
-                ]
-            }
-            if turn.evidence
-            else None,
+            evidence=_evidence_to_json(turn.evidence),
             citations=[
                 {
                     "label": c.label,
@@ -921,6 +914,22 @@ class SqlChunkRepository(ScopedRepository):
             .values(embedder_version=version)
         )
 
+    def _embedded(self) -> tuple[Any, ...]:
+        return (
+            models.Chunk.embedder_version.is_not(None),
+            models.Chunk.paper_id.in_(self._reachable_papers()),
+        )
+
+    async def embedded_chunk_ids(self) -> set[str]:
+        rows = await self._session.execute(select(models.Chunk.id).where(*self._embedded()))
+        return {str(chunk_id) for chunk_id in rows.scalars()}
+
+    async def count_embedded(self) -> int:
+        result = await self._session.execute(
+            select(func.count()).select_from(models.Chunk).where(*self._embedded())
+        )
+        return int(result.scalar_one())
+
     async def list_for_paper(self, paper_id: str) -> list[Chunk]:
         target = _as_uuid(paper_id)
         if target is None:
@@ -999,6 +1008,43 @@ def _to_section(row: models.Section) -> Section:
     )
 
 
+def _evidence_to_json(evidence: Sequence[ScoredChunk]) -> dict[str, Any] | None:
+    """A turn's evidence as stored, with each chunk's arm and rank (D172).
+
+    The arm because a fused score is RRF's rank agreement and a dense one a
+    cosine: once both exist, a stored score without its arm cannot be read.
+    """
+    if not evidence:
+        return None
+    return {
+        "chunks": [
+            {
+                "chunk_id": c.chunk_id,
+                "paper_id": c.paper_id,
+                "score": c.score,
+                "arm": c.arm.value,
+                "rank": c.rank,
+            }
+            for c in evidence
+        ]
+    }
+
+
+def _evidence_from_json(stored: Mapping[str, Any] | None) -> tuple[ScoredChunk, ...]:
+    return tuple(
+        ScoredChunk(
+            chunk_id=str(c["chunk_id"]),
+            paper_id=str(c["paper_id"]),
+            score=float(c["score"]),
+            # Rows written before D172 carry neither key, and every one of them
+            # was retrieved dense-only, so dense is what they were, not a guess.
+            arm=RetrievalArm(c.get("arm", RetrievalArm.DENSE.value)),
+            rank=int(c["rank"]) if c.get("rank") is not None else None,
+        )
+        for c in ((stored or {}).get("chunks") or [])
+    )
+
+
 def _to_turn(row: models.Message) -> Turn:
     """One message row back to a domain turn.
 
@@ -1016,15 +1062,7 @@ def _to_turn(row: models.Message) -> Turn:
         )
         for c in (row.citations or [])
     )
-    evidence = tuple(
-        ScoredChunk(
-            chunk_id=str(c["chunk_id"]),
-            paper_id=str(c["paper_id"]),
-            score=float(c["score"]),
-            arm=RetrievalArm.DENSE,
-        )
-        for c in ((row.evidence or {}).get("chunks") or [])
-    )
+    evidence = _evidence_from_json(row.evidence)
     latency = row.latency_ms or {}
     usage = row.token_usage or {}
     return Turn(

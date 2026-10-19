@@ -32,14 +32,32 @@ from scholiast.domain.errors import InvariantViolation
 #: Bump on ANY behavioural change here. Stamped alongside the chunker and embedder
 #: versions (NFR-M5): a change to tokenisation or weighting changes every sparse
 #: vector in the index and therefore every lexical number in every report.
+#: Production stamps it on every hybrid point, and a hybrid read is refused until
+#: every point carries the current one (D172) - so a bump is a full reindex.
 # 1.0.0: initial - identifier-preserving tokenizer, BM25 with sub-token expansion.
-LEXICAL_VERSION = "bm25-identifier/1.0.0"
+# 1.1.0: indexing weights use the fixed AVERAGE_LENGTH below (D172).
+LEXICAL_VERSION = "bm25-identifier/1.1.0"
 
 #: Saturation and length-normalisation constants. The standard BM25 defaults; they
 #: are not tuned here because tuning them on the eval set before the ablation has
 #: measured the arm at all would be fitting a hyperparameter to the test.
 BM25_K1 = 1.2
 BM25_B = 0.75
+
+#: BM25's `avgdl` for everything production indexes, FIXED rather than measured on
+#: the live corpus (D172). It is D-RET's mean over 7,854 chunks, under chunker
+#: structure-aware/1.2.0 and tokenizer bm25-identifier/1.0.0, which is why the
+#: published, arms and gate numbers describe production's weighting exactly.
+#:
+#: Fixed because it is baked into each chunk's stored weights at write time,
+#: unlike IDF, which the store applies to every chunk alike at query time. A
+#: running average would weight two identical chunks differently by ingestion
+#: date, and a rebuild would no longer reproduce the index (NFR-R6, D101). The
+#: cost is calibration: production's own chunks may average something else. The
+#: chunker bounds chunk length, so the value mostly describes the chunker; a
+#: chunker or tokenizer change therefore means revisiting it, and changing it
+#: means a decisions-log entry, a LEXICAL_VERSION bump and a full reindex.
+AVERAGE_LENGTH = 144.8731856378915
 
 #: A token is a run of alphanumerics, optionally joined by the punctuation that
 #: appears *inside* scientific identifiers rather than between words. This is the
@@ -125,6 +143,16 @@ def document_weights(
     for term, count in Counter(tokens).items():
         weights[term_id(term)] = count * (k1 + 1.0) / (count + norm)
     return weights
+
+
+def chunk_weights(text: str) -> dict[int, float]:
+    """Production's lexical weights for one chunk: its text, at the fixed `AVERAGE_LENGTH`.
+
+    The one function ingestion and the rebuild both call, so the two cannot weight
+    a chunk differently. It reads the chunk's own text, not the contextual header
+    the dense arm embeds (ML-3), exactly as the eval's lexical index did.
+    """
+    return document_weights(tokenize(text), average_length=AVERAGE_LENGTH)
 
 
 def query_weights(tokens: Sequence[str]) -> dict[int, float]:

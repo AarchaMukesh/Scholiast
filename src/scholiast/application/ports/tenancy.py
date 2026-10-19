@@ -106,6 +106,10 @@ SWEEPER_REASON: Final = "reconciliation sweeper: remove residue orphaned by dele
 #: refuses any workspace that is not already marked deleted.
 CASCADE_REASON: Final = "workspace cascade: delete on behalf of an owner who has gone"
 REBUILD_REASON: Final = "index rebuild from source of truth"
+#: D172. Whether the hybrid collection holds every embedded chunk is a question
+#: about the whole index, which spans tenants by design (AD-4); it reads chunk ids
+#: and counts only, never content, and writes nothing.
+INDEX_CHECK_REASON: Final = "index completeness check: compare the index with source of truth"
 MIGRATION_REASON: Final = "schema migration"
 #: D50. A worker cannot know whose job it is until it has claimed one, so the
 #: claim itself is genuinely cross-tenant. It is also the *only* cross-tenant

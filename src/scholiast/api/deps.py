@@ -65,7 +65,7 @@ from scholiast.application.ports.tenancy import (
     SystemContext,
     TenantContext,
 )
-from scholiast.application.ports.vector import VectorIndex
+from scholiast.application.ports.vector import LexicalIndex, VectorIndex
 from scholiast.application.use_cases.add_discovered import AddDiscoveredPapersUseCase
 from scholiast.application.use_cases.add_paper import AddPaperUseCase
 from scholiast.application.use_cases.answer_question import AnswerQuestionUseCase
@@ -83,6 +83,7 @@ from scholiast.application.use_cases.rank_works import DenseRelevance
 from scholiast.application.use_cases.remove_paper import RemovePaperUseCase
 from scholiast.config.settings import Settings
 from scholiast.domain.fetch_policy import host_allowlist
+from scholiast.domain.retrieval import RetrievalMode
 from scholiast.infrastructure.db import pending
 from scholiast.infrastructure.db.accounts import SqlAccountRepository, SqlSessionRepository
 from scholiast.infrastructure.db.repositories import (
@@ -95,6 +96,7 @@ from scholiast.infrastructure.db.repositories import (
 from scholiast.infrastructure.queue.postgres import PostgresQueue
 from scholiast.infrastructure.security.ratelimit import FixedWindowLimiter, Limit
 from scholiast.infrastructure.storage.local import LocalObjectStore
+from scholiast.infrastructure.vector.factory import VectorIndexes
 
 log = structlog.get_logger(__name__)
 
@@ -571,6 +573,7 @@ def streaming_workspaces(session: StreamSessionDep, scope: TenantDep) -> SqlWork
 
 
 def streaming_answer_use_case(
+    request: Request,
     session: StreamSessionDep,
     scope: TenantDep,
     embedder: EmbedderDep,
@@ -583,15 +586,32 @@ def streaming_answer_use_case(
     `SessionDep`: that session closes when the handler returns, before the turns
     are written, and a request would otherwise hold two sessions.
     """
+    read_index, mode, lexical = _retrieval(request, index)
     return AnswerQuestionUseCase(
         workspaces=SqlWorkspaceRepository(session, scope),
         papers=SqlPaperRepository(session, scope),
         chunks=SqlChunkRepository(session, scope),
         conversations=SqlConversationRepository(session, scope),
         embedder=embedder,
-        index=index,
+        index=read_index,
         providers=providers,
+        mode=mode,
+        lexical=lexical,
     )
+
+
+def _retrieval(
+    request: Request, index: VectorIndex
+) -> tuple[VectorIndex, RetrievalMode, LexicalIndex | None]:
+    """What QA reads (D172): the lifespan's retrieval config, or today's dense path.
+
+    A composition root that wired only `app.state.index` - the isolation and
+    test lifespans - gets exactly the dense retrieval it always had.
+    """
+    retrieval: VectorIndexes | None = getattr(request.app.state, "retrieval", None)
+    if retrieval is None:
+        return index, RetrievalMode.DENSE, None
+    return retrieval.read, retrieval.mode, retrieval.lexical
 
 
 StreamingWorkspacesDep = Annotated[SqlWorkspaceRepository, Depends(streaming_workspaces)]

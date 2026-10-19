@@ -46,11 +46,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from scholiast.application.ports.repositories import PaperRepository, WorkspaceRepository
+from scholiast.application.ports.repositories import (
+    ChunkRepository,
+    PaperRepository,
+    WorkspaceRepository,
+)
 from scholiast.application.ports.storage import ObjectStore
-from scholiast.application.ports.vector import VectorIndex
+from scholiast.application.ports.vector import LexicalIndex, VectorIndex
 from scholiast.application.use_cases.delete_workspace import DeleteWorkspaceUseCase
 from scholiast.application.use_cases.purge_paper import PaperPurger
+from scholiast.application.use_cases.verify_hybrid_index import VerifyHybridIndexUseCase
 
 #: Everything the object store holds for papers lives under this prefix (D49).
 #: Anything outside it is not this sweep's business, which is what keeps a
@@ -72,6 +77,10 @@ class ReconcileResult:
     papers_purged: int = 0
     vectors_deleted: int = 0
     blobs_deleted: int = 0
+    #: Embedded chunks with no current-version point in the hybrid collection
+    #: (D172). Reported, not repaired: the repair is a re-embed, which is
+    #: `scholiast-reindex --hybrid`'s job, not a sweep's.
+    hybrid_missing: int = 0
 
 
 class ReconcileUseCase:
@@ -84,11 +93,18 @@ class ReconcileUseCase:
         papers: PaperRepository,
         index: VectorIndex,
         store: ObjectStore,
+        chunks: ChunkRepository | None = None,
+        hybrid: LexicalIndex | None = None,
     ) -> None:
         self._workspaces = workspaces
         self._papers = papers
         self._index = index
         self._store = store
+        self._coverage = (
+            VerifyHybridIndexUseCase(chunks=chunks, lexical=hybrid)
+            if chunks is not None and hybrid is not None
+            else None
+        )
         self._purger = PaperPurger(papers=papers, index=index, store=store)
         self._cascade = DeleteWorkspaceUseCase(
             workspaces=workspaces, papers=papers, index=index, store=store
@@ -102,6 +118,8 @@ class ReconcileUseCase:
         live = await self._papers.all_paper_ids()
         vectors = await self._index.delete_orphans(live)
         blobs = await self._delete_orphaned_blobs(live)
+        # Last, after the orphans are gone, so what remains is a real shortfall.
+        missing = len((await self._coverage.execute()).missing) if self._coverage else 0
 
         return ReconcileResult(
             cascades_resumed=resumed,
@@ -111,6 +129,7 @@ class ReconcileUseCase:
             # which internal step removed it.
             vectors_deleted=from_cascades[0] + from_orphans[0] + vectors,
             blobs_deleted=from_cascades[1] + from_orphans[1] + blobs,
+            hybrid_missing=missing,
         )
 
     async def _resume_cascades(self) -> tuple[int, tuple[int, int]]:

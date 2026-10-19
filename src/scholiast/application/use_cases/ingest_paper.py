@@ -71,6 +71,7 @@ from scholiast.domain.chunking import (
     StructureAwareChunker,
 )
 from scholiast.domain.errors import FailureClass, IngestionFailure, InvariantViolation
+from scholiast.domain.lexical import LEXICAL_VERSION, chunk_weights
 from scholiast.domain.paper import Chunk, Paper, PaperOrigin, ParseStatus, Section
 from scholiast.domain.upload import UploadRejected, validate_upload
 from scholiast.domain.workspace import PaperMembership, PaperState
@@ -311,6 +312,10 @@ class IngestPaperUseCase:
                     section_kind=chunk.provenance.section_kind,
                     chunker_version=chunk.chunker_version,
                     embedder_version=self._embedder.version,
+                    # Always computed: a dense-only collection ignores them, and a
+                    # hybrid one stores them with the dense vector (D172).
+                    lexical=chunk_weights(chunk.text),
+                    lexical_version=LEXICAL_VERSION,
                 )
                 for chunk, vector in zip(chunks, vectors, strict=True)
             ]

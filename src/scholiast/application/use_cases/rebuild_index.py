@@ -46,6 +46,7 @@ from scholiast.application.ports.repositories import ChunkRepository, PaperRepos
 from scholiast.application.ports.vector import VectorIndex, VectorRecord
 from scholiast.domain.chunking import embeddable_chunks
 from scholiast.domain.errors import InvariantViolation
+from scholiast.domain.lexical import LEXICAL_VERSION, chunk_weights
 
 #: Bounded for §5.7's reason, not for throughput: small batches let a
 #: high-priority rerank preempt bulk work. A rebuild is bulk work by definition,
@@ -145,6 +146,10 @@ class RebuildIndexUseCase:
                     section_kind=chunk.provenance.section_kind,
                     chunker_version=chunk.chunker_version,
                     embedder_version=self._embedder.version,
+                    # Always computed: a dense-only collection ignores them, and a
+                    # hybrid one stores them with the dense vector (D172).
+                    lexical=chunk_weights(chunk.text),
+                    lexical_version=LEXICAL_VERSION,
                 )
                 for chunk, vector in zip(chunks, vectors, strict=True)
             ]

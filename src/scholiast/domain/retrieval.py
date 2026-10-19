@@ -45,6 +45,19 @@ class RetrievalArm(StrEnum):
 
 
 @unique
+class RetrievalMode(StrEnum):
+    """How production QA retrieves (D167, D172).
+
+    `DENSE` is M1's path, unchanged. `HYBRID` is the dense and lexical arms fused
+    by RRF, which D171's gate permitted. A setting rather than a code change, so
+    rolling back is a restart rather than a revert.
+    """
+
+    DENSE = "dense"
+    HYBRID = "hybrid"
+
+
+@unique
 class QueryIntent(StrEnum):
     """Routing classes (doc 6 §6.8).
 
@@ -317,7 +330,13 @@ class EvidenceSet:
 
     @property
     def top_score(self) -> float | None:
-        """Highest relevance score — the abstention signal (ML-13)."""
+        """Highest score among the chosen chunks.
+
+        A relevance score only when the chunks came from one arm. A fused chunk's
+        score is RRF's sum of 1/(k + rank), which records whether the arms AGREED
+        on its rank (about 0.033 when both rank it first, 0.016 when one does),
+        not how relevant it is - so it is not ML-13's abstention signal (D167).
+        """
         return max((c.score for c in self.chunks), default=None)
 
     @property
@@ -347,7 +366,17 @@ class EvidenceSet:
         `threshold` is fitted on labelled data and reported as a
         precision/recall curve, never hand-tuned until the demo looks good
         (doc 9 §9.6).
+
+        Refuses fused evidence rather than answering from it: a threshold on an
+        RRF score would abstain by how much the arms agreed, which D167 rules out
+        as τ's signal. M5's τ phase chooses the signal; until it does, nothing
+        can be wired to this with hybrid evidence by accident.
         """
+        if any(c.arm is RetrievalArm.FUSED for c in self.chunks):
+            raise InvariantViolation(
+                "abstention cannot read a fused score: RRF measures rank agreement, "
+                "not relevance (D167)"
+            )
         top = self.top_score
         return top is None or top < threshold
 

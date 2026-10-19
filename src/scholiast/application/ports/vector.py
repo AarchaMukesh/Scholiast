@@ -13,7 +13,7 @@ something of its own.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
@@ -73,6 +73,13 @@ class VectorRecord:
     section_kind: SectionKind
     chunker_version: str
     embedder_version: str
+    #: The chunk's BM25 term weights and the version that produced them (D172).
+    #: Production always supplies both; a dense-only collection ignores them, and
+    #: a hybrid one writes them in the same point as the dense vector, so no point
+    #: is ever half-written. None where a caller has no lexical arm (the eval,
+    #: which attaches its weights in a second pass).
+    lexical: Mapping[int, float] | None = None
+    lexical_version: str | None = None
 
 
 @runtime_checkable
@@ -187,10 +194,10 @@ class LexicalIndex(Protocol):
     for "single store, single filter path, single query round-trip" -- so this is
     implemented by the same adapter as `VectorIndex`, against the same collection,
     with the same mandatory paper filter. It is a distinct Protocol rather than
-    extra methods on `VectorIndex` because production's dense-only path must not
-    acquire methods it never calls: FR-Q3's adoption is conditional on the
-    ablation measuring hybrid against dense-only, and until then the lexical arm
-    is an eval configuration rather than the shipped retriever.
+    extra methods on `VectorIndex` because the dense-only path must not acquire
+    methods it never calls: production retrieves dense-only unless
+    `retrieval_mode` says hybrid (D172), and a dense-only collection has no lexical
+    vector to search.
 
     The same tenancy shape applies for the same reason (section 5.8 layer 3, D36):
     `paper_ids` is required and an empty set is an error, never an unfiltered scan.
@@ -210,5 +217,23 @@ class LexicalIndex(Protocol):
         """Best BM25 matches, restricted to `paper_ids`.
 
         Raises `EmptyRetrievalScope` when `paper_ids` is empty.
+        """
+        ...
+
+    async def lexical_chunk_ids(self, *, lexical_version: str) -> set[str]:
+        """Every chunk id whose point carries lexical weights of this version.
+
+        For the completeness check a hybrid read waits on (D172): compared by id
+        against the chunks Postgres records as embedded, so one missing point is
+        found, not averaged away. Read-only, and proportional to the collection,
+        so it runs at startup and in a sweep, never per request.
+        """
+        ...
+
+    async def count_lexical(self, *, lexical_version: str) -> int:
+        """How many points carry lexical weights of this version.
+
+        The cheap half of the same check, for the readiness probe: a count, not
+        an enumeration.
         """
         ...

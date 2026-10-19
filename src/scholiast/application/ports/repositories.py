@@ -336,4 +336,18 @@ class ChunkRepository(Protocol):
         """
         ...
 
+    async def embedded_chunk_ids(self) -> set[str]:
+        """Every reachable chunk stamped as having vectors (D172).
+
+        What a hybrid collection must contain before a hybrid read is allowed:
+        stamping happens only after every collection the chunk is written to has
+        taken it, so each id here should have a point there. Under `SystemContext`
+        it spans every tenant, which is the scope a completeness check needs.
+        """
+        ...
+
+    async def count_embedded(self) -> int:
+        """How many reachable chunks are stamped as embedded: the readiness probe's half."""
+        ...
+
     async def list_for_paper(self, paper_id: str) -> list[Chunk]: ...

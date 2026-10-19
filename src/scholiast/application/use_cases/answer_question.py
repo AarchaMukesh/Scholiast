@@ -47,7 +47,7 @@ from scholiast.application.ports.repositories import (
     PaperRepository,
     WorkspaceRepository,
 )
-from scholiast.application.ports.vector import VectorIndex
+from scholiast.application.ports.vector import LexicalIndex, VectorIndex
 from scholiast.application.prompts import (
     ANSWER_PROMPT_VERSION,
     EvidenceBlock,
@@ -55,19 +55,26 @@ from scholiast.application.prompts import (
 )
 from scholiast.domain.conversation import StageTimings, Turn, TurnRole
 from scholiast.domain.errors import WorkspaceNotAvailable, WorkspaceNotQueryable
+from scholiast.domain.lexical import query_weights, tokenize
 from scholiast.domain.retrieval import (
     Citation,
     EvidenceSet,
     Query,
+    RetrievalMode,
     ScoredChunk,
     audit_citations,
+    reciprocal_rank_fusion,
     strip_labels,
 )
 
-#: Dense candidates fetched before assembly. M2 replaces this with hybrid
-#: retrieval into a ~50-candidate pool for the cross-encoder; 20 is what a
-#: dense-only arm can usefully offer an 8-slot budget.
+#: Dense candidates fetched before assembly in dense mode: what a dense-only arm
+#: can usefully offer an 8-slot budget. Hybrid mode uses `HYBRID_DEPTH` instead.
 DEFAULT_CANDIDATES = 20
+
+#: Per arm, and the fused list's length, in hybrid mode (D172): the depth M2's
+#: arms comparison and D168's gate measured hybrid at, so production retrieves
+#: in the configuration whose numbers it is quoting.
+HYBRID_DEPTH = 50
 
 #: Evidence passages placed in front of the model. Matches M2's post-rerank
 #: budget on purpose, so the ablation compares like with like, and fits §6.9's
@@ -216,7 +223,13 @@ class AnswerQuestionUseCase:
         providers: Sequence[LLMProvider],
         candidates: int = DEFAULT_CANDIDATES,
         evidence_limit: int = DEFAULT_EVIDENCE_LIMIT,
+        mode: RetrievalMode = RetrievalMode.DENSE,
+        lexical: LexicalIndex | None = None,
     ) -> None:
+        if mode is RetrievalMode.HYBRID and lexical is None:
+            # Refused at construction: a hybrid use case without a lexical arm
+            # would answer dense-only while every record called it hybrid.
+            raise ValueError("hybrid retrieval needs a lexical index (D172)")
         self._workspaces = workspaces
         self._papers = papers
         self._chunks = chunks
@@ -226,6 +239,8 @@ class AnswerQuestionUseCase:
         self._providers = tuple(providers)
         self._candidates = candidates
         self._evidence_limit = evidence_limit
+        self._mode = mode
+        self._lexical = lexical
 
     async def stream(
         self, *, workspace_id: str, conversation_id: str, question: str
@@ -375,11 +390,13 @@ class AnswerQuestionUseCase:
     # -- retrieval ---------------------------------------------------------
 
     async def _retrieve(self, workspace_id: str, question: str) -> list[ScoredChunk]:
-        """Dense search over exactly this workspace's indexed papers (D36).
+        """Search exactly this workspace's indexed papers (D36), dense or hybrid.
 
         The id set comes from a tenant-scoped query rather than from the caller,
         so §5.8 layer 3's filter is *derived from* the tenant predicate instead
         of travelling beside it — a caller cannot widen what it never supplied.
+        In hybrid mode BOTH arms take that same set: a lexical arm with a filter
+        of its own would be a second, unaudited route across tenants.
         """
         paper_ids = await self._papers.queryable_paper_ids(workspace_id)
         if not paper_ids:
@@ -390,9 +407,19 @@ class AnswerQuestionUseCase:
         # which is why the original text has a home on it already (FR-Q8).
         query = Query(text=question, workspace_id=workspace_id, paper_ids=paper_ids)
         vectors = await self._embedder.embed([query.text], role=TextRole.QUERY)
-        return await self._index.search(
-            vectors[0], paper_ids=query.paper_ids, limit=self._candidates
+        if self._mode is RetrievalMode.DENSE or self._lexical is None:
+            return await self._index.search(
+                vectors[0], paper_ids=query.paper_ids, limit=self._candidates
+            )
+
+        # D167, as D171's gate measured it: each arm to HYBRID_DEPTH, fused by
+        # rank, cut to HYBRID_DEPTH. A question whose every term tokenises away
+        # gets an empty lexical list, and RRF then simply ranks the dense one.
+        dense = await self._index.search(vectors[0], paper_ids=query.paper_ids, limit=HYBRID_DEPTH)
+        lexical = await self._lexical.search_lexical(
+            query_weights(tokenize(query.text)), paper_ids=query.paper_ids, limit=HYBRID_DEPTH
         )
+        return reciprocal_rank_fusion([dense, lexical], limit=HYBRID_DEPTH)
 
     async def _resolve(self, evidence: EvidenceSet) -> tuple[EvidenceItem, ...]:
         """Turn scored chunk ids into passages a citation can point at.

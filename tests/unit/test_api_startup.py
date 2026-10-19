@@ -17,6 +17,7 @@ import pytest
 from scholiast.api import app as app_module
 from scholiast.api.app import api_lifespan, create_app
 from scholiast.config.settings import Settings
+from scholiast.infrastructure.vector import factory as factory_module
 
 
 class _Encoder:
@@ -49,7 +50,9 @@ def stand_ins(monkeypatch: pytest.MonkeyPatch) -> type[_Encoder]:
     _Encoder.instances = []
     _Encoder.fail_with = None
     monkeypatch.setattr(app_module, "LocalEmbedder", _Encoder)
-    monkeypatch.setattr(app_module, "QdrantVectorIndex", _Index)
+    # The lifespan builds its indexes through the factory (D172), so that is where
+    # the stand-in goes.
+    monkeypatch.setattr(factory_module, "QdrantVectorIndex", _Index)
     return _Encoder
 
 
