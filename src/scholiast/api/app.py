@@ -35,8 +35,12 @@ from scholiast.api.middleware import ObservabilityMiddleware
 from scholiast.api.routers import auth, chat, discovery, health, papers, workspaces
 from scholiast.api.ui import UIFiles
 from scholiast.application.ports.ml import Precision
+from scholiast.application.ports.tenancy import INDEX_CHECK_REASON, SystemContext
+from scholiast.application.ports.vector import LexicalIndex
+from scholiast.application.use_cases.verify_hybrid_index import VerifyHybridIndexUseCase
 from scholiast.config.settings import Settings, get_settings
 from scholiast.infrastructure.db.engine import build_engine, build_session_factory
+from scholiast.infrastructure.db.repositories import SqlChunkRepository
 from scholiast.infrastructure.discovery import tls_context
 from scholiast.infrastructure.discovery.sources import (
     build_discovery_cache,
@@ -51,7 +55,7 @@ from scholiast.infrastructure.security.passwords import Argon2idHasher
 from scholiast.infrastructure.security.ratelimit import FixedWindowLimiter
 from scholiast.infrastructure.security.tokens import JwtTokenService
 from scholiast.infrastructure.storage.local import LocalObjectStore
-from scholiast.infrastructure.vector.qdrant import QdrantVectorIndex
+from scholiast.infrastructure.vector.factory import build_vector_indexes
 
 STATIC_DIR = Path(__file__).parent / "static"
 
@@ -98,12 +102,13 @@ async def api_lifespan(app: FastAPI) -> AsyncIterator[None]:
         precision=Precision(settings.embedding_precision),
         batch_size=settings.embedding_batch_size,
     )
-    index = QdrantVectorIndex(
-        settings.qdrant_url,
-        collection=settings.qdrant_collection,
-        dimensions=settings.embedding_dimensions,
-    )
+    # One construction for every process (D172). `index` is what every writer
+    # uses - mirrored to the hybrid collection when one is set - and `retrieval`
+    # is what QA reads; with the defaults both are today's dense collection.
+    indexes = build_vector_indexes(settings)
+    index = indexes.write
     app.state.index = index
+    app.state.retrieval = indexes
     app.state.providers = build_provider_chain(settings)
     # Build discovery's shared TLS context now, so the first search after a restart
     # does not spend 183 ms of blocked event loop on it (D122).
@@ -112,8 +117,15 @@ async def api_lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Creates the collection and its payload index, or refuses to start if an
     # existing collection was built for a different embedder (D46, and the
     # VectorDimensionMismatch phase 4 added). Failing here beats failing on
-    # every upsert deep inside ingestion, far from the cause.
+    # every upsert deep inside ingestion, far from the cause. A hybrid mirror is
+    # only validated, never created: a missing one stops the boot (D172).
     await index.ensure_ready()
+    if indexes.lexical is not None:
+        # D172: no hybrid read until the hybrid collection holds every embedded
+        # chunk at the current lexical version, checked by id. Refusing to boot
+        # is the VectorDimensionMismatch pattern - a deployment configured to
+        # read an incomplete index is a configuration error, not a degradation.
+        await _require_complete_hybrid(app, indexes.lexical)
 
     # D156: last before `yield`, after the cheap checks above, so uvicorn accepts
     # no connection until the encoder is warm. Loaded on first use, it cost the
@@ -128,6 +140,14 @@ async def api_lifespan(app: FastAPI) -> AsyncIterator[None]:
         await index.close()
         await app.state.discovery_cache.close()
         await engine.dispose()
+
+
+async def _require_complete_hybrid(app: FastAPI, lexical: LexicalIndex) -> None:
+    async with app.state.sessions() as session:
+        await VerifyHybridIndexUseCase(
+            chunks=SqlChunkRepository(session, SystemContext(reason=INDEX_CHECK_REASON)),
+            lexical=lexical,
+        ).require_complete()
 
 
 def create_app(

@@ -44,6 +44,8 @@ PAYLOAD_PAPER_ID = "paper_id"
 PAYLOAD_SECTION_KIND = "section_kind"
 PAYLOAD_CHUNKER_VERSION = "chunker_version"
 PAYLOAD_EMBEDDER_VERSION = "embedder_version"
+#: Written on hybrid points only (D172); a dense-only collection never carries it.
+PAYLOAD_LEXICAL_VERSION = "lexical_version"
 
 #: Named-vector keys, used ONLY when the adapter is constructed with `sparse=True`.
 #: A dense-only collection keeps M1's unnamed vector, so production's schema is
@@ -77,6 +79,17 @@ class CollectionSchemaMismatch(Exception):
         super().__init__(f"collection {collection!r}: " + "; ".join(self.problems))
 
 
+class CollectionNotFound(Exception):
+    """A collection this process reads or mirrors to, but must not create, is absent (D172)."""
+
+    def __init__(self, collection: str) -> None:
+        self.collection = collection
+        super().__init__(
+            f"collection {collection!r} does not exist, and this process does not create "
+            "it: `scholiast-reindex --hybrid` builds it from Postgres (D172)"
+        )
+
+
 class QdrantVectorIndex:
     """The `VectorIndex` adapter."""
 
@@ -95,16 +108,19 @@ class QdrantVectorIndex:
         self._dimensions = dimensions
         # Opt-in, defaulting OFF, and it changes the collection SCHEMA: a sparse
         # collection uses named vectors, a dense-only one uses the unnamed vector
-        # M1 built. Two code paths rather than one conditional, so production's
-        # `scholiast_chunks` keeps the exact shape it already has and adopting the
-        # lexical arm stays a decision the ablation earns (FR-Q3, D73) rather than
-        # a schema migration that happened quietly in phase 3.
+        # M1 built. Two code paths rather than one conditional, so
+        # `scholiast_chunks` keeps the exact shape it already has; production's
+        # hybrid arm reads a separate collection built with this on (D172).
         self._sparse = sparse
         self._connection: AsyncQdrantClient | None = None
 
     @property
     def collection(self) -> str:
         return self._collection
+
+    @property
+    def sparse(self) -> bool:
+        return self._sparse
 
     @property
     def _client(self) -> AsyncQdrantClient:
@@ -257,27 +273,97 @@ class QdrantVectorIndex:
         self._assert_schema(await self._client.get_collection(self._collection))
         return await self.count()
 
+    async def require_existing(self) -> None:
+        """Validate a collection this process must not create. Read-only (D172).
+
+        What the API and worker call for the hybrid collection, in place of
+        `ensure_ready`: only `scholiast-reindex --hybrid` creates it, filled, so a
+        process that found it missing and created it would serve or extend an
+        empty index. Missing is refused, and so is any shape `_assert_schema`
+        refuses.
+        """
+        if not await self._client.collection_exists(self._collection):
+            raise CollectionNotFound(self._collection)
+        self._assert_schema(await self._client.get_collection(self._collection))
+
     async def upsert(self, records: Sequence[VectorRecord]) -> int:
         if not records:
             return 0
         points = [
             models.PointStruct(
                 id=point_id_for(record.chunk_id),
-                vector=(
-                    {DENSE_VECTOR: list(record.vector)} if self._sparse else list(record.vector)
-                ),
-                payload={
-                    PAYLOAD_CHUNK_ID: record.chunk_id,
-                    PAYLOAD_PAPER_ID: record.paper_id,
-                    PAYLOAD_SECTION_KIND: record.section_kind.value,
-                    PAYLOAD_CHUNKER_VERSION: record.chunker_version,
-                    PAYLOAD_EMBEDDER_VERSION: record.embedder_version,
-                },
+                vector=self._point_vector(record),
+                payload=self._payload(record),
             )
             for record in records
         ]
         await self._client.upsert(self._collection, points=points, wait=True)
         return len(points)
+
+    def _point_vector(self, record: VectorRecord) -> models.VectorStruct:
+        if not self._sparse:
+            # A dense-only collection has nowhere to put lexical weights, so they
+            # are ignored and the point is exactly what it was before D172.
+            return list(record.vector)
+        vector: dict[str, models.Vector] = {DENSE_VECTOR: list(record.vector)}
+        if record.lexical:
+            # In the same point as the dense vector, so no point is ever half-written.
+            # An empty weight set (a chunk with no tokens) gets no sparse vector,
+            # which the store would reject; its version is still stamped below.
+            vector[SPARSE_VECTOR] = models.SparseVector(
+                indices=list(record.lexical), values=list(record.lexical.values())
+            )
+        return vector
+
+    def _payload(self, record: VectorRecord) -> dict[str, str]:
+        payload = {
+            PAYLOAD_CHUNK_ID: record.chunk_id,
+            PAYLOAD_PAPER_ID: record.paper_id,
+            PAYLOAD_SECTION_KIND: record.section_kind.value,
+            PAYLOAD_CHUNKER_VERSION: record.chunker_version,
+            PAYLOAD_EMBEDDER_VERSION: record.embedder_version,
+        }
+        if self._sparse and record.lexical_version is not None:
+            # What the completeness check counts (D172): a point whose weights came
+            # from an earlier version is not a current one.
+            payload[PAYLOAD_LEXICAL_VERSION] = record.lexical_version
+        return payload
+
+    async def lexical_chunk_ids(self, *, lexical_version: str) -> set[str]:
+        """Chunk ids of every point stamped with this lexical version. Read-only."""
+        self._require_sparse()
+        found: set[str] = set()
+        offset: models.ExtendedPointId | None = None
+        while True:
+            points, offset = await self._client.scroll(
+                self._collection,
+                scroll_filter=self._lexical_filter(lexical_version),
+                limit=1000,
+                offset=offset,
+                with_payload=[PAYLOAD_CHUNK_ID],
+                with_vectors=False,
+            )
+            found.update(str((p.payload or {}).get(PAYLOAD_CHUNK_ID, "")) for p in points)
+            if offset is None:
+                return found
+
+    async def count_lexical(self, *, lexical_version: str) -> int:
+        """Points stamped with this lexical version: the readiness probe's count."""
+        self._require_sparse()
+        result = await self._client.count(
+            self._collection, count_filter=self._lexical_filter(lexical_version), exact=True
+        )
+        return int(result.count)
+
+    @staticmethod
+    def _lexical_filter(lexical_version: str) -> models.Filter:
+        return models.Filter(
+            must=[
+                models.FieldCondition(
+                    key=PAYLOAD_LEXICAL_VERSION, match=models.MatchValue(value=lexical_version)
+                )
+            ]
+        )
 
     async def search(
         self,
@@ -380,8 +466,8 @@ class QdrantVectorIndex:
         if not self._sparse:
             raise RuntimeError(
                 "this adapter was built dense-only; construct it with sparse=True "
-                "to use the lexical arm. Production is dense-only on purpose (D73) "
-                "— FR-Q3's adoption waits on the phase 5 ablation"
+                "to use the lexical arm. A dense-only collection has no lexical "
+                "vector: production's hybrid arm reads the hybrid collection (D172)"
             )
 
     async def delete_by_papers(self, paper_ids: Sequence[str]) -> int:

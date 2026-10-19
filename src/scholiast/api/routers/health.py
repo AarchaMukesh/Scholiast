@@ -1,9 +1,10 @@
 """The ops surface: liveness, readiness and metrics (FR-O2, FR-O3, D110, D111).
 
-**Readiness reports four things and gates on two**, and the split is what makes
-the degradation ladder possible. FR-O2 asks for "dependency status (DB, vector
-store, queue, model availability)" — it asks for *reporting*, not for requiring —
-and §5.11 says a generation outage degrades to evidence-only rather than failing.
+**Readiness reports four things and gates on two** (one more of each in hybrid
+mode), and the split is what makes the degradation ladder possible. FR-O2 asks
+for "dependency status (DB, vector store, queue, model availability)" — it asks
+for *reporting*, not for requiring — and §5.11 says a generation outage degrades
+to evidence-only rather than failing.
 A readiness probe that went red when Ollama stopped would pull the process out of
 rotation for a condition the system is designed to serve through: the ladder
 could never fire in a load-balanced deployment, because no instance would ever be
@@ -13,6 +14,9 @@ routed to while degraded.
                 truth". Without it there is no auth, no workspace and no queue.
   Qdrant        **required.** Losing it loses retrieval entirely — both arms live
                 there (D105) — so an instance without it cannot answer.
+  hybrid index  **required in hybrid mode, absent otherwise** (D172). Fewer
+                current-version hybrid points than embedded chunks means the
+                collection QA reads has holes; refreshed at most once a minute.
   the queue     **covered by the Postgres check**, because under D95 Postgres IS
                 the queue. Redis is the transport, and a broker outage costs
                 latency rather than work: the lease makes an unclaimed job
@@ -32,6 +36,7 @@ unhealthy dependency tells an anonymous caller something about the deployment;
 
 from __future__ import annotations
 
+import time
 from hmac import compare_digest
 from http import HTTPStatus
 from typing import Any
@@ -40,11 +45,19 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import text
 
+from scholiast.application.ports.tenancy import INDEX_CHECK_REASON, SystemContext
+from scholiast.application.use_cases.verify_hybrid_index import VerifyHybridIndexUseCase
+from scholiast.infrastructure.db.repositories import SqlChunkRepository
 from scholiast.infrastructure.observability import metrics
 
 log = structlog.get_logger(__name__)
 
 router = APIRouter(tags=["health"])
+
+#: How long a hybrid-coverage answer is reused (D172). The check is two counts,
+#: one per store, and a probe runs every few seconds forever; a shortfall that
+#: takes a minute to surface is still caught long before anyone else notices it.
+HYBRID_PROBE_SECONDS = 60.0
 
 
 def require_scrape_token(request: Request) -> None:
@@ -98,6 +111,11 @@ async def ready(request: Request, response: Response) -> dict[str, Any]:
         "postgres": await _postgres(request),
         "qdrant": await _qdrant(request),
     }
+    # Only in hybrid mode, and there it is required: an instance reading an
+    # incomplete hybrid collection answers from a corpus with holes in it (D172).
+    hybrid = await _hybrid_index(request)
+    if hybrid is not None:
+        checks["hybrid_index"] = hybrid
     # `not_configured` is not a failure. A composition root that wired no index
     # — the auth-only and isolation lifespans do exactly that — is not an
     # unhealthy deployment, and gating on it would make those apps permanently
@@ -153,6 +171,37 @@ async def _qdrant(request: Request) -> str:
         # reporting it as such would make those apps permanently not-ready.
         return "not_configured"
     return "ok" if await index.ping() else "unavailable"
+
+
+async def _hybrid_index(request: Request) -> str | None:
+    """Whether the hybrid collection falls short of the embedded chunks; None in dense mode.
+
+    The cheap form of the startup check: fewer current-version points than
+    embedded rows means some writer is not mirroring, or a reindex is unfinished.
+    Cached for `HYBRID_PROBE_SECONDS`, failures included, so a struggling store
+    is not asked twice as often.
+    """
+    retrieval = getattr(request.app.state, "retrieval", None)
+    lexical = getattr(retrieval, "lexical", None)
+    if lexical is None:
+        return None
+    cached: tuple[float, str] | None = getattr(request.app.state, "hybrid_probe", None)
+    now = time.monotonic()
+    if cached is not None and now - cached[0] < HYBRID_PROBE_SECONDS:
+        return cached[1]
+    try:
+        async with request.app.state.sessions() as session:
+            short = await VerifyHybridIndexUseCase(
+                chunks=SqlChunkRepository(session, SystemContext(reason=INDEX_CHECK_REASON)),
+                lexical=lexical,
+            ).falls_short()
+        status = "incomplete" if short else "ok"
+    except Exception:
+        # Broad for `_qdrant`'s reason: to a probe, every way of not knowing is
+        # the same answer, and a probe that raised would say less.
+        status = "unavailable"
+    request.app.state.hybrid_probe = (now, status)
+    return status
 
 
 def _providers(request: Request) -> dict[str, str]:

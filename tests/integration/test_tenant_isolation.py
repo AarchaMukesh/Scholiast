@@ -35,6 +35,7 @@ from testcontainers.community.postgres import PostgresContainer
 
 from scholiast.application.ports.queue import JobPriority
 from scholiast.application.ports.tenancy import (
+    INDEX_CHECK_REASON,
     SWEEPER_REASON,
     WORKER_CLAIM_REASON,
     SystemContext,
@@ -756,6 +757,43 @@ class TestQueueIsolation:
 
         system = PostgresQueue(session, SystemContext(WORKER_CLAIM_REASON))
         assert await system.complete(job_id) is True
+
+
+class TestTheEmbeddedChunksAHybridReadNeeds:
+    """What the hybrid completeness check compares against (D172).
+
+    Only chunks stamped as embedded count: a chunk row without a vector is not one
+    the hybrid collection must hold, and a parent window is never embedded at all.
+    """
+
+    async def test_only_stamped_chunks_count_and_only_across_tenants_under_the_system_scope(
+        self, session: AsyncSession, world: World
+    ) -> None:
+        check = SqlChunkRepository(session, SystemContext(reason=INDEX_CHECK_REASON))
+        # Nothing is stamped yet: the world's chunks were written, never embedded.
+        assert await check.embedded_chunk_ids() == set()
+        assert await check.count_embedded() == 0
+
+        await SqlChunkRepository(session, world.alice.scope).stamp_embedded(
+            [world.alice.chunk_id, world.public_chunk_id], "test/fp16/1.0.0"
+        )
+        await session.flush()
+
+        # Every tenant's stamped chunks, and nothing unstamped (Bob's) or a parent.
+        assert await check.embedded_chunk_ids() == {world.alice.chunk_id, world.public_chunk_id}
+        assert await check.count_embedded() == 2
+
+    async def test_a_tenant_scope_sees_only_its_own_embedded_chunks(
+        self, session: AsyncSession, world: World
+    ) -> None:
+        await SqlChunkRepository(session, world.alice.scope).stamp_embedded(
+            [world.alice.chunk_id, world.public_chunk_id], "test/fp16/1.0.0"
+        )
+        await session.flush()
+
+        bob = SqlChunkRepository(session, world.bob.scope)
+        assert await bob.embedded_chunk_ids() == {world.public_chunk_id}
+        assert await bob.count_embedded() == 1
 
 
 class TestSystemScope:

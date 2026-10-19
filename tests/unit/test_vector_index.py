@@ -16,11 +16,18 @@ from typing import Any
 import pytest
 from qdrant_client import models
 
-from scholiast.application.ports.vector import EmptyRetrievalScope, VectorDimensionMismatch
+from scholiast.application.ports.vector import (
+    EmptyRetrievalScope,
+    VectorDimensionMismatch,
+    VectorRecord,
+)
+from scholiast.domain.paper import SectionKind
 from scholiast.infrastructure.vector.qdrant import (
     DENSE_VECTOR,
+    PAYLOAD_LEXICAL_VERSION,
     POINT_NAMESPACE,
     SPARSE_VECTOR,
+    CollectionNotFound,
     CollectionSchemaMismatch,
     QdrantVectorIndex,
     point_id_for,
@@ -250,3 +257,145 @@ class TestCheckingACollectionWithoutCreatingIt:
         with pytest.raises(VectorDimensionMismatch):
             await _index_over(client, sparse=sparse).existing_count()
         assert client.reads == ["collection_exists", "get_collection"]
+
+
+class TestRequiringACollectionThisProcessMustNotCreate:
+    """`require_existing`: how the API and worker treat the hybrid collection (D172).
+
+    Only `scholiast-reindex --hybrid` creates it, filled. The stand-in client fails
+    on any method but its reads, so a path that would create the collection or its
+    payload index fails here rather than passing quietly.
+    """
+
+    async def test_a_missing_collection_stops_the_caller_and_is_not_created(self) -> None:
+        client = ReadOnlyClient(exists=False)
+
+        with pytest.raises(CollectionNotFound, match="scholiast-reindex --hybrid"):
+            await _index_over(client, sparse=True).require_existing()
+        assert client.reads == ["collection_exists"]
+
+    async def test_a_complete_hybrid_schema_passes_on_reads_alone(self) -> None:
+        client = ReadOnlyClient(exists=True, params=HYBRID)
+
+        await _index_over(client, sparse=True).require_existing()
+        assert client.reads == ["collection_exists", "get_collection"]
+
+    async def test_a_hybrid_collection_without_its_lexical_vector_is_refused(self) -> None:
+        client = ReadOnlyClient(exists=True, params={"vectors": {DENSE_VECTOR: _dense()}})
+
+        with pytest.raises(CollectionSchemaMismatch, match="no 'lexical' sparse vector"):
+            await _index_over(client, sparse=True).require_existing()
+
+
+def _record(
+    lexical: dict[int, float] | None, version: str | None = "bm25-identifier/1.1.0"
+) -> VectorRecord:
+    return VectorRecord(
+        chunk_id="paper:p0:c0",
+        paper_id="paper",
+        vector=(0.1, 0.2),
+        section_kind=SectionKind.METHOD,
+        chunker_version="structure-aware/1.2.0",
+        embedder_version="test/fp16/1.0.0",
+        lexical=lexical,
+        lexical_version=version,
+    )
+
+
+class WritingClient:
+    """Records what `upsert` sends, and answers the coverage reads it is asked."""
+
+    def __init__(self, *, pages: list[list[str]] | None = None, counted: int = 0) -> None:
+        self.points: list[models.PointStruct] = []
+        self.filters: list[object] = []
+        self._pages = pages or []
+        self._counted = counted
+
+    async def upsert(
+        self, collection: str, *, points: list[models.PointStruct], wait: bool
+    ) -> None:
+        self.points.extend(points)
+
+    async def scroll(self, collection: str, **kwargs: Any) -> tuple[list[object], object]:
+        self.filters.append(kwargs["scroll_filter"])
+        assert kwargs["with_vectors"] is False, "the completeness check needs ids, not vectors"
+        page = kwargs["offset"] or 0
+        ids = self._pages[page] if page < len(self._pages) else []
+        points = [SimpleNamespace(payload={"chunk_id": chunk_id}) for chunk_id in ids]
+        return points, (page + 1 if page + 1 < len(self._pages) else None)
+
+    async def count(self, collection: str, **kwargs: Any) -> object:
+        self.filters.append(kwargs["count_filter"])
+        return SimpleNamespace(count=self._counted)
+
+
+def _writing(client: WritingClient, *, sparse: bool) -> QdrantVectorIndex:
+    index = QdrantVectorIndex("http://qdrant.invalid:6333", collection="c", sparse=sparse)
+    index._connection = client  # type: ignore[assignment]
+    return index
+
+
+class TestAHybridPointIsWrittenWhole:
+    """D172: the dense and lexical vectors of one chunk travel in one point."""
+
+    async def test_a_hybrid_point_carries_both_vectors_and_its_lexical_version(self) -> None:
+        client = WritingClient()
+        await _writing(client, sparse=True).upsert([_record({11: 0.5, 7: 1.25})])
+
+        (point,) = client.points
+        assert isinstance(point.vector, dict)
+        assert point.vector[DENSE_VECTOR] == [0.1, 0.2]
+        lexical = point.vector[SPARSE_VECTOR]
+        assert isinstance(lexical, models.SparseVector)
+        assert dict(zip(lexical.indices, lexical.values, strict=True)) == {11: 0.5, 7: 1.25}
+        assert point.payload is not None
+        assert point.payload[PAYLOAD_LEXICAL_VERSION] == "bm25-identifier/1.1.0"
+
+    async def test_a_dense_only_point_is_exactly_what_it_was_before(self) -> None:
+        # Phase A changes nothing in scholiast_chunks: lexical weights handed to a
+        # dense-only collection are ignored, payload and all.
+        with_weights, without = WritingClient(), WritingClient()
+        await _writing(with_weights, sparse=False).upsert([_record({11: 0.5})])
+        await _writing(without, sparse=False).upsert([_record(None, None)])
+
+        assert with_weights.points == without.points
+        (point,) = with_weights.points
+        assert point.vector == [0.1, 0.2]
+        assert point.payload is not None and PAYLOAD_LEXICAL_VERSION not in point.payload
+
+    async def test_a_chunk_with_no_terms_is_stamped_without_an_empty_sparse_vector(self) -> None:
+        # The store rejects an empty sparse vector; the point is still current, so
+        # the completeness check must still find it by version.
+        client = WritingClient()
+        await _writing(client, sparse=True).upsert([_record({})])
+
+        (point,) = client.points
+        assert isinstance(point.vector, dict) and SPARSE_VECTOR not in point.vector
+        assert point.payload is not None
+        assert point.payload[PAYLOAD_LEXICAL_VERSION] == "bm25-identifier/1.1.0"
+
+
+class TestCoverageIsReadByVersion:
+    async def test_chunk_ids_are_collected_across_every_page_for_one_version(self) -> None:
+        client = WritingClient(pages=[["a", "b"], ["c"]])
+        ids = await _writing(client, sparse=True).lexical_chunk_ids(lexical_version="v2")
+
+        assert ids == {"a", "b", "c"}
+        for used in client.filters:
+            assert isinstance(used, models.Filter) and used.must is not None
+            (condition,) = used.must  # type: ignore[misc]
+            assert condition.key == PAYLOAD_LEXICAL_VERSION
+            assert condition.match.value == "v2"
+
+    async def test_the_count_is_filtered_to_the_version_too(self) -> None:
+        client = WritingClient(counted=42)
+        assert await _writing(client, sparse=True).count_lexical(lexical_version="v2") == 42
+        (used,) = client.filters
+        assert isinstance(used, models.Filter) and used.must is not None
+
+    async def test_a_dense_only_adapter_has_no_lexical_coverage_to_report(self) -> None:
+        index = _writing(WritingClient(), sparse=False)
+        with pytest.raises(RuntimeError, match="dense-only"):
+            await index.lexical_chunk_ids(lexical_version="v2")
+        with pytest.raises(RuntimeError, match="dense-only"):
+            await index.count_lexical(lexical_version="v2")

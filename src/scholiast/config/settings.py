@@ -13,8 +13,9 @@ from __future__ import annotations
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal
 
-from pydantic import Field, PostgresDsn, field_validator
+from pydantic import Field, PostgresDsn, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -40,6 +41,16 @@ class Settings(BaseSettings):
     #: is the dimension expected to grow, and per-tenant indexes are the classic
     #: multi-tenancy scaling trap.
     qdrant_collection: str = "scholiast_chunks"
+    #: The hybrid collection (dense + lexical, D172). Unset, nothing names a second
+    #: collection and every process behaves exactly as before. Set, every write
+    #: also goes to it - but no API or worker ever creates it: only
+    #: `scholiast-reindex --hybrid` does, filled, and a missing one stops startup.
+    qdrant_hybrid_collection: str | None = None
+    #: How QA retrieves (D167, D172). `dense` is today's path; `hybrid` reads the
+    #: hybrid collection, and only once it holds every embedded chunk. Switching
+    #: back is this setting and a restart, because the dense collection is kept
+    #: current by the same mirrored writes.
+    retrieval_mode: Literal["dense", "hybrid"] = "dense"
     redis_url: str = "redis://localhost:6379/0"
     grobid_url: str = "http://localhost:8070"
 
@@ -222,6 +233,22 @@ class Settings(BaseSettings):
         if value not in ("fp16", "fp32"):
             raise ValueError(f"embedding_precision must be fp16 or fp32, got {value!r}")
         return value
+
+    @model_validator(mode="after")
+    def _retrieval_is_coherent(self) -> Settings:
+        """Refuse the two configurations that would read or write the wrong thing (D172)."""
+        if self.retrieval_mode == "hybrid" and not self.qdrant_hybrid_collection:
+            raise ValueError(
+                "retrieval_mode is hybrid but qdrant_hybrid_collection is not set: "
+                "there is no collection to read the lexical arm from"
+            )
+        if self.qdrant_hybrid_collection == self.qdrant_collection:
+            raise ValueError(
+                f"qdrant_hybrid_collection and qdrant_collection are both "
+                f"{self.qdrant_collection!r}: one collection cannot be both the dense "
+                "one and its hybrid mirror"
+            )
+        return self
 
     @property
     def alembic_url(self) -> str:

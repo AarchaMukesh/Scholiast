@@ -13,6 +13,14 @@ same code the ordinary case runs.
 
     uv run scholiast-reindex            # rebuild the configured collection
     uv run scholiast-reindex --dry-run  # report the work without doing it
+    uv run scholiast-reindex --hybrid   # build or rebuild the hybrid collection (D172)
+    uv run scholiast-reindex --verify   # is the hybrid collection complete? read-only
+
+**`--hybrid` is the only thing that creates the hybrid collection** (D172). The
+API and the workers validate it and refuse to start without it, so it never
+exists empty: it is created here and filled from Postgres in the same run, dense
+and lexical vectors in each point. Run against an existing one it converges, as
+the plain rebuild does, which is how it catches up after the migration's gap.
 
 **The embedder is built ungated, and that is not a default — it is a
 requirement** (D74, D101). A gated embedder re-batches, which perturbs fp16
@@ -35,13 +43,22 @@ import asyncio
 import sys
 
 from scholiast.application.ports.ml import Precision
-from scholiast.application.ports.tenancy import REBUILD_REASON, SystemContext
+from scholiast.application.ports.tenancy import (
+    INDEX_CHECK_REASON,
+    REBUILD_REASON,
+    SystemContext,
+)
 from scholiast.application.use_cases.rebuild_index import RebuildIndexUseCase, RebuildResult
+from scholiast.application.use_cases.verify_hybrid_index import (
+    HybridCoverage,
+    VerifyHybridIndexUseCase,
+)
 from scholiast.config.settings import Settings, get_settings
 from scholiast.domain.chunking import embeddable_chunks
 from scholiast.infrastructure.db.engine import build_engine, build_session_factory
 from scholiast.infrastructure.db.repositories import SqlChunkRepository, SqlPaperRepository
 from scholiast.infrastructure.ml.embedder import LocalEmbedder
+from scholiast.infrastructure.vector.factory import build_vector_indexes
 from scholiast.infrastructure.vector.qdrant import QdrantVectorIndex
 
 
@@ -50,12 +67,40 @@ def _parser() -> argparse.ArgumentParser:
         prog="scholiast-reindex",
         description="Rebuild the vector index from Postgres (NFR-R6).",
     )
-    parser.add_argument(
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
         "--dry-run",
         action="store_true",
         help="report how many papers and chunks would be re-embedded, and change nothing",
     )
+    mode.add_argument(
+        "--hybrid",
+        action="store_true",
+        help=(
+            "build the hybrid collection named by qdrant_hybrid_collection: create it if "
+            "absent and write dense and lexical vectors from Postgres (D172)"
+        ),
+    )
+    mode.add_argument(
+        "--verify",
+        action="store_true",
+        help=(
+            "check, read-only, that the hybrid collection holds every embedded chunk at "
+            "the current lexical version; exit 1 if it does not"
+        ),
+    )
     return parser
+
+
+def _hybrid_index(settings: Settings) -> QdrantVectorIndex:
+    """The hybrid collection's adapter, built as every other process builds it."""
+    hybrid = build_vector_indexes(settings).hybrid
+    if hybrid is None:
+        raise SystemExit(
+            "qdrant_hybrid_collection is not set: there is no hybrid collection to build "
+            "or check (D172)"
+        )
+    return hybrid
 
 
 async def _dry_run(settings: Settings) -> str:
@@ -77,13 +122,11 @@ async def _dry_run(settings: Settings) -> str:
     return f"would re-embed {total} chunks across {len(paper_ids)} papers"
 
 
-async def _rebuild(settings: Settings) -> RebuildResult:
+async def _rebuild(settings: Settings, *, hybrid: bool = False) -> RebuildResult:
+    # Exactly one collection per run: the dense one, or with --hybrid the hybrid
+    # one, whose `ensure_ready` is the only place it is ever created (D172).
+    index = _hybrid_index(settings) if hybrid else build_vector_indexes(settings).primary
     engine = build_engine(settings)
-    index = QdrantVectorIndex(
-        settings.qdrant_url,
-        collection=settings.qdrant_collection,
-        dimensions=settings.embedding_dimensions,
-    )
     scope = SystemContext(reason=REBUILD_REASON)
     try:
         await index.ensure_ready()
@@ -112,6 +155,22 @@ async def _rebuild(settings: Settings) -> RebuildResult:
     return result
 
 
+async def _verify(settings: Settings) -> HybridCoverage:
+    """The id-level completeness check, read-only: what a hybrid read waits on."""
+    index = _hybrid_index(settings)
+    engine = build_engine(settings)
+    try:
+        await index.require_existing()
+        async with build_session_factory(engine)() as session:
+            return await VerifyHybridIndexUseCase(
+                chunks=SqlChunkRepository(session, SystemContext(reason=INDEX_CHECK_REASON)),
+                lexical=index,
+            ).execute()
+    finally:
+        await index.close()
+        await engine.dispose()
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     settings = get_settings()
@@ -120,7 +179,18 @@ def main(argv: list[str] | None = None) -> int:
         print(asyncio.run(_dry_run(settings)))
         return 0
 
-    result = asyncio.run(_rebuild(settings))
+    if args.verify:
+        coverage = asyncio.run(_verify(settings))
+        print(
+            f"{coverage.present} of {coverage.expected} embedded chunks have a point at "
+            f"lexical version {coverage.lexical_version}; {len(coverage.missing)} missing, "
+            f"{coverage.unaccounted} points no embedded chunk accounts for"
+        )
+        for chunk_id in coverage.missing[:20]:
+            print(f"  missing {chunk_id}")
+        return 0 if coverage.complete else 1
+
+    result = asyncio.run(_rebuild(settings, hybrid=args.hybrid))
     print(
         f"rebuilt {result.vectors_upserted} vectors "
         f"from {result.chunks_embedded} chunks across {result.papers} papers"

@@ -69,6 +69,8 @@ from scholiast.infrastructure.queue.celery_app import (
     build_celery_app,
 )
 from scholiast.infrastructure.storage.local import LocalObjectStore
+from scholiast.infrastructure.vector.factory import build_vector_indexes
+from scholiast.infrastructure.vector.mirrored import MirroredVectorIndex
 from scholiast.infrastructure.vector.qdrant import QdrantVectorIndex
 from scholiast.workers.ingestion import IngestionWorker, WorkerConfig
 from scholiast.workers.maintenance import MaintenanceWorker
@@ -100,13 +102,16 @@ class _ProcessContext:
     #: Held here as well as inside the worker because the process has to make it
     #: ready before the first claim, and reaching into the worker's private
     #: attribute to do that would make this module depend on its internals.
-    index: QdrantVectorIndex
+    #: The write index: mirrored to the hybrid collection when one is set (D172).
+    index: QdrantVectorIndex | MirroredVectorIndex
 
 
 _context: _ProcessContext | None = None
 
 
-def _build(settings: Settings) -> tuple[IngestionWorker, MaintenanceWorker, QdrantVectorIndex]:
+def _build(
+    settings: Settings,
+) -> tuple[IngestionWorker, MaintenanceWorker, QdrantVectorIndex | MirroredVectorIndex]:
     """Construct the pipeline exactly as `scholiast.main` does in-process.
 
     Duplicated deliberately rather than shared with the composition root: that
@@ -117,11 +122,10 @@ def _build(settings: Settings) -> tuple[IngestionWorker, MaintenanceWorker, Qdra
     engine = build_engine(settings)
     sessions = build_session_factory(engine)
     store = LocalObjectStore(settings.object_store_path)
-    index = QdrantVectorIndex(
-        settings.qdrant_url,
-        collection=settings.qdrant_collection,
-        dimensions=settings.embedding_dimensions,
-    )
+    # The same construction as the API's (D172): with a hybrid collection set,
+    # every write this process makes reaches both collections.
+    indexes = build_vector_indexes(settings)
+    index = indexes.write
     worker = IngestionWorker(
         sessions=sessions,
         store=store,
@@ -143,7 +147,9 @@ def _build(settings: Settings) -> tuple[IngestionWorker, MaintenanceWorker, Qdra
         # Once per process, with the worker, so its pacing spans every job (D134).
         fetcher=build_pdf_fetcher(settings),
     )
-    maintenance = MaintenanceWorker(sessions=sessions, index=index, store=store)
+    maintenance = MaintenanceWorker(
+        sessions=sessions, index=index, store=store, hybrid=indexes.hybrid
+    )
     return worker, maintenance, index
 
 

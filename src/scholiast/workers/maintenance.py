@@ -39,13 +39,17 @@ from scholiast.application.ports.tenancy import (
     SWEEPER_REASON,
     SystemContext,
 )
-from scholiast.application.ports.vector import VectorIndex
+from scholiast.application.ports.vector import LexicalIndex, VectorIndex
 from scholiast.application.use_cases.delete_workspace import (
     DeleteWorkspaceResult,
     DeleteWorkspaceUseCase,
 )
 from scholiast.application.use_cases.reconcile import ReconcileResult, ReconcileUseCase
-from scholiast.infrastructure.db.repositories import SqlPaperRepository, SqlWorkspaceRepository
+from scholiast.infrastructure.db.repositories import (
+    SqlChunkRepository,
+    SqlPaperRepository,
+    SqlWorkspaceRepository,
+)
 
 log = structlog.get_logger(__name__)
 
@@ -61,10 +65,14 @@ class MaintenanceWorker:
         sessions: SessionFactory,
         index: VectorIndex,
         store: ObjectStore,
+        hybrid: LexicalIndex | None = None,
     ) -> None:
         self._sessions = sessions
         self._index = index
         self._store = store
+        #: The hybrid collection, when one is configured: the sweep reports its
+        #: shortfall against Postgres (D172).
+        self._hybrid = hybrid
 
     async def delete_workspace(self, workspace_id: str) -> DeleteWorkspaceResult:
         """Run one workspace's cascade (§5.6.4 step 2)."""
@@ -110,6 +118,8 @@ class MaintenanceWorker:
                 papers=SqlPaperRepository(session, scope),
                 index=self._index,
                 store=self._store,
+                chunks=SqlChunkRepository(session, scope),
+                hybrid=self._hybrid,
             )
             result = await use_case.execute()
             await session.commit()
@@ -119,6 +129,7 @@ class MaintenanceWorker:
             or result.papers_purged
             or result.vectors_deleted
             or result.blobs_deleted
+            or result.hybrid_missing
         )
         # Distinct event names, not one event with a level: "the sweep found
         # residue" is the thing worth alerting on, and it has to be greppable
@@ -130,5 +141,6 @@ class MaintenanceWorker:
             papers_purged=result.papers_purged,
             vectors_deleted=result.vectors_deleted,
             blobs_deleted=result.blobs_deleted,
+            hybrid_missing=result.hybrid_missing,
         )
         return result
