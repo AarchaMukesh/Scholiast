@@ -68,7 +68,7 @@ negative.** Do not re-argue any of these — they cost a phase each:
 
 ## Read this first
 
-**`docs/00-decisions-log.md` is the source of truth.** D1–D174, and several *reverse*
+**`docs/00-decisions-log.md` is the source of truth.** D1–D176, and several *reverse*
 what the earlier design docs say — including two that reverse *other decisions*.
 Reading doc 5, 6 or 7 without the log will lead you to recommend things already
 measured against:
@@ -106,7 +106,7 @@ measurements against a specific commit, so it belongs in history with it.
 
 | File | What it holds |
 |---|---|
-| `docs/00-decisions-log.md` | D1–D174 + measured hardware baseline. **Start here.** |
+| `docs/00-decisions-log.md` | D1–D176 + measured hardware baseline. **Start here.** |
 | `docs/milestone-logs/M4-MILESTONE-LOG.md` | M4's close-out: 6/7 criteria as written and **1 not met (NFR-P1 cold) with its cause measured**, its defects and what found them, 305 mutations, debt to M5/M6 |
 | `SPIKE-FINDINGS-M4.md` · `spike/m4-protocol.json` | M4's live-source spike and its pre-registered addenda A1–A5 and A6-multiday, with their results under `spike/results/`. The spike findings write up the spike, A1 and A2; A3 and A4 are reported in the M4 log, A5 and A6-multiday in its §3 addendum (D163, D169) |
 | `docs/milestone-logs/M3-MILESTONE-LOG.md` | M3's close-out: 7/8 criteria as written and 1 amended with cause, 15 defects and what found them, 96 mutations, debt to M4/M6 |
