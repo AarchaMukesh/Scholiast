@@ -195,9 +195,9 @@ class LexicalIndex(Protocol):
     implemented by the same adapter as `VectorIndex`, against the same collection,
     with the same mandatory paper filter. It is a distinct Protocol rather than
     extra methods on `VectorIndex` because the dense-only path must not acquire
-    methods it never calls: production retrieves dense-only unless
-    `retrieval_mode` says hybrid (D172), and a dense-only collection has no lexical
-    vector to search.
+    methods it never calls: dense mode - the rollback since hybrid became the
+    default (D174) - reads a dense-only collection, which has no lexical vector
+    to search.
 
     The same tenancy shape applies for the same reason (section 5.8 layer 3, D36):
     `paper_ids` is required and an empty set is an error, never an unfiltered scan.

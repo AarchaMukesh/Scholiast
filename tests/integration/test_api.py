@@ -169,7 +169,10 @@ async def api(postgres: str, tmp_path: Path) -> AsyncIterator[Harness]:
             ):
                 await connection.execute(text(f"DELETE FROM {table}"))  # noqa: S608 - fixed list
         await engine.dispose()
-        await app.state.index._client.delete_collection(collection)
+        # The default deployment mirrors (D174): the hybrid collection this boot
+        # created for its empty corpus goes too.
+        for store in (app.state.index.primary, app.state.index.mirror):
+            await store._client.delete_collection(store.collection)
 
 
 async def drain(app: FastAPI, limit: int = 6) -> int:

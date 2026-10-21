@@ -103,9 +103,9 @@ async def api_lifespan(app: FastAPI) -> AsyncIterator[None]:
         batch_size=settings.embedding_batch_size,
     )
     # One construction for every process (D172). `index` is what every writer
-    # uses - mirrored to the hybrid collection when one is set - and `retrieval`
-    # is what QA reads; with the defaults both are today's dense collection.
-    indexes = build_vector_indexes(settings)
+    # uses - mirrored to the hybrid collection - and `retrieval` is what QA
+    # reads: the hybrid collection by default (D174), the dense one in dense mode.
+    indexes = build_vector_indexes(settings, embedded_chunks=lambda: _count_embedded(app))
     index = indexes.write
     app.state.index = index
     app.state.retrieval = indexes
@@ -117,8 +117,9 @@ async def api_lifespan(app: FastAPI) -> AsyncIterator[None]:
     # Creates the collection and its payload index, or refuses to start if an
     # existing collection was built for a different embedder (D46, and the
     # VectorDimensionMismatch phase 4 added). Failing here beats failing on
-    # every upsert deep inside ingestion, far from the cause. A hybrid mirror is
-    # only validated, never created: a missing one stops the boot (D172).
+    # every upsert deep inside ingestion, far from the cause. A missing hybrid
+    # mirror is created only while Postgres records no embedded chunk, when an
+    # empty collection is a complete one; otherwise it stops the boot (D174).
     await index.ensure_ready()
     if indexes.lexical is not None:
         # D172: no hybrid read until the hybrid collection holds every embedded
@@ -140,6 +141,13 @@ async def api_lifespan(app: FastAPI) -> AsyncIterator[None]:
         await index.close()
         await app.state.discovery_cache.close()
         await engine.dispose()
+
+
+async def _count_embedded(app: FastAPI) -> int:
+    async with app.state.sessions() as session:
+        return await SqlChunkRepository(
+            session, SystemContext(reason=INDEX_CHECK_REASON)
+        ).count_embedded()
 
 
 async def _require_complete_hybrid(app: FastAPI, lexical: LexicalIndex) -> None:

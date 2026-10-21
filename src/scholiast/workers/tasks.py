@@ -54,10 +54,13 @@ from dataclasses import dataclass
 from typing import Any
 
 import structlog
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from scholiast.application.ports.ml import Precision
+from scholiast.application.ports.tenancy import INDEX_CHECK_REASON, SystemContext
 from scholiast.config.settings import Settings, get_settings
 from scholiast.infrastructure.db.engine import build_engine, build_session_factory
+from scholiast.infrastructure.db.repositories import SqlChunkRepository
 from scholiast.infrastructure.fetch import build_pdf_fetcher
 from scholiast.infrastructure.ml.embedder import LocalEmbedder
 from scholiast.infrastructure.observability.logging import configure_logging
@@ -123,8 +126,9 @@ def _build(
     sessions = build_session_factory(engine)
     store = LocalObjectStore(settings.object_store_path)
     # The same construction as the API's (D172): with a hybrid collection set,
-    # every write this process makes reaches both collections.
-    indexes = build_vector_indexes(settings)
+    # every write this process makes reaches both collections, and a missing one
+    # is created only while nothing is embedded (D174).
+    indexes = build_vector_indexes(settings, embedded_chunks=lambda: _count_embedded(sessions))
     index = indexes.write
     worker = IngestionWorker(
         sessions=sessions,
@@ -151,6 +155,13 @@ def _build(
         sessions=sessions, index=index, store=store, hybrid=indexes.hybrid
     )
     return worker, maintenance, index
+
+
+async def _count_embedded(sessions: async_sessionmaker[AsyncSession]) -> int:
+    async with sessions() as session:
+        return await SqlChunkRepository(
+            session, SystemContext(reason=INDEX_CHECK_REASON)
+        ).count_embedded()
 
 
 def _process_context() -> _ProcessContext:

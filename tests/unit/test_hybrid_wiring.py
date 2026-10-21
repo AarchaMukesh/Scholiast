@@ -1,11 +1,12 @@
-"""How production's processes are wired for the hybrid collection (D172).
+"""How production's processes are wired for the hybrid collection (D172, D174).
 
-Phase A's promise is that merging it changes nothing: with today's settings every
-process builds exactly the dense collection it built before. Its guards are that
-no API or worker ever creates the hybrid collection, that a hybrid read is refused
-until that collection is complete, that every write reaches both collections once
-one is configured, and that readiness notices a writer that does not mirror. Each
-is tested here at the place it is wired, with stand-ins for Qdrant and the model.
+Since D174 the default deployment mirrors every write to a hybrid collection and
+QA reads it; dense mode is the rollback, and a deployment with no hybrid
+collection at all is still possible. The guards: an API or worker creates a
+missing hybrid collection only while nothing is embedded, a hybrid read is
+refused until that collection is complete, every write reaches both
+collections, and readiness notices a writer that does not mirror. Each is tested
+here at the place it is wired, with stand-ins for Qdrant and the model.
 """
 
 from __future__ import annotations
@@ -39,6 +40,8 @@ from scholiast.workers.maintenance import MaintenanceWorker
 from tests.unit.test_observability import ops_client
 
 HYBRID = "scholiast_chunks_hybrid"
+#: A deployment from before D172: one dense collection, read and written.
+DENSE_ONLY: dict[str, Any] = {"retrieval_mode": "dense", "qdrant_hybrid_collection": None}
 
 
 def settings(**overrides: Any) -> Settings:
@@ -51,16 +54,41 @@ def settings(**overrides: Any) -> Settings:
 # --- settings ----------------------------------------------------------------------
 
 
-class TestTheDefaultsAreTodaysDeployment:
-    def test_nothing_names_a_second_collection_and_qa_reads_dense(self) -> None:
-        fields = Settings.model_fields
-        assert fields["qdrant_collection"].default == "scholiast_chunks"
-        assert fields["qdrant_hybrid_collection"].default is None
-        assert fields["retrieval_mode"].default == "dense"
+class TestTheDefaultsAreHybrid:
+    def test_the_default_deployment_mirrors_to_and_reads_the_hybrid_collection(self) -> None:
+        assert Settings.model_fields["retrieval_mode"].default == "hybrid"
+        default = settings()
+        assert default.qdrant_collection == "scholiast_chunks"
+        assert default.qdrant_hybrid_collection == HYBRID
+        assert default.retrieval_mode == "hybrid"
 
-    def test_hybrid_mode_without_a_hybrid_collection_is_refused(self) -> None:
+    def test_a_deployment_naming_its_own_collection_gets_its_own_hybrid_one(self) -> None:
+        # A fixed default would send this deployment's - or this test's - mirrored
+        # writes into scholiast_chunks_hybrid, whatever dense collection it named.
+        assert settings(qdrant_collection="tenant_x").qdrant_hybrid_collection == "tenant_x_hybrid"
+
+    def test_the_environment_names_the_dense_collection_the_hybrid_follows(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("QDRANT_COLLECTION", "from_env")
+        assert settings().qdrant_hybrid_collection == "from_env_hybrid"
+
+    def test_a_named_hybrid_collection_is_kept(self) -> None:
+        assert settings(qdrant_hybrid_collection="chosen").qdrant_hybrid_collection == "chosen"
+
+    def test_an_empty_name_from_the_environment_means_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # `QDRANT_HYBRID_COLLECTION=` is how a deployment opts out; it must not
+        # arrive as a collection called "".
+        monkeypatch.setenv("QDRANT_HYBRID_COLLECTION", "")
+        monkeypatch.setenv("RETRIEVAL_MODE", "dense")
+        assert settings().qdrant_hybrid_collection is None
+
+    @pytest.mark.parametrize("none", [None, ""])
+    def test_hybrid_mode_without_a_hybrid_collection_is_refused(self, none: str | None) -> None:
         with pytest.raises(ValidationError, match="no collection to read the lexical arm"):
-            settings(retrieval_mode="hybrid")
+            settings(qdrant_hybrid_collection=none)
 
     def test_one_collection_named_as_both_is_refused(self) -> None:
         with pytest.raises(ValidationError, match="cannot be both"):
@@ -75,27 +103,29 @@ class TestTheDefaultsAreTodaysDeployment:
 
 
 class TestEveryProcessBuildsTheSameIndexes:
-    def test_by_default_there_is_one_dense_collection_for_reading_and_writing(self) -> None:
+    def test_by_default_writes_are_mirrored_and_qa_reads_the_hybrid_collection(self) -> None:
         built = build_vector_indexes(settings())
+        assert isinstance(built.write, MirroredVectorIndex)
+        assert built.write.primary.collection == "scholiast_chunks"
+        assert built.hybrid is not None and built.hybrid.collection == HYBRID
+        assert built.read is built.hybrid and built.lexical is built.hybrid
+        assert built.mode is RetrievalMode.HYBRID
+
+    def test_a_dense_only_deployment_has_one_collection_for_reading_and_writing(self) -> None:
+        built = build_vector_indexes(settings(**DENSE_ONLY))
         assert isinstance(built.write, QdrantVectorIndex)
         assert built.write.collection == "scholiast_chunks" and built.write.sparse is False
         assert built.hybrid is None and built.lexical is None
         assert built.read is built.write and built.mode is RetrievalMode.DENSE
 
-    def test_a_configured_hybrid_collection_is_mirrored_to_while_qa_stays_dense(self) -> None:
-        built = build_vector_indexes(settings(qdrant_hybrid_collection=HYBRID))
+    def test_dense_mode_still_mirrors_so_the_rollback_keeps_hybrid_current(self) -> None:
+        built = build_vector_indexes(settings(retrieval_mode="dense"))
         assert isinstance(built.write, MirroredVectorIndex)
         assert built.write.primary.collection == "scholiast_chunks"
         assert built.hybrid is not None and built.write.mirror is built.hybrid
         assert built.hybrid.collection == HYBRID and built.hybrid.sparse is True
         # Dense mode reads the collection it always read: rollback is this.
         assert built.read is built.primary and built.lexical is None
-
-    def test_hybrid_mode_reads_both_arms_from_the_hybrid_collection(self) -> None:
-        built = build_vector_indexes(
-            settings(qdrant_hybrid_collection=HYBRID, retrieval_mode="hybrid")
-        )
-        assert built.read is built.hybrid and built.lexical is built.hybrid
 
     def test_the_factory_refuses_hybrid_mode_settings_validation_was_bypassed_for(self) -> None:
         bypassed = Settings.model_construct(retrieval_mode="hybrid", qdrant_hybrid_collection=None)
@@ -105,12 +135,12 @@ class TestEveryProcessBuildsTheSameIndexes:
     def test_the_celery_worker_writes_through_the_mirror_and_sweeps_the_hybrid(self) -> None:
         # The process most likely to drift from the API's configuration is the
         # one built elsewhere; it builds through the same factory.
-        _, maintenance, index = tasks._build(settings(qdrant_hybrid_collection=HYBRID))
+        _, maintenance, index = tasks._build(settings())
         assert isinstance(index, MirroredVectorIndex)
         assert maintenance._hybrid is index.mirror
 
-    def test_the_celery_worker_by_default_is_exactly_what_it_was(self) -> None:
-        _, maintenance, index = tasks._build(settings())
+    def test_a_dense_only_celery_worker_is_exactly_what_it_was(self) -> None:
+        _, maintenance, index = tasks._build(settings(**DENSE_ONLY))
         assert isinstance(index, QdrantVectorIndex) and index.collection == "scholiast_chunks"
         assert maintenance._hybrid is None
 
@@ -121,16 +151,24 @@ class TestEveryProcessBuildsTheSameIndexes:
 class Collection:
     """A store stand-in that records what is asked of it."""
 
-    def __init__(self, name: str, *, orphans: int = 0) -> None:
+    def __init__(self, name: str, *, orphans: int = 0, exists: bool = True) -> None:
         self.collection = name
         self.calls: list[str] = []
         self._orphans = orphans
+        self._exists = exists
+
+    async def exists(self) -> bool:
+        self.calls.append("exists")
+        return self._exists
 
     async def ensure_ready(self) -> None:
         self.calls.append("ensure_ready")
+        self._exists = True
 
     async def require_existing(self) -> None:
         self.calls.append("require_existing")
+        if not self._exists:
+            raise CollectionNotFound(self.collection)
 
     async def upsert(self, records: Sequence[object]) -> int:
         self.calls.append("upsert")
@@ -201,8 +239,59 @@ def mirrored(**orphans: int) -> tuple[MirroredVectorIndex, Collection, Collectio
     return MirroredVectorIndex(primary, mirror), primary, mirror  # type: ignore[arg-type]
 
 
+class Embedded:
+    """Postgres's count of embedded chunks, recording whether it was asked."""
+
+    def __init__(self, count: int) -> None:
+        self.count = count
+        self.asked = 0
+
+    async def __call__(self) -> int:
+        self.asked += 1
+        return self.count
+
+
+def mirror_of(
+    *, exists: bool, embedded: Embedded | None
+) -> tuple[MirroredVectorIndex, Collection, Collection]:
+    primary, mirror = Collection("dense"), Collection("hybrid", exists=exists)
+    index = MirroredVectorIndex(primary, mirror, embedded_chunks=embedded)  # type: ignore[arg-type]
+    return index, primary, mirror
+
+
+class TestTheMirrorIsCreatedOnlyForAnEmptyCorpus:
+    """D174: a starting process may create a missing mirror only while nothing is embedded."""
+
+    async def test_a_missing_mirror_is_created_while_nothing_is_embedded(self) -> None:
+        index, primary, mirror = mirror_of(exists=False, embedded=Embedded(0))
+        await index.ensure_ready()
+        assert primary.calls == ["ensure_ready"]
+        # Created, then held to the schema like any existing one.
+        assert mirror.calls == ["exists", "ensure_ready", "require_existing"]
+
+    async def test_a_missing_mirror_beside_embedded_chunks_stops_the_process(self) -> None:
+        # Created empty here, it would serve or extend an index lacking them.
+        index, _, mirror = mirror_of(exists=False, embedded=Embedded(1))
+        with pytest.raises(CollectionNotFound):
+            await index.ensure_ready()
+        assert "ensure_ready" not in mirror.calls
+
+    async def test_an_existing_mirror_is_validated_without_counting(self) -> None:
+        embedded = Embedded(0)
+        index, _, mirror = mirror_of(exists=True, embedded=embedded)
+        await index.ensure_ready()
+        assert mirror.calls == ["exists", "require_existing"] and embedded.asked == 0
+
+    async def test_without_a_count_a_missing_mirror_is_never_created(self) -> None:
+        # D172's rule, for any process that did not supply the count.
+        index, _, mirror = mirror_of(exists=False, embedded=None)
+        with pytest.raises(CollectionNotFound):
+            await index.ensure_ready()
+        assert mirror.calls == ["require_existing"]
+
+
 class TestEveryWriteReachesBothCollections:
-    async def test_the_mirror_is_validated_never_created(self) -> None:
+    async def test_without_a_count_the_mirror_is_validated_never_created(self) -> None:
         index, primary, mirror = mirrored()
         await index.ensure_ready()
         assert primary.calls == ["ensure_ready"]
@@ -272,7 +361,7 @@ class TestEveryWriteReachesBothCollections:
 
 
 class FakeQdrant:
-    """Stands in for `QdrantVectorIndex` inside the factory. Has no way to create anything."""
+    """Stands in for `QdrantVectorIndex` inside the factory. Records what is asked of it."""
 
     built: ClassVar[list[FakeQdrant]] = []
     hybrid_exists: ClassVar[bool] = True
@@ -286,6 +375,12 @@ class FakeQdrant:
 
     async def ensure_ready(self) -> None:
         self.calls.append("ensure_ready")
+        if self.sparse:
+            FakeQdrant.hybrid_exists = True
+
+    async def exists(self) -> bool:
+        self.calls.append("exists")
+        return FakeQdrant.hybrid_exists if self.sparse else True
 
     async def require_existing(self) -> None:
         self.calls.append("require_existing")
@@ -308,6 +403,9 @@ class FakeRows:
 
     async def embedded_chunk_ids(self) -> set[str]:
         return set(FakeRows.embedded)
+
+    async def count_embedded(self) -> int:
+        return len(FakeRows.embedded)
 
 
 class _Encoder:
@@ -332,19 +430,32 @@ def by_collection() -> dict[str, FakeQdrant]:
 
 
 class TestStartup:
-    async def test_by_default_only_scholiast_chunks_is_touched(
+    async def test_a_dense_only_deployment_touches_only_scholiast_chunks(
         self, stand_ins: type[FakeQdrant]
     ) -> None:
-        async with api_lifespan(create_app(settings())):
+        async with api_lifespan(create_app(settings(**DENSE_ONLY))):
             pass
         (only,) = FakeQdrant.built
         assert only.collection == "scholiast_chunks" and only.sparse is False
         assert only.calls[0] == "ensure_ready"
 
-    async def test_a_configured_hybrid_collection_is_validated_not_created(
+    async def test_the_default_boot_reads_an_existing_complete_hybrid_collection(
         self, stand_ins: type[FakeQdrant]
     ) -> None:
-        app = create_app(settings(qdrant_hybrid_collection=HYBRID))
+        FakeRows.embedded = {"a"}
+        stand_ins.hybrid_points = {"a"}
+        app = create_app(settings())
+        async with api_lifespan(app):
+            assert isinstance(app.state.index, MirroredVectorIndex)
+            assert app.state.retrieval.mode is RetrievalMode.HYBRID
+        hybrid = by_collection()[HYBRID]
+        assert "ensure_ready" not in hybrid.calls and "require_existing" in hybrid.calls
+
+    async def test_a_configured_hybrid_collection_is_validated_not_created_in_dense_mode(
+        self, stand_ins: type[FakeQdrant]
+    ) -> None:
+        FakeRows.embedded = {"a"}
+        app = create_app(settings(retrieval_mode="dense"))
         async with api_lifespan(app):
             assert isinstance(app.state.index, MirroredVectorIndex)
         hybrid = by_collection()[HYBRID]
@@ -352,13 +463,42 @@ class TestStartup:
         # Dense mode reads nothing from it, so it waits on no completeness check.
         assert not any(call.startswith("lexical_chunk_ids") for call in hybrid.calls)
 
-    async def test_a_missing_hybrid_collection_stops_the_boot(
-        self, stand_ins: type[FakeQdrant]
+    @pytest.mark.parametrize("mode", ["hybrid", "dense"])
+    async def test_a_missing_hybrid_collection_beside_embedded_chunks_stops_the_boot(
+        self, stand_ins: type[FakeQdrant], mode: str
     ) -> None:
         stand_ins.hybrid_exists = False
+        FakeRows.embedded = {"a"}
         with pytest.raises(CollectionNotFound):
-            async with api_lifespan(create_app(settings(qdrant_hybrid_collection=HYBRID))):
+            async with api_lifespan(create_app(settings(retrieval_mode=mode))):
                 pytest.fail("the API started without its hybrid collection")
+        assert "ensure_ready" not in by_collection()[HYBRID].calls
+
+    async def test_a_fresh_deployment_creates_its_hybrid_collection_and_boots_hybrid(
+        self, stand_ins: type[FakeQdrant]
+    ) -> None:
+        # D174: nothing is embedded, so an empty collection is a complete one.
+        stand_ins.hybrid_exists = False
+        app = create_app(settings())
+        async with api_lifespan(app):
+            assert app.state.retrieval.mode is RetrievalMode.HYBRID
+        hybrid = by_collection()[HYBRID]
+        assert hybrid.calls[:3] == ["exists", "ensure_ready", "require_existing"]
+        assert f"lexical_chunk_ids:{LEXICAL_VERSION}" in hybrid.calls
+
+    async def test_the_celery_worker_applies_the_same_rule(
+        self, stand_ins: type[FakeQdrant], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(tasks, "SqlChunkRepository", FakeRows)
+        stand_ins.hybrid_exists = False
+        FakeRows.embedded = {"a"}
+        _, _, refused = tasks._build(settings())
+        with pytest.raises(CollectionNotFound):
+            await refused.ensure_ready()
+        FakeRows.embedded = set()
+        _, _, created = tasks._build(settings())
+        await created.ensure_ready()
+        assert stand_ins.hybrid_exists is True
 
     @pytest.mark.parametrize(
         ("points", "case"),
@@ -369,9 +509,8 @@ class TestStartup:
     ) -> None:
         FakeRows.embedded = {"a", "b"}
         stand_ins.hybrid_points = points
-        hybrid_settings = settings(qdrant_hybrid_collection=HYBRID, retrieval_mode="hybrid")
         with pytest.raises(HybridIndexIncomplete):
-            async with api_lifespan(create_app(hybrid_settings)):
+            async with api_lifespan(create_app(settings())):
                 pytest.fail(f"the API started reading a hybrid collection that was {case}")
 
     async def test_hybrid_mode_checks_the_current_lexical_version(
@@ -379,7 +518,7 @@ class TestStartup:
     ) -> None:
         FakeRows.embedded = {"a"}
         stand_ins.hybrid_points = {"a"}
-        app = create_app(settings(qdrant_hybrid_collection=HYBRID, retrieval_mode="hybrid"))
+        app = create_app(settings())
         async with api_lifespan(app):
             assert app.state.retrieval.mode is RetrievalMode.HYBRID
         assert f"lexical_chunk_ids:{LEXICAL_VERSION}" in by_collection()[HYBRID].calls
@@ -470,13 +609,44 @@ class TestReadinessInHybridMode:
 # --- scholiast-reindex ------------------------------------------------------------------
 
 
+class _Stop(Exception):
+    pass
+
+
+class _Readable:
+    """Paper and chunk rows that answer, recording the order they were read in."""
+
+    order: ClassVar[list[str]] = []
+
+    def __init__(self, session: object, scope: object) -> None:
+        pass
+
+    async def all_paper_ids(self) -> tuple[str, ...]:
+        _Readable.order.append("all_paper_ids")
+        return ("p",)
+
+    async def get(self, paper_id: str) -> None:
+        _Readable.order.append("get")
+
+    async def list_for_paper(self, paper_id: str) -> list[object]:
+        _Readable.order.append("list_for_paper")
+        return []
+
+
+class _Unreadable(_Readable):
+    """A schema behind the code, as D173's first run met it."""
+
+    async def get(self, paper_id: str) -> None:
+        raise LookupError("column papers.doi does not exist")
+
+
 class TestTheReindexCommand:
     def test_hybrid_work_needs_a_configured_hybrid_collection(self) -> None:
         with pytest.raises(SystemExit, match="qdrant_hybrid_collection is not set"):
-            reindex._hybrid_index(settings())
+            reindex._hybrid_index(settings(**DENSE_ONLY))
 
     def test_the_hybrid_collection_is_built_sparse_as_every_process_builds_it(self) -> None:
-        built = reindex._hybrid_index(settings(qdrant_hybrid_collection=HYBRID))
+        built = reindex._hybrid_index(settings())
         assert built.collection == HYBRID and built.sparse is True
 
     def test_modes_are_exclusive(self) -> None:
@@ -498,9 +668,46 @@ class TestTheReindexCommand:
             raise Stop
 
         monkeypatch.setattr(QdrantVectorIndex, "ensure_ready", ensure_ready)
+        monkeypatch.setattr(reindex, "SqlPaperRepository", _Readable)
+        monkeypatch.setattr(reindex, "SqlChunkRepository", _Readable)
         with pytest.raises(Stop):
-            await reindex._rebuild(settings(qdrant_hybrid_collection=HYBRID), hybrid=True)
+            await reindex._rebuild(settings(), hybrid=True)
         assert [(i.collection, i.sparse) for i in chosen] == [(HYBRID, True)]
+
+    async def test_postgres_is_read_before_anything_is_created(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # D173's first run failed on the database after the collection existed,
+        # leaving it empty. The rebuild's own reads now come first.
+        order: list[str] = []
+
+        async def ensure_ready(self: QdrantVectorIndex) -> None:
+            order.append("ensure_ready")
+            raise _Stop
+
+        _Readable.order = order
+        monkeypatch.setattr(QdrantVectorIndex, "ensure_ready", ensure_ready)
+        monkeypatch.setattr(reindex, "SqlPaperRepository", _Readable)
+        monkeypatch.setattr(reindex, "SqlChunkRepository", _Readable)
+        with pytest.raises(_Stop):
+            await reindex._rebuild(settings(), hybrid=True)
+        assert order == ["all_paper_ids", "get", "list_for_paper", "ensure_ready"]
+
+    async def test_a_database_the_rebuild_cannot_read_creates_nothing(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        created: list[str] = []
+
+        async def ensure_ready(self: QdrantVectorIndex) -> None:
+            created.append(self.collection)
+
+        _Readable.order = []
+        monkeypatch.setattr(QdrantVectorIndex, "ensure_ready", ensure_ready)
+        monkeypatch.setattr(reindex, "SqlPaperRepository", _Unreadable)
+        monkeypatch.setattr(reindex, "SqlChunkRepository", _Readable)
+        with pytest.raises(LookupError, match=r"papers\.doi"):
+            await reindex._rebuild(settings(), hybrid=True)
+        assert created == []
 
     @pytest.mark.parametrize(("missing", "code"), [((), 0), (("b",), 1)])
     def test_verify_exits_nonzero_unless_complete(
@@ -532,9 +739,7 @@ def _request(retrieval: object | None) -> Any:
 
 class TestQaIsHandedTheConfiguredRetrieval:
     def test_hybrid_mode_hands_qa_both_arms_of_the_hybrid_collection(self) -> None:
-        built = build_vector_indexes(
-            settings(qdrant_hybrid_collection=HYBRID, retrieval_mode="hybrid")
-        )
+        built = build_vector_indexes(settings())
         use_case = deps.streaming_answer_use_case(
             _request(built),
             session=SimpleNamespace(),  # type: ignore[arg-type]
@@ -547,11 +752,11 @@ class TestQaIsHandedTheConfiguredRetrieval:
         assert use_case._index is built.hybrid and use_case._lexical is built.hybrid
 
     def test_dense_mode_hands_qa_the_dense_collection_even_while_mirroring(self) -> None:
-        built = build_vector_indexes(settings(qdrant_hybrid_collection=HYBRID))
+        built = build_vector_indexes(settings(retrieval_mode="dense"))
         read, mode, lexical = deps._retrieval(_request(built), built.write)
         assert (read, mode, lexical) == (built.primary, RetrievalMode.DENSE, None)
 
-    def test_a_root_that_wired_only_an_index_gets_todays_dense_path(self) -> None:
+    def test_a_root_that_wired_only_an_index_gets_the_dense_path(self) -> None:
         index = object()
         assert deps._retrieval(_request(None), index) == (index, RetrievalMode.DENSE, None)  # type: ignore[arg-type]
 

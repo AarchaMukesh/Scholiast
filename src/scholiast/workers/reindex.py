@@ -16,11 +16,20 @@ same code the ordinary case runs.
     uv run scholiast-reindex --hybrid   # build or rebuild the hybrid collection (D172)
     uv run scholiast-reindex --verify   # is the hybrid collection complete? read-only
 
-**`--hybrid` is the only thing that creates the hybrid collection** (D172). The
-API and the workers validate it and refuse to start without it, so it never
-exists empty: it is created here and filled from Postgres in the same run, dense
-and lexical vectors in each point. Run against an existing one it converges, as
-the plain rebuild does, which is how it catches up after the migration's gap.
+**`--hybrid` is what creates the hybrid collection beside a corpus** (D172). The
+API and the workers validate it and refuse to start without it, unless nothing
+is embedded yet (D174), so it never exists empty beside chunks that belong in
+it: it is created here and filled from Postgres in the same run, dense and
+lexical vectors in each point. Run against an existing one it converges, as the
+plain rebuild does, which is how it catches up after the migration's gap.
+**Postgres is read before anything is created** (D174), as far as one paper:
+the paper listing, then the first paper's row and its chunks. A database those
+reads fail on - unreachable, or a schema behind the code, as D173's first run met
+three migrations back - stops the run with no collection created. That is all it
+guarantees. A later paper's rows, the embedder (built and loaded only after the
+collection exists) and Qdrant can still fail after creation, leaving a collection
+empty or partial; the completeness check refuses a hybrid read from it and
+`--verify` reports it, and rerunning `--hybrid` converges.
 
 **The embedder is built ungated, and that is not a default — it is a
 requirement** (D74, D101). A gated embedder re-batches, which perturbs fp16
@@ -129,11 +138,14 @@ async def _rebuild(settings: Settings, *, hybrid: bool = False) -> RebuildResult
     engine = build_engine(settings)
     scope = SystemContext(reason=REBUILD_REASON)
     try:
-        await index.ensure_ready()
         async with build_session_factory(engine)() as session:
+            papers = SqlPaperRepository(session, scope)
+            chunks = SqlChunkRepository(session, scope)
+            await _preflight(papers, chunks)
+            await index.ensure_ready()
             use_case = RebuildIndexUseCase(
-                papers=SqlPaperRepository(session, scope),
-                chunks=SqlChunkRepository(session, scope),
+                papers=papers,
+                chunks=chunks,
                 embedder=LocalEmbedder(
                     settings.embedding_model,
                     device=settings.embedding_device,
@@ -153,6 +165,21 @@ async def _rebuild(settings: Settings, *, hybrid: bool = False) -> RebuildResult
         await index.close()
         await engine.dispose()
     return result
+
+
+async def _preflight(papers: SqlPaperRepository, chunks: SqlChunkRepository) -> None:
+    """The rebuild's three kinds of Postgres read, once each, before `ensure_ready` (D174).
+
+    The paper listing, then the first paper's full row and its chunks: the same
+    queries the rebuild makes, so a database that cannot answer them - unreachable,
+    or a schema behind the code - fails here with no collection created. It reads
+    one paper, not all of them: a row that fails only for a later paper still
+    fails after the collection exists, as anything outside Postgres can.
+    """
+    paper_ids = await papers.all_paper_ids()
+    if paper_ids:
+        await papers.get(paper_ids[0])
+        await chunks.list_for_paper(paper_ids[0])
 
 
 async def _verify(settings: Settings) -> HybridCoverage:

@@ -133,6 +133,10 @@ class EvidenceOut(BaseModel):
     char_start: int
     char_end: int
     text: str
+    #: The retrieval score that ranked this passage. In hybrid mode, the default
+    #: (D174), it is the RRF score: how highly the two arms agreed to rank it, not
+    #: a relevance measure, so it is not comparable across questions and nothing
+    #: should threshold on it (D167). In dense mode it is the cosine similarity.
     score: float
     describes_other_work: bool
 

@@ -48,10 +48,14 @@ FR-O4 tracing is deferred (D109). Do not re-argue these.
 negative.** Do not re-argue any of these — they cost a phase each:
 
 - **Hybrid beats dense-only** on D-RET-CORE: recall@10 **+0.088** [+0.004, +0.177],
-  nDCG@10 **+0.061**, significant on four of five metrics. Adopted? **Decided, not live**:
-  D167 adopts hybrid RRF without reranking and amends FR-Q3, unless D168's workspace-scale
-  gate (`uv run eval --workspace-gate`) finds hybrid significantly worse. The gate has not
-  been run, so production is still dense-only.
+  nDCG@10 **+0.061**, significant on four of five metrics. **Adopted, and the default
+  since D174**: D167 adopted hybrid RRF without reranking and amended FR-Q3, unless D168's
+  workspace-scale gate found hybrid significantly worse. It ran, reproduced M2 exactly and
+  did not (D171: CORE recall@10 +0.019 [-0.073, +0.104], within noise; FULL +0.040
+  [+0.00017, +0.084]). Every write is mirrored to `scholiast_chunks_hybrid` (D172), so
+  `RETRIEVAL_MODE=dense` is the rollback. An API or worker creates a missing hybrid
+  collection only while nothing is embedded; beside a corpus it refuses to boot until
+  `scholiast-reindex --hybrid` has built it (D174).
 - **Reranking is a null against hybrid**, and the cause is measured: at the adopted top-50
   budget **two-thirds of relevant chunks never reach the cross-encoder**, and the
   pre-rerank ceiling still climbs at depth 100 (CORE 0.342 → 0.417). It is a starved
@@ -64,7 +68,7 @@ negative.** Do not re-argue any of these — they cost a phase each:
 
 ## Read this first
 
-**`docs/00-decisions-log.md` is the source of truth.** D1–D170, and several *reverse*
+**`docs/00-decisions-log.md` is the source of truth.** D1–D174, and several *reverse*
 what the earlier design docs say — including two that reverse *other decisions*.
 Reading doc 5, 6 or 7 without the log will lead you to recommend things already
 measured against:
@@ -102,7 +106,7 @@ measurements against a specific commit, so it belongs in history with it.
 
 | File | What it holds |
 |---|---|
-| `docs/00-decisions-log.md` | D1–D170 + measured hardware baseline. **Start here.** |
+| `docs/00-decisions-log.md` | D1–D174 + measured hardware baseline. **Start here.** |
 | `docs/milestone-logs/M4-MILESTONE-LOG.md` | M4's close-out: 6/7 criteria as written and **1 not met (NFR-P1 cold) with its cause measured**, its defects and what found them, 305 mutations, debt to M5/M6 |
 | `SPIKE-FINDINGS-M4.md` · `spike/m4-protocol.json` | M4's live-source spike and its pre-registered addenda A1–A5 and A6-multiday, with their results under `spike/results/`. The spike findings write up the spike, A1 and A2; A3 and A4 are reported in the M4 log, A5 and A6-multiday in its §3 addendum (D163, D169) |
 | `docs/milestone-logs/M3-MILESTONE-LOG.md` | M3's close-out: 7/8 criteria as written and 1 amended with cause, 15 defects and what found them, 96 mutations, debt to M4/M6 |
@@ -138,7 +142,8 @@ Services: `docker compose up -d` (Postgres · Qdrant · Redis · GROBID).
 config snapshot; the plain command measures what production runs.
 
 ```bash
-uv run eval                      # dense-only, the D56 ablation baseline
+uv run eval                      # hybrid RRF, what production runs (D174); kind retrieval-hybrid
+uv run eval --dense              # dense-only, the D56 ablation baseline; kind retrieval
 uv run eval --compare-arms       # dense / lexical / RRF hybrid / hybrid+rerank
 uv run eval --compare-depths     # candidate depth 10/20/30/50 + a 100 diagnostic (D77)
 uv run eval --compare-fusion     # RRF vs weighted, weight fitted on the TRAIN split (D76)

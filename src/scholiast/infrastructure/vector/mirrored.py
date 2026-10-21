@@ -19,14 +19,20 @@ points whose rows are unstamped, which no read reaches; a half-done delete leave
 the hybrid collection short, which the completeness check reports, and the dense
 collection that production reads intact.
 
-**It never creates the mirror.** `ensure_ready` creates the primary as it always
-has, and only validates the mirror (`require_existing`): a mirror created here
-would be empty, and only `scholiast-reindex --hybrid` creates one, filled.
+**It creates the mirror only for a corpus with nothing in it** (D174).
+`ensure_ready` creates the primary as it always has. A missing mirror is created
+only when the process supplied `embedded_chunks` and it counts zero: with no
+embedded chunk there is nothing to backfill, so an empty collection is complete,
+and every later write reaches it. Otherwise the mirror is only validated
+(`require_existing`) and a missing one stops the process, because a mirror
+created empty beside a corpus would serve or extend an index lacking it; only
+`scholiast-reindex --hybrid` creates one filled. Without `embedded_chunks` it is
+never created, as D172 had it.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 
 from scholiast.application.ports.vector import VectorRecord
 from scholiast.domain.retrieval import ScoredChunk
@@ -36,13 +42,22 @@ from scholiast.infrastructure.vector.qdrant import QdrantVectorIndex
 class MirroredVectorIndex:
     """A `VectorIndex` over a primary collection and a mirror of it."""
 
-    def __init__(self, primary: QdrantVectorIndex, mirror: QdrantVectorIndex) -> None:
+    def __init__(
+        self,
+        primary: QdrantVectorIndex,
+        mirror: QdrantVectorIndex,
+        *,
+        embedded_chunks: Callable[[], Awaitable[int]] | None = None,
+    ) -> None:
         if primary.collection == mirror.collection:
             # Writing every point twice to one collection would look like a mirror
             # and be none.
             raise ValueError(f"a collection cannot mirror itself: {primary.collection!r}")
         self._primary = primary
         self._mirror = mirror
+        #: How many chunks Postgres records as embedded, across every tenant: the
+        #: one question that decides whether a missing mirror may be created.
+        self._embedded_chunks = embedded_chunks
 
     @property
     def primary(self) -> QdrantVectorIndex:
@@ -54,6 +69,14 @@ class MirroredVectorIndex:
 
     async def ensure_ready(self) -> None:
         await self._primary.ensure_ready()
+        if (
+            self._embedded_chunks is not None
+            and not await self._mirror.exists()
+            and await self._embedded_chunks() == 0
+        ):
+            await self._mirror.ensure_ready()
+        # Every path ends here, so a mirror just created - or created a moment
+        # ago by another process - is held to the same schema as an old one.
         await self._mirror.require_existing()
 
     async def upsert(self, records: Sequence[VectorRecord]) -> int:

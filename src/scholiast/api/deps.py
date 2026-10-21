@@ -603,10 +603,11 @@ def streaming_answer_use_case(
 def _retrieval(
     request: Request, index: VectorIndex
 ) -> tuple[VectorIndex, RetrievalMode, LexicalIndex | None]:
-    """What QA reads (D172): the lifespan's retrieval config, or today's dense path.
+    """What QA reads (D172): the lifespan's retrieval config, or the dense path.
 
     A composition root that wired only `app.state.index` - the isolation and
-    test lifespans - gets exactly the dense retrieval it always had.
+    test lifespans - gets dense retrieval over that index, as it always had:
+    there is no lexical arm to read without the lifespan's hybrid collection.
     """
     retrieval: VectorIndexes | None = getattr(request.app.state, "retrieval", None)
     if retrieval is None:
