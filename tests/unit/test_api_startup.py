@@ -4,8 +4,10 @@ Loaded on first use, the encoder cost the first search after a start 16.2 s in
 D155's walkthrough: 3.9-5.9 s importing torch, 7.7-11.1 s asking the model hub
 about updates (D157), and a slow first encode. A test that never builds the real
 lifespan would not notice the warm-up being removed, so these run `api_lifespan`
-itself, with the encoder and the vector index replaced: no model, no Qdrant, and
-an engine that never connects.
+itself, with the encoder, the vector index and the chunk rows replaced: no
+model, no Qdrant, and an engine that never connects. They boot the default
+deployment, which mirrors to a hybrid collection and reads it (D174), so the
+warm-up is checked where production runs it: after the hybrid checks.
 """
 
 from __future__ import annotations
@@ -35,14 +37,33 @@ class _Encoder:
 
 
 class _Index:
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
-        pass
+    """A collection that exists and is complete: the boot passes every index check."""
+
+    def __init__(self, *args: Any, collection: str, **kwargs: Any) -> None:
+        self.collection = collection
 
     async def ensure_ready(self) -> None:
         return None
 
+    async def exists(self) -> bool:
+        return True
+
+    async def require_existing(self) -> None:
+        return None
+
+    async def lexical_chunk_ids(self, *, lexical_version: str) -> set[str]:
+        return set()
+
     async def close(self) -> None:
         return None
+
+
+class _Rows:
+    def __init__(self, *args: Any) -> None:
+        pass
+
+    async def embedded_chunk_ids(self) -> set[str]:
+        return set()
 
 
 @pytest.fixture
@@ -53,6 +74,7 @@ def stand_ins(monkeypatch: pytest.MonkeyPatch) -> type[_Encoder]:
     # The lifespan builds its indexes through the factory (D172), so that is where
     # the stand-in goes.
     monkeypatch.setattr(factory_module, "QdrantVectorIndex", _Index)
+    monkeypatch.setattr(app_module, "SqlChunkRepository", _Rows)
     return _Encoder
 
 

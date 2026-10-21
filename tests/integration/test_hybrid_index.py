@@ -1,10 +1,11 @@
-"""The hybrid collection against a real Qdrant (D172).
+"""The hybrid collection against a real Qdrant (D172, D174).
 
 What a fake cannot establish: that a point written with both vectors is searchable
 by both arms through the store's own filter and IDF, that the lexical arm honours
 the tenant filter the way the dense arm does, that coverage is read by payload
-version, and that a rebuild run twice leaves the collection byte-for-byte as it
-was. Each test uses its own collection and deletes it.
+version, that a rebuild run twice leaves the collection byte-for-byte as it
+was, and that a process losing a race to create the collection gets the refusal
+it expects. Each test uses its own collection and deletes it.
 """
 
 from __future__ import annotations
@@ -178,3 +179,31 @@ class TestTheHybridCollectionAgainstRealQdrant:
             assert await store._client.collection_exists(name) is False
         finally:
             await store.close()
+
+    async def test_a_process_that_loses_the_create_race_starts_anyway(self) -> None:
+        # D174: two processes starting on an empty corpus can both find the
+        # collection missing. The second's create is refused by the real store,
+        # and that refusal must read as a race lost, not as a failed start.
+        name = f"test_hybrid_{uuid.uuid4().hex[:10]}"
+        first = QdrantVectorIndex(QDRANT_URL, collection=name, dimensions=8, sparse=True)
+        second = QdrantVectorIndex(QDRANT_URL, collection=name, dimensions=8, sparse=True)
+        try:
+            await first.ensure_ready()
+            client = second._client
+            real = client.collection_exists
+            asked: list[str] = []
+
+            async def missing_at_first(collection_name: str, **kwargs: object) -> bool:
+                # What the second process saw just before the first created it.
+                asked.append(collection_name)
+                return False if len(asked) == 1 else await real(collection_name, **kwargs)
+
+            client.collection_exists = missing_at_first  # type: ignore[method-assign]
+            await second.ensure_ready()
+            # Missing, the create refused, then found: the race lost, not a failure.
+            assert len(asked) == 2
+            await second.require_existing()
+        finally:
+            await first._client.delete_collection(name)
+            await first.close()
+            await second.close()

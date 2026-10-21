@@ -13,8 +13,10 @@ import uuid
 from types import SimpleNamespace
 from typing import Any
 
+import httpx
 import pytest
 from qdrant_client import models
+from qdrant_client.http.exceptions import UnexpectedResponse
 
 from scholiast.application.ports.vector import (
     EmptyRetrievalScope,
@@ -399,3 +401,110 @@ class TestCoverageIsReadByVersion:
             await index.lexical_chunk_ids(lexical_version="v2")
         with pytest.raises(RuntimeError, match="dense-only"):
             await index.count_lexical(lexical_version="v2")
+
+
+def _refused(status: int) -> UnexpectedResponse:
+    return UnexpectedResponse(status, "refused", b"{}", httpx.Headers())
+
+
+class CreatingClient:
+    """A Qdrant client stand-in for `ensure_ready`: answers `collection_exists` from
+    a script, refuses `create_collection` with the status it is given, and reports
+    the collection the other process built with `params`."""
+
+    def __init__(
+        self,
+        exists: list[bool],
+        *,
+        refuse: int | None = None,
+        params: dict[str, Any] | None = None,
+    ) -> None:
+        self.calls: list[str] = []
+        self._exists = exists
+        self._refuse = refuse
+        self._params = DENSE_ONLY if params is None else params
+
+    async def collection_exists(self, collection: str) -> bool:
+        self.calls.append("collection_exists")
+        return self._exists.pop(0)
+
+    async def create_collection(self, collection: str, **kwargs: object) -> None:
+        self.calls.append("create_collection")
+        if self._refuse is not None:
+            raise _refused(self._refuse)
+
+    async def get_collection(self, collection: str) -> object:
+        self.calls.append("get_collection")
+        return SimpleNamespace(config=SimpleNamespace(params=SimpleNamespace(**self._params)))
+
+    async def create_payload_index(self, collection: str, **kwargs: object) -> None:
+        self.calls.append("create_payload_index")
+
+
+class TestTwoProcessesStartingTogether:
+    """D174: a hybrid collection may now be created at startup, so two processes
+    starting at once can both find it missing, and the second create is refused."""
+
+    async def test_a_create_lost_to_another_process_is_checked_like_an_existing_one(
+        self,
+    ) -> None:
+        client = CreatingClient([False, True], refuse=409)
+        await _index_over(client).ensure_ready()  # type: ignore[arg-type]
+        assert client.calls == [
+            "collection_exists",
+            "create_collection",
+            "collection_exists",
+            "get_collection",
+            "create_payload_index",
+        ]
+
+    async def test_a_collection_the_other_process_built_differently_is_still_refused(
+        self,
+    ) -> None:
+        client = CreatingClient([False, True], refuse=409, params={"vectors": _dense(384)})
+        with pytest.raises(VectorDimensionMismatch):
+            await _index_over(client).ensure_ready()  # type: ignore[arg-type]
+
+    async def test_a_lost_race_to_a_hybrid_collection_is_held_to_the_strict_schema(
+        self,
+    ) -> None:
+        client = CreatingClient([False, True], refuse=409, params=HYBRID)
+        await _index_over(client, sparse=True).ensure_ready()  # type: ignore[arg-type]
+        assert "create_payload_index" in client.calls
+
+    async def test_a_lost_race_to_a_dense_shaped_collection_is_refused_for_hybrid(
+        self,
+    ) -> None:
+        # The right dense size, so the lenient check would pass it; but the
+        # lexical arm has nothing to query, and this process never saw it built.
+        client = CreatingClient([False, True], refuse=409, params=DENSE_ONLY)
+        with pytest.raises(CollectionSchemaMismatch):
+            await _index_over(client, sparse=True).ensure_ready()  # type: ignore[arg-type]
+        assert "create_payload_index" not in client.calls
+
+    @pytest.mark.parametrize("status", [400, 500])
+    async def test_a_refusal_other_than_conflict_fails_even_if_the_collection_exists(
+        self, status: int
+    ) -> None:
+        # Only 409 means "it already exists"; anything else is the store failing.
+        client = CreatingClient([False, True], refuse=status)
+        with pytest.raises(UnexpectedResponse):
+            await _index_over(client).ensure_ready()  # type: ignore[arg-type]
+        assert "create_payload_index" not in client.calls
+
+    async def test_a_create_refused_for_any_other_reason_fails(self) -> None:
+        # Nothing exists after the refusal, so it was not a race: a real failure.
+        client = CreatingClient([False, False], refuse=400)
+        with pytest.raises(UnexpectedResponse):
+            await _index_over(client).ensure_ready()  # type: ignore[arg-type]
+        assert "create_payload_index" not in client.calls
+
+    async def test_an_uncontested_create_reads_nothing_back(self) -> None:
+        client = CreatingClient([False])
+        await _index_over(client).ensure_ready()  # type: ignore[arg-type]
+        assert client.calls == ["collection_exists", "create_collection", "create_payload_index"]
+
+    async def test_asking_whether_it_exists_only_reads(self) -> None:
+        client = ReadOnlyClient(exists=False)
+        assert await _index_over(client).exists() is False
+        assert client.reads == ["collection_exists"]

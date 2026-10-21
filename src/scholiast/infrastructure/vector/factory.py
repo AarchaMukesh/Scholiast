@@ -12,11 +12,16 @@ exactly how the hybrid collection would go stale - so all three call this.
   collection; hybrid mode reads both arms from the hybrid collection.
 - `hybrid`: the hybrid collection's adapter, for the completeness check, or None.
 
+`embedded_chunks` is what lets a starting API or worker create a missing hybrid
+collection, for a corpus with nothing embedded yet (D174). The reindex command
+does not pass it: it builds the collection itself, filled.
+
 Nothing here touches the network: adapters connect on first use.
 """
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 from scholiast.config.settings import Settings
@@ -48,7 +53,9 @@ class VectorIndexes:
         await self.write.close()
 
 
-def build_vector_indexes(settings: Settings) -> VectorIndexes:
+def build_vector_indexes(
+    settings: Settings, *, embedded_chunks: Callable[[], Awaitable[int]] | None = None
+) -> VectorIndexes:
     mode = RetrievalMode(settings.retrieval_mode)
     primary = QdrantVectorIndex(
         settings.qdrant_url,
@@ -69,5 +76,8 @@ def build_vector_indexes(settings: Settings) -> VectorIndexes:
         sparse=True,
     )
     return VectorIndexes(
-        mode=mode, primary=primary, hybrid=hybrid, write=MirroredVectorIndex(primary, hybrid)
+        mode=mode,
+        primary=primary,
+        hybrid=hybrid,
+        write=MirroredVectorIndex(primary, hybrid, embedded_chunks=embedded_chunks),
     )

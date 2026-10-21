@@ -10,11 +10,14 @@ see its docstring. The distinction is the whole reason validation lives where it
 does: a generator's body does not run until its first `__anext__()`, so an error
 raised inside one arrives after the response has already committed `200 OK`.
 
-**This is M1's ablation baseline, not the adopted design** (D56). Dense-only,
-child-only context, relevance-descending order. The lexical arm, RRF fusion, the
-cross-encoder, parent expansion and sandwich placement are M2's — deliberately,
-so each one's contribution is a measured number rather than an assumption. Every
-one of them is a configuration change here, not a restructuring.
+**Retrieval is hybrid RRF, without a reranker** (D167, D171, D174): the dense and
+lexical arms each take the workspace's papers to `HYBRID_DEPTH`, fused by rank.
+That is the one M2 measurement production adopted, after D168's gate checked it
+at workspace scale; the cross-encoder was a null against it. Dense mode is kept
+as the rollback and is M1's ablation baseline (D56). The rest of that baseline
+stands - child-only context, relevance-descending order - so that parent
+expansion or sandwich placement would each be a measured change, not an
+assumption, and a configuration change here rather than a restructuring.
 
 Three properties are load-bearing:
 

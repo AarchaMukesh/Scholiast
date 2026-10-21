@@ -22,6 +22,7 @@ import uuid
 from collections.abc import Sequence
 
 from qdrant_client import AsyncQdrantClient, models
+from qdrant_client.http.exceptions import UnexpectedResponse
 
 from scholiast.application.ports.vector import (
     EmptyRetrievalScope,
@@ -79,14 +80,20 @@ class CollectionSchemaMismatch(Exception):
         super().__init__(f"collection {collection!r}: " + "; ".join(self.problems))
 
 
+#: The status Qdrant refuses a create with when the collection already exists:
+#: the one refusal `ensure_ready` reads as a race lost (D174).
+CONFLICT = 409
+
+
 class CollectionNotFound(Exception):
     """A collection this process reads or mirrors to, but must not create, is absent (D172)."""
 
     def __init__(self, collection: str) -> None:
         self.collection = collection
         super().__init__(
-            f"collection {collection!r} does not exist, and this process does not create "
-            "it: `scholiast-reindex --hybrid` builds it from Postgres (D172)"
+            f"collection {collection!r} does not exist. A starting process creates it "
+            "only while nothing is embedded (D174); otherwise `scholiast-reindex "
+            "--hybrid` builds it from Postgres, then `--verify` (D172)"
         )
 
 
@@ -144,10 +151,40 @@ class QdrantVectorIndex:
             await self._connection.close()
             self._connection = None
 
+    async def exists(self) -> bool:
+        """Whether the collection exists. Read-only: one `GET .../exists`."""
+        return await self._client.collection_exists(self._collection)
+
     async def ensure_ready(self) -> None:
         if await self._client.collection_exists(self._collection):
             self._assert_dimensions(await self._client.get_collection(self._collection))
-        elif self._sparse:
+        else:
+            try:
+                await self._create()
+            except UnexpectedResponse as refused:
+                # D174: two processes starting together can both find it missing,
+                # and the second create is refused with 409 Conflict. Only that,
+                # with the collection then present, is a race lost - and the
+                # winner's collection is held to the strict schema, since this
+                # process never saw it built. Any other refusal is a real failure.
+                if refused.status_code != CONFLICT or not await self._client.collection_exists(
+                    self._collection
+                ):
+                    raise
+                self._assert_schema(await self._client.get_collection(self._collection))
+
+        # The index that makes the mandatory filter selective. Creating it is
+        # idempotent, and doing it here rather than at collection creation means
+        # an index added later still gets built on an existing deployment.
+        await self._client.create_payload_index(
+            self._collection,
+            field_name=PAYLOAD_PAPER_ID,
+            field_schema=models.PayloadSchemaType.KEYWORD,
+            wait=True,
+        )
+
+    async def _create(self) -> None:
+        if self._sparse:
             await self._client.create_collection(
                 self._collection,
                 # Named vectors, because one collection now holds two
@@ -185,16 +222,6 @@ class QdrantVectorIndex:
                 # it becomes a measured change against this baseline.
             )
 
-        # The index that makes the mandatory filter selective. Creating it is
-        # idempotent, and doing it here rather than at collection creation means
-        # an index added later still gets built on an existing deployment.
-        await self._client.create_payload_index(
-            self._collection,
-            field_name=PAYLOAD_PAPER_ID,
-            field_schema=models.PayloadSchemaType.KEYWORD,
-            wait=True,
-        )
-
     def _assert_dimensions(self, info: models.CollectionInfo) -> None:
         """Refuse to run against a collection built for a different embedder.
 
@@ -218,10 +245,12 @@ class QdrantVectorIndex:
     def _assert_schema(self, info: models.CollectionInfo) -> None:
         """Strictly: the collection holds exactly the vectors this adapter reads.
 
-        For `existing_count`. `_assert_dimensions`, which `ensure_ready` uses, is
-        left lenient on purpose, so production's path is unchanged; this one
-        refuses an unreadable shape instead of passing it, because a check that
-        finds nothing must not look like validation.
+        For `existing_count`, `require_existing`, and a create `ensure_ready` lost
+        to another process (D174). `_assert_dimensions`, which `ensure_ready` uses
+        on a collection that already existed, is left lenient on purpose, so
+        production's path is unchanged; this one refuses an unreadable shape
+        instead of passing it, because a check that finds nothing must not look
+        like validation.
 
         - Dense-only: one unnamed vector of `dimensions`, what `search` queries.
         - Sparse: a named `dense` vector of `dimensions` and a named `lexical`

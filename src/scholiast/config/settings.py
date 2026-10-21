@@ -18,6 +18,9 @@ from typing import Literal
 from pydantic import Field, PostgresDsn, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+#: What a hybrid collection's default name adds to `qdrant_collection` (D174).
+HYBRID_SUFFIX = "_hybrid"
+
 
 class Settings(BaseSettings):
     """Everything the process needs from its environment."""
@@ -41,16 +44,21 @@ class Settings(BaseSettings):
     #: is the dimension expected to grow, and per-tenant indexes are the classic
     #: multi-tenancy scaling trap.
     qdrant_collection: str = "scholiast_chunks"
-    #: The hybrid collection (dense + lexical, D172). Unset, nothing names a second
-    #: collection and every process behaves exactly as before. Set, every write
-    #: also goes to it - but no API or worker ever creates it: only
-    #: `scholiast-reindex --hybrid` does, filled, and a missing one stops startup.
+    #: The hybrid collection (dense + lexical, D172, D174). Every write also goes
+    #: to it. Left unset, it is named after `qdrant_collection` plus
+    #: `HYBRID_SUFFIX` - `scholiast_chunks_hybrid` by default - so a test or a
+    #: second deployment that names its own dense collection gets its own hybrid
+    #: one rather than writing into someone else's. Set empty or None, there is
+    #: none and every process behaves as before D172, which needs `dense` below.
+    #: Only `scholiast-reindex --hybrid` fills a missing one; an API or worker
+    #: creates it only for a corpus with nothing embedded yet (D174), and
+    #: otherwise a missing one stops startup.
     qdrant_hybrid_collection: str | None = None
-    #: How QA retrieves (D167, D172). `dense` is today's path; `hybrid` reads the
+    #: How QA retrieves (D167, D172, D174). `hybrid` reads both arms from the
     #: hybrid collection, and only once it holds every embedded chunk. Switching
-    #: back is this setting and a restart, because the dense collection is kept
+    #: back is `dense` and a restart, because the dense collection is kept
     #: current by the same mirrored writes.
-    retrieval_mode: Literal["dense", "hybrid"] = "dense"
+    retrieval_mode: Literal["dense", "hybrid"] = "hybrid"
     redis_url: str = "redis://localhost:6379/0"
     grobid_url: str = "http://localhost:8070"
 
@@ -236,7 +244,16 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _retrieval_is_coherent(self) -> Settings:
-        """Refuse the two configurations that would read or write the wrong thing (D172)."""
+        """Name the hybrid collection, then refuse the two configurations that
+        would read or write the wrong thing (D172, D174)."""
+        if "qdrant_hybrid_collection" not in self.model_fields_set:
+            # Derived rather than a fixed default (D174): a fixed name would send
+            # every deployment's - and every test's - mirrored writes into one
+            # collection, whatever dense collection each of them named.
+            self.qdrant_hybrid_collection = f"{self.qdrant_collection}{HYBRID_SUFFIX}"
+        elif not self.qdrant_hybrid_collection:
+            # `QDRANT_HYBRID_COLLECTION=` arrives as "", which means none.
+            self.qdrant_hybrid_collection = None
         if self.retrieval_mode == "hybrid" and not self.qdrant_hybrid_collection:
             raise ValueError(
                 "retrieval_mode is hybrid but qdrant_hybrid_collection is not set: "

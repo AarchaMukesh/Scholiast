@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -19,6 +21,7 @@ from scholiast.application.ports.ml import TextRole
 from scholiast.application.ports.vector import VectorRecord
 from scholiast.domain.paper import SectionKind
 from scholiast.domain.retrieval import RetrievalArm, ScoredChunk
+from scholiast.eval import cli
 from scholiast.eval.cli import (
     COMPARED_EMBEDDERS,
     DEPTH_SWEEP,
@@ -941,8 +944,46 @@ class TestThePlan:
         with pytest.raises(ValueError, match="share a label"):
             _validate([twin, twin])
 
+    def test_the_plain_run_measures_what_production_retrieves_with(self) -> None:
+        # D174: hybrid RRF without a reranker, at the depth production uses.
+        (cell,) = _plan(
+            self.BASE, compare=False, compare_arms=False, compare_depths=False, weight=None
+        )
+        assert (cell.arm, cell.depth, cell.fusion) == ("hybrid", INCUMBENT_DEPTH, "rrf")
+        assert not cell.is_m1_baseline and cell.control_label == ""
+
+    def test_dense_is_still_the_m1_baseline(self) -> None:
+        (cell,) = _plan(
+            self.BASE,
+            compare=False,
+            compare_arms=False,
+            compare_depths=False,
+            weight=None,
+            dense=True,
+        )
+        assert cell.arm == "dense" and cell.is_m1_baseline
+
+    def test_the_plain_hybrid_cell_is_the_arms_comparisons_hybrid_cell(self) -> None:
+        # One label for one configuration, so the two series can be read together.
+        (plain,) = _plan(
+            self.BASE, compare=False, compare_arms=False, compare_depths=False, weight=None
+        )
+        arms = _plan(self.BASE, compare=False, compare_arms=True, compare_depths=False, weight=None)
+        assert plain.label in {cell.label for cell in arms if cell.arm == "hybrid"}
+
     def test_the_real_plans_pass_their_own_check(self) -> None:
         _validate(self._depths())
+        for dense in (False, True):
+            _validate(
+                _plan(
+                    self.BASE,
+                    compare=False,
+                    compare_arms=False,
+                    compare_depths=False,
+                    weight=None,
+                    dense=dense,
+                )
+            )
         _validate(
             _plan(self.BASE, compare=True, compare_arms=False, compare_depths=False, weight=None)
         )
@@ -965,3 +1006,43 @@ class TestThePlan:
         header = _comparison([], compare=False, fit=fit)
         assert "0.4" in header
         assert "629 train-split queries" in header
+
+
+class TestThePlainRunIsArchivedByItsArm:
+    """`retrieval` stays the dense series; production's hybrid runs get their own (D174)."""
+
+    @pytest.fixture
+    def runs(self, monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
+        calls: list[dict[str, Any]] = []
+
+        async def fake_run(**kwargs: Any) -> EvalReport:
+            calls.append(kwargs)
+            return EvalReport(generated_at="2026-10-20T10:00:00+00:00", config={}, blocks={})
+
+        monkeypatch.setattr(cli, "_run", fake_run)
+        monkeypatch.setattr(cli, "_render", lambda report: "")
+        return calls
+
+    def test_the_plain_run_is_archived_as_retrieval_hybrid(
+        self, runs: list[dict[str, Any]], tmp_path: Path
+    ) -> None:
+        assert cli.main(["--report-dir", str(tmp_path)]) == 0
+        archived = [p.name for p in tmp_path.iterdir()]
+        assert archived == ["retrieval-hybrid-20261020T100000+0000.json"]
+        assert runs[0]["dense"] is False
+
+    def test_dense_keeps_the_retrieval_series(
+        self, runs: list[dict[str, Any]], tmp_path: Path
+    ) -> None:
+        assert cli.main(["--dense", "--report-dir", str(tmp_path)]) == 0
+        assert [p.name for p in tmp_path.iterdir()] == ["retrieval-20261020T100000+0000.json"]
+        assert runs[0]["dense"] is True
+
+    @pytest.mark.parametrize("other", ["--compare-arms", "--smoke", "--workspace-gate"])
+    def test_dense_beside_another_mode_is_refused_not_ignored(
+        self, runs: list[dict[str, Any]], tmp_path: Path, other: str
+    ) -> None:
+        with pytest.raises(SystemExit) as exit_info:
+            cli.main(["--dense", other, "--report-dir", str(tmp_path)])
+        assert exit_info.value.code == 2
+        assert runs == [] and list(tmp_path.iterdir()) == []

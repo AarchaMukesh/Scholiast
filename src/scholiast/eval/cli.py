@@ -18,6 +18,10 @@ configuration that produced it is not reproducible, only repeatable.
 statistical claims; FULL is the larger-sample robustness check. They are never
 merged into one table, and FULL's nDCG is omitted — binary judgments do not produce
 the graded nDCG CORE reports, and one shared column would overstate precision.
+
+**The plain command measures what production runs** — the hybrid RRF arm since
+D174, archived as `retrieval-hybrid`. `--dense` is the D56 dense baseline, still
+archived as `retrieval`, so neither date-stamped series mixes in the other's arm.
 """
 
 from __future__ import annotations
@@ -673,6 +677,7 @@ def _plan(
     compare_arms: bool,
     compare_depths: bool,
     weight: float | None,
+    dense: bool = False,
 ) -> list[Cell]:
     """The cells this run measures, and what each one is compared against.
 
@@ -728,7 +733,11 @@ def _plan(
             )
             for spec in COMPARED_EMBEDDERS
         ]
-    return [Cell(base.label, base, is_m1_baseline=True)]
+    if dense:
+        return [Cell(base.label, base, is_m1_baseline=True)]
+    # What production retrieves with (D174): RRF over both arms, no reranker,
+    # at the incumbent depth - the same cell `--compare-arms` labels hybrid.
+    return [Cell(f"hybrid ({model})", base, arm="hybrid")]
 
 
 def _validate(plan: Sequence[Cell]) -> None:
@@ -782,6 +791,7 @@ async def _run(
     compare_arms: bool,
     compare_depths: bool = False,
     compare_fusion: bool = False,
+    dense: bool = False,
 ) -> EvalReport:
     dataset = build_dret(load_snapshot())
     verify_split(dataset)
@@ -799,6 +809,7 @@ async def _run(
         compare_arms=compare_arms,
         compare_depths=compare_depths,
         weight=fit.weight if fit else None,
+        dense=dense,
     )
 
     _validate(plan)
@@ -1605,7 +1616,7 @@ def main(argv: list[str] | None = None) -> int:
         help=(
             "run dense / lexical / RRF-hybrid / hybrid+rerank against the M1 baseline "
             "encoder and report paired deltas (FR-Q3, doc 6 sections 6.5-6.7). Off by default: "
-            "adoption waits on the phase 7 ablation, so production stays dense-only."
+            "the plain command measures the production arm alone, hybrid RRF (D174)."
         ),
     )
     parser.add_argument(
@@ -1701,7 +1712,39 @@ def main(argv: list[str] | None = None) -> int:
             "the committed dense scores (D152) and time dense ranking on this device."
         ),
     )
+    parser.add_argument(
+        "--dense",
+        action="store_true",
+        help=(
+            "measure the dense-only arm, the D56 ablation baseline, archived as "
+            "`retrieval` as the plain command's runs were before D174. The plain "
+            "command measures production's hybrid RRF arm, archived as `retrieval-hybrid`."
+        ),
+    )
     args = parser.parse_args(argv)
+
+    if args.dense:
+        # Refused rather than ignored, as below: `--dense` names the plain run's
+        # arm, and beside any other mode it would either do nothing or change
+        # what that mode compares.
+        others = [
+            flag
+            for flag, selected in (
+                ("--compare-embedders", args.compare_embedders),
+                ("--compare-arms", args.compare_arms),
+                ("--compare-depths", args.compare_depths),
+                ("--compare-fusion", args.compare_fusion),
+                ("--smoke", args.smoke),
+                ("--pdf-check", args.pdf_check),
+                ("--contention", args.contention),
+                ("--workspace-gate", args.workspace_gate),
+                ("--dedup", args.dedup),
+                ("--ranking", args.ranking),
+            )
+            if selected
+        ]
+        if others:
+            parser.error(f"--dense only means something on its own, not with {others[0]}")
 
     if args.recompute_dense and not args.ranking:
         parser.error("--recompute-dense only means something with --ranking")
@@ -1755,6 +1798,7 @@ def main(argv: list[str] | None = None) -> int:
                 compare_arms=args.compare_arms,
                 compare_depths=args.compare_depths,
                 compare_fusion=args.compare_fusion,
+                dense=args.dense,
             )
         )
         print(_render(report))
@@ -1777,10 +1821,13 @@ def main(argv: list[str] | None = None) -> int:
                     ("fusion", args.compare_fusion),
                     ("arms", args.compare_arms),
                     ("compare", args.compare_embedders),
+                    # The dense baseline keeps the kind the plain run had before
+                    # D174, so its series continues unbroken.
+                    ("retrieval", args.dense),
                 )
                 if selected
             ),
-            "retrieval",
+            "retrieval-hybrid",
         )
         path = args.report_dir / f"{kind}-{stamp}.json"
         path.write_text(report.to_json() + "\n", encoding="utf-8")
