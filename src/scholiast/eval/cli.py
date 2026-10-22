@@ -38,6 +38,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from scholiast.config.settings import get_settings
+from scholiast.eval.answerability import candidate_sheet, sheet_json, sheet_markdown
 from scholiast.eval.contention import (
     DEFAULT_REPEATS,
     Condition,
@@ -119,6 +120,9 @@ if TYPE_CHECKING:
 #: across milestones is itself a deliverable, and it cannot exist if each run
 #: destroys the last.
 DEFAULT_REPORT_DIR = Path("var/eval")
+#: Where `--withheld-sheet` writes D177's hand-check sheet: gitignored, like the
+#: reports, because it is generated from the vendored snapshot.
+DEFAULT_SHEET_DIR = Path("var/labelling")
 
 #: Where D68's fetched PDFs live. Under `var/` so the repository never carries
 #: third-party papers, and cached so a re-run costs arXiv nothing.
@@ -1713,6 +1717,21 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--withheld-sheet",
+        action="store_true",
+        help=(
+            "write D177's withheld-paper candidates, each with its scope's titles and "
+            "abstracts, as the sheet the hand-check is done on. Scores nothing and "
+            "archives nothing."
+        ),
+    )
+    parser.add_argument(
+        "--sheet-dir",
+        type=Path,
+        default=DEFAULT_SHEET_DIR,
+        help=f"where --withheld-sheet writes (default: {DEFAULT_SHEET_DIR})",
+    )
+    parser.add_argument(
         "--dense",
         action="store_true",
         help=(
@@ -1740,11 +1759,27 @@ def main(argv: list[str] | None = None) -> int:
                 ("--workspace-gate", args.workspace_gate),
                 ("--dedup", args.dedup),
                 ("--ranking", args.ranking),
+                ("--withheld-sheet", args.withheld_sheet),
             )
             if selected
         ]
         if others:
             parser.error(f"--dense only means something on its own, not with {others[0]}")
+
+    if args.withheld_sheet:
+        # D177's hand-check input, not a result: nothing is scored, so nothing is
+        # archived, and the sheet's own hash is what a label file must quote.
+        rows = load_snapshot()
+        entries = candidate_sheet(rows, build_dret(rows))
+        body = sheet_json(entries)
+        digest = json.loads(body)["sheet_sha256"]
+        args.sheet_dir.mkdir(parents=True, exist_ok=True)
+        (args.sheet_dir / "d177-withheld-candidates.json").write_text(body + "\n", encoding="utf-8")
+        (args.sheet_dir / "d177-withheld-candidates.md").write_text(
+            sheet_markdown(entries, sheet_sha256=digest) + "\n", encoding="utf-8"
+        )
+        print(f"{len(entries)} candidates, sheet sha256 {digest}, written to {args.sheet_dir}")
+        return 0
 
     if args.recompute_dense and not args.ranking:
         parser.error("--recompute-dense only means something with --ranking")
