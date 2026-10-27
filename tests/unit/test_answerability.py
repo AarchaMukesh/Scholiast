@@ -8,6 +8,8 @@ fails here first.
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 from pathlib import Path
 from typing import Any
@@ -206,3 +208,196 @@ class TestTheSheet:
     def test_dense_beside_the_sheet_is_refused(self, tmp_path: Path) -> None:
         with pytest.raises(SystemExit):
             cli.main(["--dense", "--withheld-sheet", "--sheet-dir", str(tmp_path)])
+
+
+# --- step 2: verdicts and the versioned sets --------------------------------------
+
+
+@pytest.fixture(scope="module")
+def sheet(rows: list[dict[str, Any]], dataset: DRet) -> dict[str, Any]:
+    result: dict[str, Any] = json.loads(sets.sheet_json(sets.candidate_sheet(rows, dataset)))
+    return result
+
+
+def verdict_csv(sheet: dict[str, Any], overrides: dict[int, dict[str, str]] | None = None) -> str:
+    """A completed verdict file: every candidate `keep`, then any row overridden."""
+    out = io.StringIO()
+    writer = csv.writer(out, lineterminator="\r\n")
+    writer.writerow(sets.VERDICT_COLUMNS)
+    for number, candidate in enumerate(sheet["candidates"], start=1):
+        row = {
+            "number": str(number),
+            "question_id": candidate["question_id"],
+            "split": candidate["split"],
+            "question": candidate["question"],
+            "verdict": "keep",
+            "note": "",
+            "sheet_sha256": sheet["sheet_sha256"],
+        }
+        row |= (overrides or {}).get(number, {})
+        writer.writerow([row[column] for column in sets.VERDICT_COLUMNS])
+    return "\ufeff" + out.getvalue()
+
+
+def problems_of(text: str, sheet: dict[str, Any]) -> tuple[str, ...]:
+    with pytest.raises(sets.VerdictFileInvalid) as refused:
+        sets.read_verdicts(text, sheet)
+    return refused.value.problems
+
+
+class TestTheVerdictsMustMatchTheSheetExactly:
+    def test_a_complete_file_is_read_with_its_bom(self, sheet: dict[str, Any]) -> None:
+        verdicts = sets.read_verdicts(verdict_csv(sheet), sheet)
+        assert len(verdicts) == 100 and {v.verdict for v in verdicts} == {"keep"}
+
+    def test_a_verdict_spelled_differently_is_refused_not_repaired(
+        self, sheet: dict[str, Any]
+    ) -> None:
+        # " Keep" means keep to a person and nothing to a rule; repairing it would
+        # be a label nobody made.
+        found = problems_of(verdict_csv(sheet, {5: {"verdict": "Keep"}}), sheet)
+        assert any("row 5: verdict 'Keep'" in p for p in found)
+
+    def test_an_exclusion_naming_a_paper_outside_its_scope_is_refused(
+        self, sheet: dict[str, Any]
+    ) -> None:
+        # What the owner's first pass did on four rows: the note named the
+        # question's own paper, seen in another candidate's scope.
+        own_elsewhere = sheet["candidates"][1]["scope"][0]["paper_id"]
+        mine = {p["paper_id"] for p in sheet["candidates"][0]["scope"]}
+        assert own_elsewhere not in mine
+        override = {1: {"verdict": "exclude (ii)", "note": own_elsewhere}}
+        found = problems_of(verdict_csv(sheet, override), sheet)
+        assert any("names no paper from its scope" in p for p in found)
+        assert any("outside its scope" in p for p in found)
+
+    def test_an_exclusion_naming_its_own_scope_paper_is_accepted(
+        self, sheet: dict[str, Any]
+    ) -> None:
+        mine = sheet["candidates"][0]["scope"][3]["paper_id"]
+        override = {1: {"verdict": "exclude (ii)", "note": f"covered by {mine}"}}
+        verdicts = sets.read_verdicts(verdict_csv(sheet, override), sheet)
+        assert verdicts[0].verdict == "exclude (ii)" and verdicts[0].note == f"covered by {mine}"
+
+    @pytest.mark.parametrize(
+        ("override", "column"),
+        [
+            ({"question": "an edited question"}, "question"),
+            ({"sheet_sha256": "0" * 64}, "sheet_sha256"),
+            ({"split": "train"}, "split"),
+            ({"question_id": "someone-else"}, "question_id"),
+        ],
+    )
+    def test_a_row_that_differs_from_the_sheet_is_refused(
+        self, sheet: dict[str, Any], override: dict[str, str], column: str
+    ) -> None:
+        row = next(i for i, c in enumerate(sheet["candidates"], 1) if c["split"] == "eval")
+        found = problems_of(verdict_csv(sheet, {row: override}), sheet)
+        assert any(f"row {row}: {column}" in p for p in found)
+
+    def test_a_missing_row_is_refused(self, sheet: dict[str, Any]) -> None:
+        lines = verdict_csv(sheet).split("\r\n")
+        short = "\r\n".join([*lines[:-2], ""])
+        assert any("99 rows" in p for p in problems_of(short, sheet))
+
+    def test_every_problem_is_reported_at_once(self, sheet: dict[str, Any]) -> None:
+        override = {2: {"verdict": "skip"}, 7: {"verdict": "KEEP"}}
+        assert len(problems_of(verdict_csv(sheet, override), sheet)) == 2
+
+    def test_a_tampered_sheet_is_refused_before_any_row_is_read(
+        self, sheet: dict[str, Any]
+    ) -> None:
+        tampered = sheet | {"candidates": sheet["candidates"][1:]}
+        assert problems_of(verdict_csv(sheet), tampered) == (
+            "the sheet's stated sha256 does not match its own candidates",
+        )
+
+
+@pytest.fixture(scope="module")
+def built(rows: list[dict[str, Any]], dataset: DRet, sheet: dict[str, Any]) -> dict[str, Any]:
+    verdicts = sets.read_verdicts(verdict_csv(sheet), sheet)
+    return sets.build_sets(rows, dataset, verdicts, sheet_sha256=sheet["sheet_sha256"])
+
+
+class TestTheVersionedSets:
+    def test_the_counts_are_d177s_with_every_candidate_kept(self, built: dict[str, Any]) -> None:
+        assert built["counts"] == {
+            "eval/answerable": 243,
+            "eval/unanswerable-qasper": 9,
+            "eval/unanswerable-withheld": 40,
+            "train/answerable": 624,
+            "train/unanswerable-qasper": 47,
+            "train/unanswerable-withheld": 60,
+        }
+        assert built["left_out"] == {"disagree": 75, "outside_dret": 7, "withheld_excluded": 0}
+        assert built["set_version"] == "d-ans-unans/1.0.0"
+
+    def test_a_withheld_entry_carries_its_scope_without_its_own_paper(
+        self, built: dict[str, Any]
+    ) -> None:
+        withheld = [q for q in built["questions"] if q["category"] == "unanswerable-withheld"]
+        for entry in withheld:
+            assert entry["withheld_paper"] == entry["paper_id"]
+            assert len(entry["scope"]) == 10 and entry["paper_id"] not in entry["scope"]
+
+    def test_an_exclusion_leaves_the_set_and_is_recorded(
+        self, rows: list[dict[str, Any]], dataset: DRet, sheet: dict[str, Any]
+    ) -> None:
+        mine = sheet["candidates"][0]["scope"][0]["paper_id"]
+        override = {1: {"verdict": "exclude (ii)", "note": mine}}
+        verdicts = sets.read_verdicts(verdict_csv(sheet, override), sheet)
+        built = sets.build_sets(rows, dataset, verdicts, sheet_sha256=sheet["sheet_sha256"])
+        assert built["counts"]["train/unanswerable-withheld"] == 59
+        (excluded,) = built["withheld_excluded"]
+        assert excluded["question_id"] == sheet["candidates"][0]["question_id"]
+        assert excluded["note"] == mine
+
+    def test_verdicts_for_other_candidates_are_refused(
+        self, rows: list[dict[str, Any]], dataset: DRet, sheet: dict[str, Any]
+    ) -> None:
+        verdicts = sets.read_verdicts(verdict_csv(sheet), sheet)
+        with pytest.raises(ValueError, match="not for this snapshot"):
+            sets.build_sets(rows, dataset, verdicts[1:], sheet_sha256=sheet["sheet_sha256"])
+
+    def test_the_written_file_loads_and_an_edited_one_is_refused(
+        self, built: dict[str, Any], tmp_path: Path
+    ) -> None:
+        path, manifest = tmp_path / "s.json", tmp_path / "s.manifest.json"
+        record = sets.write_sets(
+            built,
+            labeller="owner",
+            labelled_on="2026-10-27",
+            verdicts_sha256="v",
+            path=path,
+            manifest=manifest,
+        )
+        assert record["labeller"] == "owner" and record["counts"] == built["counts"]
+        assert sets.load_sets(path, manifest) == built
+        path.write_bytes(path.read_bytes().replace(b'"keep"', b'"kept"', 1) + b" ")
+        with pytest.raises(ValueError, match="was edited"):
+            sets.load_sets(path, manifest)
+
+    def test_the_command_builds_from_a_valid_file_and_refuses_an_invalid_one(
+        self, sheet: dict[str, Any], tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        sheet_dir = tmp_path / "labelling"
+        sheet_dir.mkdir()
+        (sheet_dir / "d177-withheld-candidates.json").write_text(json.dumps(sheet), "utf-8")
+        monkeypatch.setattr(sets, "SETS", tmp_path / "sets.json")
+        monkeypatch.setattr(sets, "SETS_MANIFEST", tmp_path / "sets.manifest.json")
+        good = tmp_path / "good.csv"
+        good.write_text(verdict_csv(sheet), encoding="utf-8")
+        argv = ["--build-sets", "--sheet-dir", str(sheet_dir), "--labeller", "owner"]
+        argv += ["--labelled-on", "2026-10-27", "--verdicts"]
+        assert cli.main([*argv, str(good)]) == 0
+        assert sets.load_sets()["counts"]["eval/unanswerable-withheld"] == 40
+        bad = tmp_path / "bad.csv"
+        bad.write_text(verdict_csv(sheet, {3: {"verdict": "maybe"}}), encoding="utf-8")
+        (tmp_path / "sets.json").unlink()
+        with pytest.raises(sets.VerdictFileInvalid):
+            cli.main([*argv, str(bad)])
+        assert not (tmp_path / "sets.json").exists()
+
+    def test_the_command_needs_its_labeller_and_date(self, tmp_path: Path) -> None:
+        with pytest.raises(SystemExit):
+            cli.main(["--build-sets", "--verdicts", str(tmp_path / "x.csv")])

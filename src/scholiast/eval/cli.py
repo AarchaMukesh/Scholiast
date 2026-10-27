@@ -38,7 +38,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from scholiast.config.settings import get_settings
-from scholiast.eval.answerability import candidate_sheet, sheet_json, sheet_markdown
+from scholiast.eval.answerability import (
+    build_sets,
+    candidate_sheet,
+    read_verdicts,
+    sheet_json,
+    sheet_markdown,
+    write_sets,
+)
 from scholiast.eval.contention import (
     DEFAULT_REPEATS,
     Condition,
@@ -1732,6 +1739,21 @@ def main(argv: list[str] | None = None) -> int:
         help=f"where --withheld-sheet writes (default: {DEFAULT_SHEET_DIR})",
     )
     parser.add_argument(
+        "--build-sets",
+        action="store_true",
+        help=(
+            "build D177's versioned answerability sets from the hand-check's verdicts "
+            "(--verdicts), refusing any row that does not match the sheet. Scores nothing."
+        ),
+    )
+    parser.add_argument(
+        "--verdicts", type=Path, help="with --build-sets, the labeller's completed CSV"
+    )
+    parser.add_argument("--labeller", help="with --build-sets, who labelled the candidates")
+    parser.add_argument(
+        "--labelled-on", help="with --build-sets, the date the labels were made (YYYY-MM-DD)"
+    )
+    parser.add_argument(
         "--dense",
         action="store_true",
         help=(
@@ -1760,11 +1782,30 @@ def main(argv: list[str] | None = None) -> int:
                 ("--dedup", args.dedup),
                 ("--ranking", args.ranking),
                 ("--withheld-sheet", args.withheld_sheet),
+                ("--build-sets", args.build_sets),
             )
             if selected
         ]
         if others:
             parser.error(f"--dense only means something on its own, not with {others[0]}")
+
+    if args.build_sets:
+        if not (args.verdicts and args.labeller and args.labelled_on):
+            parser.error("--build-sets needs --verdicts, --labeller and --labelled-on")
+        sheet_path = args.sheet_dir / "d177-withheld-candidates.json"
+        sheet = json.loads(sheet_path.read_text(encoding="utf-8"))
+        raw = args.verdicts.read_bytes()
+        verdicts = read_verdicts(raw.decode("utf-8"), sheet)
+        rows = load_snapshot()
+        sets = build_sets(rows, build_dret(rows), verdicts, sheet_sha256=sheet["sheet_sha256"])
+        record = write_sets(
+            sets,
+            labeller=args.labeller,
+            labelled_on=args.labelled_on,
+            verdicts_sha256=hashlib.sha256(raw).hexdigest(),
+        )
+        print(f"{record['set_version']}: {record['counts']}, sha256 {record['sha256']}")
+        return 0
 
     if args.withheld_sheet:
         # D177's hand-check input, not a result: nothing is scored, so nothing is

@@ -27,11 +27,15 @@ D177's own, so no draw here can coincide with the gate's.
 
 from __future__ import annotations
 
+import csv
 import hashlib
+import io
 import json
+import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
+from pathlib import Path
 from typing import Any
 
 from scholiast.eval.dret import DRet, Split
@@ -292,3 +296,232 @@ def sheet_markdown(entries: Sequence[SheetEntry], *, sheet_sha256: str) -> str:
             lines.append(f"- **{paper.title}** (`{paper.paper_id}`): {abstract}")
         lines.append("")
     return "\n".join(lines)
+
+
+# --- step 2: the owner's verdicts, and the versioned sets ---------------------------
+
+#: Where the sets live once built: plain JSON beside its manifest, like the dedup
+#: fixture, so a change to one label is a readable diff.
+ROOT = Path(__file__).resolve().parents[3]
+SETS = ROOT / "data" / "eval" / "d-ans-unans.json"
+SETS_MANIFEST = ROOT / "data" / "eval" / "d-ans-unans.manifest.json"
+#: The verdict file's columns, as `eval --withheld-sheet`'s template wrote them.
+VERDICT_COLUMNS: tuple[str, ...] = (
+    "number",
+    "question_id",
+    "split",
+    "question",
+    "verdict",
+    "note",
+    "sheet_sha256",
+)
+_ARXIV_ID = re.compile(r"\d{4}\.\d{4,5}")
+
+
+class Category(StrEnum):
+    ANSWERABLE = "answerable"
+    UNANSWERABLE_QASPER = "unanswerable-qasper"
+    UNANSWERABLE_WITHHELD = "unanswerable-withheld"
+
+
+class VerdictFileInvalid(ValueError):
+    """The verdict file does not match the sheet it claims to judge. Every problem is listed."""
+
+    def __init__(self, problems: Sequence[str]) -> None:
+        self.problems = tuple(problems)
+        super().__init__(f"{len(problems)} problem(s): " + "; ".join(problems[:10]))
+
+
+@dataclass(frozen=True, slots=True)
+class Verdict:
+    question_id: str
+    verdict: str
+    note: str
+
+
+def read_verdicts(text: str, sheet: Mapping[str, Any]) -> list[Verdict]:
+    """The labeller's verdicts, refused unless every row matches the sheet exactly.
+
+    Nothing is normalised: a verdict that is not exactly one of `VERDICTS`, a row out
+    of the sheet's order, a question whose text was edited, or a hash from another
+    sheet is a problem to report, not something to repair - a repaired label is one
+    nobody made. `exclude (ii)` must name a paper from that candidate's own scope
+    and no other (D177's clarification). All problems are collected before raising,
+    so one pass shows everything that needs the labeller's attention.
+    """
+    candidates = sheet["candidates"]
+    digest = sheet["sheet_sha256"]
+    recomputed = hashlib.sha256(json.dumps(candidates, sort_keys=True).encode("utf-8")).hexdigest()
+    if recomputed != digest:
+        raise VerdictFileInvalid(["the sheet's stated sha256 does not match its own candidates"])
+    reader = csv.reader(io.StringIO(text.removeprefix("\ufeff"), newline=""))
+    header = next(reader, None)
+    problems: list[str] = []
+    if header is None or tuple(header) != VERDICT_COLUMNS:
+        problems.append(f"header is {header}, expected {list(VERDICT_COLUMNS)}")
+    rows = [row for row in reader if any(cell.strip() for cell in row)]
+    if len(rows) != len(candidates):
+        problems.append(f"{len(rows)} rows, the sheet has {len(candidates)} candidates")
+    verdicts: list[Verdict] = []
+    for number, (row, candidate) in enumerate(zip(rows, candidates, strict=False), start=1):
+        where = f"row {number}"
+        if len(row) != len(VERDICT_COLUMNS):
+            problems.append(f"{where}: {len(row)} columns")
+            continue
+        fields = dict(zip(VERDICT_COLUMNS, row, strict=True))
+        expected = {
+            "number": str(number),
+            "question_id": candidate["question_id"],
+            "split": candidate["split"],
+            "question": candidate["question"],
+            "sheet_sha256": digest,
+        }
+        for column, value in expected.items():
+            if fields[column] != value:
+                problems.append(f"{where}: {column} {fields[column]!r} does not match the sheet")
+        verdict, note = fields["verdict"], fields["note"]
+        if verdict not in VERDICTS:
+            problems.append(f"{where}: verdict {verdict!r} is not exactly one of {list(VERDICTS)}")
+        if verdict == "exclude (ii)":
+            scope = {paper["paper_id"] for paper in candidate["scope"]}
+            named = set(_ARXIV_ID.findall(note))
+            if not named & scope:
+                problems.append(f"{where}: exclude (ii) names no paper from its scope")
+            if named - scope:
+                problems.append(
+                    f"{where}: exclude (ii) names {sorted(named - scope)}, outside its scope"
+                )
+        verdicts.append(Verdict(candidate["question_id"], verdict, note))
+    if problems:
+        raise VerdictFileInvalid(problems)
+    return verdicts
+
+
+def build_sets(
+    rows: Sequence[Mapping[str, Any]],
+    dataset: DRet,
+    verdicts: Sequence[Verdict],
+    *,
+    sheet_sha256: str,
+) -> dict[str, Any]:
+    """D177's sets: every labelled question, by category, with what was left out.
+
+    A withheld question appears twice by design: once as `answerable` (asked beside
+    its own paper) and once as `unanswerable-withheld` (asked in the hashed scope
+    that omits it). Each entry is keyed by question and category, and a withheld
+    entry carries its scope, so scoring needs nothing but this file and the corpus.
+    """
+    labelled = label_questions(rows, dataset)
+    candidates = withheld_candidates(labelled)
+    by_id = {verdict.question_id: verdict for verdict in verdicts}
+    if [c.question_id for c in candidates] != [v.question_id for v in verdicts]:
+        raise ValueError("the verdicts are not for this snapshot's withheld candidates")
+    papers = sorted(dataset.papers)
+    entries: list[dict[str, Any]] = []
+    for question in labelled.questions:
+        if question.label is Answerability.DISAGREE:
+            continue
+        category = (
+            Category.ANSWERABLE
+            if question.label is Answerability.ANSWERABLE
+            else Category.UNANSWERABLE_QASPER
+        )
+        entries.append(_entry(question, category))
+    excluded: list[dict[str, Any]] = []
+    for candidate in candidates:
+        verdict = by_id[candidate.question_id]
+        scope = list(withheld_scope(candidate.question_id, candidate.paper_id, papers))
+        if verdict.verdict == "keep":
+            entry = _entry(candidate, Category.UNANSWERABLE_WITHHELD)
+            entry |= {"withheld_paper": candidate.paper_id, "scope": scope}
+            entries.append(entry)
+        else:
+            excluded.append(
+                {
+                    "question_id": candidate.question_id,
+                    "verdict": verdict.verdict,
+                    "note": verdict.note,
+                    "scope": scope,
+                }
+            )
+    entries.sort(key=lambda e: (e["split"], e["category"], e["question_id"]))
+    counts: dict[str, int] = {}
+    for entry in entries:
+        key = f"{entry['split']}/{entry['category']}"
+        counts[key] = counts.get(key, 0) + 1
+    return {
+        "set_version": SET_VERSION,
+        "decision": "D177",
+        "sheet_sha256": sheet_sha256,
+        "counts": dict(sorted(counts.items())),
+        "left_out": {
+            "disagree": sum(q.label is Answerability.DISAGREE for q in labelled.questions),
+            "outside_dret": labelled.outside_dret,
+            "withheld_excluded": len(excluded),
+        },
+        "withheld_excluded": excluded,
+        "questions": entries,
+    }
+
+
+def _entry(question: LabelledQuestion, category: Category) -> dict[str, Any]:
+    return {
+        "question_id": question.question_id,
+        "paper_id": question.paper_id,
+        "split": question.split.name.lower(),
+        "category": category.value,
+        "question": question.text,
+    }
+
+
+def write_sets(
+    sets: Mapping[str, Any],
+    *,
+    labeller: str,
+    labelled_on: str,
+    verdicts_sha256: str,
+    path: Path | None = None,
+    manifest: Path | None = None,
+) -> dict[str, Any]:
+    """Write the sets and their manifest; return the manifest.
+
+    The paths default to `SETS` and `SETS_MANIFEST`, read at call time so a test
+    can point them elsewhere.
+    """
+    path = SETS if path is None else path
+    manifest = SETS_MANIFEST if manifest is None else manifest
+    body = json.dumps(sets, indent=1, sort_keys=True, ensure_ascii=False) + "\n"
+    data = body.encode("utf-8")
+    path.write_bytes(data)
+    record = {
+        "dataset": "scholiast-m5-answerability",
+        "set_version": sets["set_version"],
+        "decision": "D177",
+        "file": path.name,
+        "sha256": hashlib.sha256(data).hexdigest(),
+        "bytes": len(data),
+        "counts": sets["counts"],
+        "left_out": sets["left_out"],
+        "derived_from": "data/eval/qasper-validation.json.gz, labels from its annotators",
+        "licence": "CC BY 4.0 (derived from QASPER)",
+        "sheet_sha256": sets["sheet_sha256"],
+        "verdicts_sha256": verdicts_sha256,
+        "labeller": labeller,
+        "labelled_on": labelled_on,
+    }
+    manifest.write_text(json.dumps(record, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    return record
+
+
+def load_sets(path: Path | None = None, manifest: Path | None = None) -> dict[str, Any]:
+    """The sets, refused unless they are byte-for-byte the file the manifest records."""
+    path = SETS if path is None else path
+    manifest = SETS_MANIFEST if manifest is None else manifest
+    data = path.read_bytes()
+    record = json.loads(manifest.read_text(encoding="utf-8"))
+    if hashlib.sha256(data).hexdigest() != record["sha256"]:
+        raise ValueError(f"{path.name} does not match its manifest's sha256; it was edited")
+    sets: dict[str, Any] = json.loads(data.decode("utf-8"))
+    if sets["set_version"] != SET_VERSION:
+        raise ValueError(f"{path.name} is {sets['set_version']}, this code reads {SET_VERSION}")
+    return sets
