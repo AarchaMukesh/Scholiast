@@ -15,7 +15,7 @@ cache, the SSRF-guarded PDF fetcher, add-by-identifier through `backfill`, a rul
 dedup, a fitted ranker that explains every score, and a UI that logs in again. **1929
 tests, five gates green** at M4's close. M5, grounding and comparison, is under way:
 **phase 1 (the abstention threshold τ) is scored and adopted nothing** (D177, D178), and
-phase 2, the model's own refusals and groundedness, is next.
+phase 2, the model's own refusals and groundedness, is pre-registered as D179 and in progress.
 
 **Read `docs/milestone-logs/M4-MILESTONE-LOG.md` before starting M5**, then M3's and M2's.
 Milestone logs are the only tracked files under `docs/` (D67), and each one's "what this
@@ -82,7 +82,7 @@ after seeing the result was considered and rejected.
 
 ## Read this first
 
-**`docs/00-decisions-log.md` is the source of truth.** D1–D178, and several *reverse*
+**`docs/00-decisions-log.md` is the source of truth.** D1–D179, and several *reverse*
 what the earlier design docs say — including two that reverse *other decisions*.
 Reading doc 5, 6 or 7 without the log will lead you to recommend things already
 measured against:
@@ -120,7 +120,7 @@ measurements against a specific commit, so it belongs in history with it.
 
 | File | What it holds |
 |---|---|
-| `docs/00-decisions-log.md` | D1–D178 + measured hardware baseline. **Start here.** |
+| `docs/00-decisions-log.md` | D1–D179 + measured hardware baseline. **Start here.** |
 | `docs/milestone-logs/M4-MILESTONE-LOG.md` | M4's close-out: 6/7 criteria as written and **1 not met (NFR-P1 cold) with its cause measured**, its defects and what found them, 305 mutations, debt to M5/M6 |
 | `SPIKE-FINDINGS-M4.md` · `spike/m4-protocol.json` | M4's live-source spike and its pre-registered addenda A1–A5 and A6-multiday, with their results under `spike/results/`. The spike findings write up the spike, A1 and A2; A3 and A4 are reported in the M4 log, A5 and A6-multiday in its §3 addendum (D163, D169) |
 | `docs/milestone-logs/M3-MILESTONE-LOG.md` | M3's close-out: 7/8 criteria as written and 1 amended with cause, 15 defects and what found them, 96 mutations, debt to M4/M6 |
@@ -166,12 +166,15 @@ uv run eval --pdf-check          # D68's real-PDF validity check — fetches fro
 uv run eval --smoke              # FR-E6's CI gate; exits 1 on a regression (D82)
 uv run eval --workspace-gate     # D167's gate, fixed by D168: hybrid vs dense on workspace-sized scopes
 uv run eval --abstention         # D177: tau's three signals on d-ans-unans/1.0.0; adopted nothing (D178)
+uv run eval --answers --dev      # D179: production's answers to the 167 train questions the rules are built on
 ```
 
 Reruns are cheap: a complete collection is never rebuilt, and the PDF cache is reused.
 `--abstention` resumes from `var/eval/abstention-progress-<id>.jsonl`, whose identity
 covers the sets, collection and model versions but **not the code**: delete it before
-rerunning after a code change, or it reuses rows the old code scored.
+rerunning after a code change, or it reuses rows the old code scored. `--answers`
+works the same way, and **plain `--answers` (the eval split) refuses to run** until D179's
+two rules are frozen in code: eval answers must not exist before the rules that read them.
 **Never point a gated embedder at the eval collection** — it re-batches and perturbs fp16
 vectors (D74), which is why `--contention` refuses to build one.
 

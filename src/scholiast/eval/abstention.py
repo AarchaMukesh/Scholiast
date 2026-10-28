@@ -43,7 +43,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from fractions import Fraction
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from scholiast.application.ports.ml import TextRole
 from scholiast.application.ports.vector import VectorIndex
@@ -294,8 +294,14 @@ def read_progress(path: Path) -> dict[str, Scored]:
     return rows
 
 
+class ProgressRow(Protocol):
+    """What a progress file holds a line of: phase 1's scores, phase 2's answers."""
+
+    def to_json(self) -> dict[str, Any]: ...
+
+
 @contextmanager
-def progress_writer(path: Path) -> Iterator[Callable[[Scored], None]]:
+def progress_writer(path: Path) -> Iterator[Callable[[ProgressRow], None]]:
     """A sink that appends each row to `path` and flushes it before returning.
 
     Synchronous on purpose: the run scores one instance at a time, so nothing else
@@ -304,7 +310,7 @@ def progress_writer(path: Path) -> Iterator[Callable[[Scored], None]]:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
 
-        def sink(row: Scored) -> None:
+        def sink(row: ProgressRow) -> None:
             handle.write(json.dumps(row.to_json(), sort_keys=True) + "\n")
             handle.flush()
 
