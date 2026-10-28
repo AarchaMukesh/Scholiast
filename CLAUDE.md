@@ -13,7 +13,9 @@ the §4.4.1 failure taxonomy, cascade deletion, a circuit breaker, observability
 limiting. M4 is the discovery engine: OpenAlex and arXiv under one deadline, per-user page
 cache, the SSRF-guarded PDF fetcher, add-by-identifier through `backfill`, a rules-first
 dedup, a fitted ranker that explains every score, and a UI that logs in again. **1929
-tests, five gates green.** M5 is next: grounding and comparison.
+tests, five gates green** at M4's close. M5, grounding and comparison, is under way:
+**phase 1 (the abstention threshold τ) is scored and adopted nothing** (D177, D178), and
+phase 2, the model's own refusals and groundedness, is next.
 
 **Read `docs/milestone-logs/M4-MILESTONE-LOG.md` before starting M5**, then M3's and M2's.
 Milestone logs are the only tracked files under `docs/` (D67), and each one's "what this
@@ -64,11 +66,23 @@ negative.** Do not re-argue any of these — they cost a phase each:
   2.1× faster (D71). **Weighted fusion ties RRF** with the weight fitted on the train
   split (D76). Neither changed production.
 
+**M5 phase 1 adopted no abstention threshold (D178), by a rule fixed before any score
+was read (D177 and its three clarifications). Do not re-argue it.** No retrieval signal
+reaches answer recall 0.50 at a train false-answer rate of at most 0.10: the
+cross-encoder's top score is best at **0.316**, dense 0.277, lexical 0.238. The cause is
+measured: no score separates QASPER's unanswerable questions from answerable ones (AUC
+0.48–0.67, lexical at chance), because QASPER's "unanswerable" usually means the paper
+discusses the topic without answering it; questions about a withheld paper separate
+better (AUC 0.60–0.79). So production keeps **D60's structural refusal only**: no production
+path calls `should_abstain`, and abstention moves to the model's own refusals in phase 2,
+which needs its own pre-registration. Lowering the floor or loosening the constraint
+after seeing the result was considered and rejected.
+
 ---
 
 ## Read this first
 
-**`docs/00-decisions-log.md` is the source of truth.** D1–D176, and several *reverse*
+**`docs/00-decisions-log.md` is the source of truth.** D1–D178, and several *reverse*
 what the earlier design docs say — including two that reverse *other decisions*.
 Reading doc 5, 6 or 7 without the log will lead you to recommend things already
 measured against:
@@ -106,7 +120,7 @@ measurements against a specific commit, so it belongs in history with it.
 
 | File | What it holds |
 |---|---|
-| `docs/00-decisions-log.md` | D1–D176 + measured hardware baseline. **Start here.** |
+| `docs/00-decisions-log.md` | D1–D178 + measured hardware baseline. **Start here.** |
 | `docs/milestone-logs/M4-MILESTONE-LOG.md` | M4's close-out: 6/7 criteria as written and **1 not met (NFR-P1 cold) with its cause measured**, its defects and what found them, 305 mutations, debt to M5/M6 |
 | `SPIKE-FINDINGS-M4.md` · `spike/m4-protocol.json` | M4's live-source spike and its pre-registered addenda A1–A5 and A6-multiday, with their results under `spike/results/`. The spike findings write up the spike, A1 and A2; A3 and A4 are reported in the M4 log, A5 and A6-multiday in its §3 addendum (D163, D169) |
 | `docs/milestone-logs/M3-MILESTONE-LOG.md` | M3's close-out: 7/8 criteria as written and 1 amended with cause, 15 defects and what found them, 96 mutations, debt to M4/M6 |
@@ -151,9 +165,13 @@ uv run eval --contention         # rerank latency with the GPU gate on and off (
 uv run eval --pdf-check          # D68's real-PDF validity check — fetches from arXiv
 uv run eval --smoke              # FR-E6's CI gate; exits 1 on a regression (D82)
 uv run eval --workspace-gate     # D167's gate, fixed by D168: hybrid vs dense on workspace-sized scopes
+uv run eval --abstention         # D177: tau's three signals on d-ans-unans/1.0.0; adopted nothing (D178)
 ```
 
 Reruns are cheap: a complete collection is never rebuilt, and the PDF cache is reused.
+`--abstention` resumes from `var/eval/abstention-progress-<id>.jsonl`, whose identity
+covers the sets, collection and model versions but **not the code**: delete it before
+rerunning after a code change, or it reuses rows the old code scored.
 **Never point a gated embedder at the eval collection** — it re-batches and perturbs fp16
 vectors (D74), which is why `--contention` refuses to build one.
 
@@ -214,7 +232,7 @@ Every one of these cost real time in M0 or M1. Do not rediscover them.
 |---|---|
 | **`uv pip install` targets the wrong Python** | Always pass `--python .venv\Scripts\python.exe`, or it silently installs into the system interpreter |
 | **`datasets` breaks the ML stack** | A Windows Application Control policy blocks pyarrow's `_dataset` DLL, and `sentence-transformers` imports `datasets` at module load. **Do not install it** (D25). QASPER is therefore vendored as plain JSON (D20) — done in M2 phase 1: `data/eval/qasper-validation.json.gz`, 281 papers, with a manifest. Its text is LaTeX-derived, which matters more than it sounds; see the `BIBREF` row below. |
-| **⚠️ Smart App Control can block compiled extensions without warning — it has taken gates 3 and 4 down before (D72)** | Windows SAC is *enforced* (`VerifiedAndReputablePolicyState = 1`) and judges unsigned native DLLs by **reputation, which can change while the files stay byte-identical**. Pinning `grimp<3.15` dodged an earlier block on 3.15 but is not a fix: on 2026-09-16 SAC blocked 3.14's `_rustgrimp` too (killing `lint-imports`, **gate 4**) and mypy's `__mypyc` .pyd (**gate 3**), and D72 records one-off `torch` and `grpc._cython.cygrpc` load failures. **The block then lifted on its own** — no block logged after 11:13 that day, and all five gates ran green that evening — **but it can recur at any time.** If gate 3 or 4 dies loading a DLL, check Code Integrity event **3077** (`Microsoft-Windows-CodeIntegrity/Operational`) before debugging anything else. **Reinstalling cannot help**: the installed `_rustgrimp` matches its wheel's RECORD hash, so a reinstall rewrites bytes SAC has already judged. **A module-level route sometimes works, so try it before giving up**: during the M2 phase 6 recurrence the `lint-imports` LAUNCHER was blocked while `grimp._rustgrimp` imported fine, and `importlinter.cli:lint_imports_command` ran the same three contracts in-process. D72's earlier claim that every route is blocked by one DLL is false in general. **"Five gates green" is a claim about a run, not the machine**: make it only when all five ran and passed in that session, and never rewrite the layering acceptance tests to route around a block. Options are recorded in D72; none is taken. CI's containerized Linux path is unaffected |
+| **⚠️ Smart App Control can block compiled extensions without warning — it has taken gates 3 and 4 down before (D72)** | Windows SAC is *enforced* (`VerifiedAndReputablePolicyState = 1`) and judges unsigned native DLLs by **reputation, which can change while the files stay byte-identical**. Pinning `grimp<3.15` dodged an earlier block on 3.15 but is not a fix: on 2026-09-16 SAC blocked 3.14's `_rustgrimp` too (killing `lint-imports`, **gate 4**) and mypy's `__mypyc` .pyd (**gate 3**), and D72 records one-off `torch` and `grpc._cython.cygrpc` load failures. **The block then lifted on its own** — no block logged after 11:13 that day, and all five gates ran green that evening — **but it can recur at any time.** If gate 3 or 4 dies loading a DLL, check Code Integrity event **3077** (`Microsoft-Windows-CodeIntegrity/Operational`) before debugging anything else. **Reinstalling cannot help**: the installed `_rustgrimp` matches its wheel's RECORD hash, so a reinstall rewrites bytes SAC has already judged. **A module-level route sometimes works, so try it before giving up**: during the M2 phase 6 recurrence the `lint-imports` LAUNCHER was blocked while `grimp._rustgrimp` imported fine, and `importlinter.cli:lint_imports_command` ran the same three contracts in-process. D72's earlier claim that every route is blocked by one DLL is false in general. **"Five gates green" is a claim about a run, not the machine**: make it only when all five ran and passed in that session, and never rewrite the layering acceptance tests to route around a block. Options are recorded in D72; none is taken. **On 2026-10-28 it blocked uv's `eval` launcher** (os error 4551); `python -m scholiast.eval.cli`, the same `main`, ran D178's scoring. CI's containerized Linux path is unaffected |
 | **A model download is a network call** | Tests that load a real encoder must skip unless it is already in the local HF cache. `bge-base` is 419 MB, and NFR-T3 requires the default test run to make **zero** network calls. A warm cache on the dev machine hides this completely — CI is where it bites |
 | **Alembic does not compare CHECK constraints** | Neither `--autogenerate` nor `alembic check` sees them. Write them by hand in the migration and cover each with an *attempted violation* — a constraint that silently failed to be created looks identical to one that works |
 | **GROBID nests nothing** | `<figure>` is a **sibling** of `<div>` under `<body>`, never inside it, and the body has zero nested divs. Looking for tables inside a div finds exactly zero and raises nothing; section hierarchy comes from `head/@n` numbering |
