@@ -38,9 +38,26 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from scholiast.config.settings import get_settings
+from scholiast.domain.lexical import LEXICAL_VERSION
+from scholiast.eval import answerability
+from scholiast.eval.abstention import (
+    ABSTENTION_VERSION,
+    REPRODUCE_SAMPLE,
+    WITHHELD_SIZES,
+    analyse,
+    instances,
+    largest_differences,
+    progress_writer,
+    read_progress,
+    reproduce_sample,
+    score_all,
+    score_one,
+)
+from scholiast.eval.abstention import RULE as ABSTENTION_RULE
 from scholiast.eval.answerability import (
     build_sets,
     candidate_sheet,
+    load_sets,
     read_verdicts,
     sheet_json,
     sheet_markdown,
@@ -1508,6 +1525,207 @@ def _render_gate(report: EvalReport) -> str:
     return "\n".join(out)
 
 
+async def run_abstention(
+    *, reference: Path = GATE_REPRODUCES, progress_dir: Path = DEFAULT_REPORT_DIR
+) -> EvalReport:
+    """D177's scoring: three non-fused signals for every instance, then the fixed rule.
+
+    **Read-only against Qdrant**, under the gate's checks (D177, clarified
+    2026-10-28):
+
+    1. The collection names and the embedder version are checked against the ones
+       M2's archive records, before any Qdrant call.
+    2. The hybrid collection, which serves all three signals as production's
+       hybrid path does, must hold every D-RET chunk by `existing_count`, which
+       only reads. A missing or partial collection is refused, never built.
+
+    No LLM is called and no gated embedder is built (D74). Rows are written to a
+    progress file as they are scored, one file per identity (sets, collection,
+    models), so a standby costs one instance and a rerun resumes (D160).
+    """
+    archived = _load_reference(reference)
+    sets = load_sets()
+    sets_sha256 = hashlib.sha256(answerability.SETS.read_bytes()).hexdigest()
+    dataset = build_dret(load_snapshot())
+    verify_split(dataset)
+    verify_core(dataset)
+    base = next(s for s in COMPARED_EMBEDDERS if s.baseline)
+    embedder, _dense_index, dense_collection = _build_dependencies(dataset, base)
+    _, hybrid_index, hybrid_collection = _build_dependencies(dataset, base, sparse=True)
+    wrong = _identity_mismatches(
+        archived,
+        collections={"dense": dense_collection, "hybrid": hybrid_collection},
+        embedder_version=embedder.version,
+    )
+    if wrong:
+        raise ValueError(
+            "the abstention run would not read the collections M2's arms read (D177):\n  "
+            + "\n  ".join(wrong)
+        )
+    present = await hybrid_index.existing_count()
+    if present is None:
+        raise ValueError(
+            f"{hybrid_collection} does not exist. The abstention run reads the collection "
+            "M2's hybrid arm measured and never creates one (D177)."
+        )
+    if present != len(dataset.chunks):
+        raise ValueError(
+            f"{hybrid_collection} holds {present} of {len(dataset.chunks)} chunks. The "
+            "abstention run must not build it; a rebuilt collection is not M2's (D177)."
+        )
+
+    reranker = _build_reranker()
+    todo = instances(sets, dataset)
+    identity = {
+        "sets_sha256": sets_sha256,
+        "collection": hybrid_collection,
+        "embedder_version": embedder.version,
+        "reranker_version": reranker.version,
+        "lexical_version": LEXICAL_VERSION,
+        "depth": DEPTH,
+    }
+    digest = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()[:12]
+    progress = progress_dir / f"abstention-progress-{digest}.jsonl"
+    done = read_progress(progress)
+    adapters: dict[str, Any] = {
+        "dataset": dataset,
+        "index": hybrid_index,
+        "lexical": hybrid_index,
+        "embedder": embedder,
+        "reranker": reranker,
+    }
+    with progress_writer(progress) as sink:
+        rows = await score_all(todo, done=done, sink=sink, **adapters)
+    sample = reproduce_sample(todo)
+    again = [await score_one(instance, vectors={}, **adapters) for instance in sample]
+    by_key = {row.key: row for row in rows}
+    analysis = analyse(rows)
+
+    return EvalReport(
+        generated_at=datetime.now(UTC).isoformat(timespec="seconds"),
+        config={
+            "comparison": "D177's abstention signals: the top dense cosine, top lexical "
+            "score and top cross-encoder score in a scope, none fused, separating "
+            "answerable from unanswerable questions",
+            "decision": "D177 (clarified 2026-10-22 and 2026-10-28)",
+            "set_version": sets["set_version"],
+            "sets_sha256": sets_sha256,
+            "sheet_sha256": sets["sheet_sha256"],
+            "dataset_versions": dataset.versions,
+            "corpus_papers": len(dataset.papers),
+            "corpus_chunks": len(dataset.chunks),
+            **identity,
+            "abstention_version": ABSTENTION_VERSION,
+            "signals": {
+                "dense": "top cosine of the dense arm in the scope (production's, D174)",
+                "lexical": "top IDF-weighted sparse score in the scope; indexes BIBREF tokens",
+                "rerank": "top cross-encoder score over the RRF top 50; measured, not adopted",
+            },
+            "scope": {
+                "sizes": list(SIZES),
+                "deciding_size": DECIDING_SIZE,
+                "draws_per_question": DRAWS,
+                "draw": f"D168's scope_for, key {GATE_KEY!r}",
+                "withheld_sizes": list(WITHHELD_SIZES),
+                "withheld": "the hand-checked 10-paper scope, and its first 5 at size 5; "
+                "not asked at 25, where 15 papers were never checked",
+            },
+            "weights": "each instance 1/k, k its question's instances at that size",
+            "rule": ABSTENTION_RULE,
+            "reference": str(reference),
+            "progress_file": str(progress),
+            "instances": len(rows),
+            "resumed_rows": sum(1 for instance in todo if instance.key in done),
+            "llm_calls": 0,
+            "does_not_establish": [
+                "QASPER 'unanswerable' often means the paper discusses the topic "
+                "without answering it (D177)",
+                "LaTeX-derived corpus with BIBREF tokens (T12), which the lexical signal indexes",
+                "a random scope is not a real user's single-topic workspace",
+                "withheld-paper labels are one labeller's, judged on titles and abstracts",
+                "retrieval scores only: whether the model itself refuses is phase 2",
+                "eval holds 9 QASPER-unanswerable questions, so their interval is wide",
+            ],
+        },
+        blocks={
+            "verdict": analysis["verdict"],
+            "chosen": analysis["chosen"],
+            "train_fits": analysis["train_fits"],
+            "eval": analysis["eval"],
+            "sizes": analysis["sizes"],
+            "reproducibility": {
+                "instances": len(sample),
+                "of": REPRODUCE_SAMPLE,
+                "largest_abs_difference": largest_differences(
+                    [by_key[instance.key] for instance in sample], again
+                ),
+                "gated": False,
+            },
+            # Every instance's three scores, so any curve can be recomputed offline.
+            "instances": {"rows": [row.to_json() for row in rows]},
+        },
+    )
+
+
+def _render_abstention(report: EvalReport) -> str:
+    """The verdict first, then the train fits, the eval rates and the AUCs."""
+    cfg, blocks = report.config, report.blocks
+    verdict, chosen = blocks["verdict"], blocks["chosen"]
+    out = [
+        f"D177 abstention signals  ({report.generated_at})",
+        f"  sets       {cfg['set_version']}  sha256 {cfg['sets_sha256'][:16]}...",
+        f"  collection {cfg['collection']}",
+        f"  rule       {cfg['rule']}",
+        f"  instances  {cfg['instances']} ({cfg['resumed_rows']} resumed)",
+        "",
+        f"  VERDICT: {verdict['outcome']}",
+        f"    {verdict['reason']}",
+        "",
+        f"  train, N={DECIDING_SIZE}, at false-answer <= 0.10:",
+    ]
+    for signal, fit in blocks["train_fits"].items():
+        tau = "+inf (answers nothing)" if fit["answers_nothing"] else f"{fit['tau']:.4f}"
+        out.append(
+            f"    {signal:<8} tau {tau:<12} recall {fit['answer_recall']:.3f}  "
+            f"false-answer {fit['false_answer']:.3f}"
+        )
+    out += [
+        "",
+        f"  eval, N={DECIDING_SIZE}: {chosen['signal']} at its train tau, papers resampled:",
+    ]
+    for name, interval in blocks["eval"].items():
+        if name == "papers":
+            continue
+        point = "undefined" if interval["point"] is None else f"{interval['point']:.3f}"
+        ci = interval["ci95"]
+        band = "no interval" if ci is None else f"[{ci[0]:.3f}, {ci[1]:.3f}]"
+        out.append(f"    {name:<36} {point}  {band}  ({interval['undefined_resamples']} undefined)")
+    out += ["", "  AUC, pooled / qasper / withheld:"]
+    for size, block in blocks["sizes"].items():
+        tag = "[DECIDES]" if block["deciding"] else "(reported only)"
+        out.append(f"    {size} {tag}")
+        for split in ("train", "eval"):
+            for signal, numbers in block.get(split, {}).items():
+                cells = [
+                    numbers["auc"],
+                    numbers["auc/unanswerable-qasper"],
+                    numbers["auc/unanswerable-withheld"],
+                ]
+                shown = " / ".join("-" if v is None else f"{v:.3f}" for v in cells)
+                out.append(f"      {split:<5} {signal:<8} {shown}")
+    differences = blocks["reproducibility"]["largest_abs_difference"]
+    shown_differences = ", ".join(
+        f"{signal} " + ("one side empty" if value is None else f"{value:.2e}")
+        for signal, value in differences.items()
+    )
+    out += [
+        "",
+        f"  reproducibility: {blocks['reproducibility']['instances']} instances re-scored, "
+        f"largest |difference| {shown_differences}",
+    ]
+    return "\n".join(out)
+
+
 def _render_pdf_check(report: EvalReport) -> str:
     """Two builds side by side, with what each one's evidence did."""
     cfg = report.config
@@ -1754,6 +1972,16 @@ def main(argv: list[str] | None = None) -> int:
         "--labelled-on", help="with --build-sets, the date the labels were made (YYYY-MM-DD)"
     )
     parser.add_argument(
+        "--abstention",
+        action="store_true",
+        help=(
+            "D177: score the top dense, lexical and cross-encoder scores for every "
+            "answerable and unanswerable question in its scopes, then fit tau by the "
+            "pre-registered rule. No LLM. Read-only: never creates, indexes or writes a "
+            "collection. Resumes from its progress file after an interruption."
+        ),
+    )
+    parser.add_argument(
         "--dense",
         action="store_true",
         help=(
@@ -1783,6 +2011,7 @@ def main(argv: list[str] | None = None) -> int:
                 ("--ranking", args.ranking),
                 ("--withheld-sheet", args.withheld_sheet),
                 ("--build-sets", args.build_sets),
+                ("--abstention", args.abstention),
             )
             if selected
         ]
@@ -1862,6 +2091,10 @@ def main(argv: list[str] | None = None) -> int:
         # retrieval configurations, so it has its own runner and its own view.
         report = asyncio.run(run_contention())
         print(_render_contention(report))
+    elif args.abstention:
+        # A verdict under a rule fixed in advance (D177), so it leads with it.
+        report = asyncio.run(run_abstention())
+        print(_render_abstention(report))
     elif args.workspace_gate:
         # A verdict under a rule fixed in advance (D168), so it leads with the
         # verdict and the precondition rather than with a table.
@@ -1893,6 +2126,7 @@ def main(argv: list[str] | None = None) -> int:
                     ("pdf-check", args.pdf_check),
                     ("contention", args.contention),
                     ("gate", args.workspace_gate),
+                    ("abstention", args.abstention),
                     ("depths", args.compare_depths),
                     ("fusion", args.compare_fusion),
                     ("arms", args.compare_arms),
