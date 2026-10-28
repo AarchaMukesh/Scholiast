@@ -24,8 +24,9 @@ Three properties are load-bearing:
 **Never answer from parametric memory.** A workspace with nothing indexed raises
 rather than answering (FR-W5), and a retrieval that finds nothing returns an
 explicit refusal without spending a generation call. Those are the degenerate
-cases; the calibrated abstention threshold τ is M2's, because §6.12 fits it on
-labelled data and reports the curve rather than picking a number (D60).
+cases (D60), and the only refusals this code makes: M5 phase 1 adopted no
+calibrated abstention threshold τ, because no retrieval signal met the rule
+fixed before it was scored (D177, D178).
 
 **The citation surface is closed.** The model is shown `[C1]…[Cn]` and nothing
 else, and every label it emits is checked against that set (`audit_citations`,
