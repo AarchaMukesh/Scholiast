@@ -173,8 +173,11 @@ Reruns are cheap: a complete collection is never rebuilt, and the PDF cache is r
 `--abstention` resumes from `var/eval/abstention-progress-<id>.jsonl`, whose identity
 covers the sets, collection and model versions but **not the code**: delete it before
 rerunning after a code change, or it reuses rows the old code scored. `--answers`
-works the same way, and **plain `--answers` (the eval split) refuses to run** until D179's
-two rules are frozen in code: eval answers must not exist before the rules that read them.
+works the same way, and **plain `--answers` (the eval split) refuses to run** unless D179's
+two rules, `domain/claims.py` (Rule 2) and `eval/refusal.py` (Rule 1), hash to
+`FROZEN_RULE_HASHES` in `eval/answers.py`: eval answers must not exist before the rules
+that read them, and **editing either rule breaks the freeze** (a new freeze is a new
+clarification to D179, not a hash update to make a test pass).
 **Never point a gated embedder at the eval collection** — it re-batches and perturbs fp16
 vectors (D74), which is why `--contention` refuses to build one.
 

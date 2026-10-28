@@ -45,6 +45,8 @@ from scholiast.application.use_cases.answer_question import (
     HYBRID_DEPTH,
     NO_EVIDENCE_ANSWER,
 )
+from scholiast.domain import claims as claims_module
+from scholiast.domain.claims import CLAIMS_VERSION, Claim, split_claims
 from scholiast.domain.lexical import query_weights, tokenize
 from scholiast.domain.retrieval import (
     CitationStatus,
@@ -53,11 +55,13 @@ from scholiast.domain.retrieval import (
     reciprocal_rank_fusion,
     strip_labels,
 )
+from scholiast.eval import refusal as refusal_module
 from scholiast.eval.abstention import UNANSWERABLE, Instance, instances
 from scholiast.eval.answerability import Category
 from scholiast.eval.dret import DRet
 from scholiast.eval.gate import DECIDING_SIZE
 from scholiast.eval.harness import EmbedderLike, LexicalLike
+from scholiast.eval.refusal import REFUSAL_VERSION, Refusal, label_answer
 
 #: The answer record's version stamp (NFR-M5). Rules read these rows, so a change
 #: to what a row holds is a change to what they read.
@@ -71,9 +75,19 @@ ANSWER_DRAW = 0
 DEV_KEY = "d179-dev"
 DEV_ANSWERABLE = 60
 
-#: The rules' source hashes, frozen by D179's clarification before any eval answer
-#: is generated. Empty until then, and an empty mapping refuses eval answers.
-FROZEN_RULE_HASHES: Mapping[str, str] = {}
+#: Each rule's source file, by version: the bytes D179's freeze covers.
+RULE_SOURCES: Mapping[str, Path] = {
+    CLAIMS_VERSION: Path(claims_module.__file__),
+    REFUSAL_VERSION: Path(refusal_module.__file__),
+}
+
+#: The rules' source hashes, frozen on the 167 train answers and recorded in D179's
+#: clarification before any eval answer is generated. A rule whose source no longer
+#: hashes to its entry refuses eval answers.
+FROZEN_RULE_HASHES: Mapping[str, str] = {
+    CLAIMS_VERSION: "22e83044da599a13ba5db123dd9ebbabdafbe8af642e3a794c081074074df68c",
+    REFUSAL_VERSION: "0d93a40a50689eb7899f0c5dbd593de44e348f53f756545e9e9b52b199f17c98",
+}
 
 
 class RulesNotFrozen(RuntimeError):
@@ -84,17 +98,35 @@ class EmptyGeneration(RuntimeError):
     """The generator finished without text. Production would fail over; nothing is kept."""
 
 
-def require_frozen_rules(frozen: Mapping[str, str] = FROZEN_RULE_HASHES) -> None:
-    """Refuse eval answers until D179's clarification has frozen both rules.
+def rule_hash(path: Path) -> str:
+    """sha256 of a rule's source with LF line endings, so every checkout hashes it alike."""
+    return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+
+
+def require_frozen_rules(
+    frozen: Mapping[str, str] | None = None, sources: Mapping[str, Path] | None = None
+) -> None:
+    """Refuse eval answers unless both rules are frozen and unchanged since.
 
     A refusal detector or claim splitter adjusted after reading eval answers would
-    be fitted to the numbers it reports, so the order is enforced, not trusted.
+    be fitted to the numbers it reports, so the order is enforced, not trusted: a
+    rule edited after its freeze no longer matches its hash, and the run stops.
     """
+    frozen = FROZEN_RULE_HASHES if frozen is None else frozen
+    sources = RULE_SOURCES if sources is None else sources
     if not frozen:
         raise RulesNotFrozen(
             "eval answers are generated only after Rule 1 and Rule 2 are frozen by "
             "D179's clarification; generate train answers with --dev"
         )
+    for version, path in sources.items():
+        if version not in frozen:
+            raise RulesNotFrozen(f"{version} has no frozen hash; D179 freezes both rules")
+        if rule_hash(path) != frozen[version]:
+            raise RulesNotFrozen(
+                f"{version} changed after it was frozen ({path.name} no longer hashes to "
+                f"{frozen[version][:12]}); a rule changed after the freeze needs a new one"
+            )
 
 
 # --- what is asked ----------------------------------------------------------------
@@ -424,4 +456,66 @@ def summarise(rows: Sequence[Answer], *, context_length: int | None) -> dict[str
             if context_length is None
             else sum(1 for tokens in reported if tokens >= context_length)
         ),
+    }
+
+
+# --- what the rules read ----------------------------------------------------------
+
+
+def headings(answer: Answer, dataset: DRet) -> tuple[str, ...]:
+    """Each shown passage's `title · section path`, as `EvidenceBlock` rendered it.
+
+    The model sometimes copies these back, and Rule 2 removes them before it
+    reads a sentence; they are rebuilt from the corpus, as the prompt built them.
+    """
+    out: list[str] = []
+    for passage in answer.passages:
+        provenance = dataset.chunks[passage.chunk_id].provenance
+        out.append(f"{dataset.papers[provenance.paper_id].title} · {provenance.section_path}")
+    return tuple(out)
+
+
+@dataclass(frozen=True, slots=True)
+class Reading:
+    """What Rule 2 and Rule 1 make of one answer."""
+
+    claims: tuple[Claim, ...]
+    refusal: Refusal
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "refusal": self.refusal.value,
+            "claims": [
+                {
+                    "index": c.index,
+                    "source": c.source,
+                    "text": c.text,
+                    "labels": list(c.labels),
+                    "kind": c.kind.value,
+                    "refuses": c.refuses,
+                }
+                for c in self.claims
+            ],
+        }
+
+
+def read_answer(answer: Answer, dataset: DRet) -> Reading:
+    """Rule 2 on the model's raw text, then Rule 1 on its sentences (D179)."""
+    claims = split_claims(answer.text, headings=headings(answer, dataset))
+    return Reading(claims, label_answer(claims, structural=answer.structural_refusal))
+
+
+def summarise_readings(rows: Sequence[Answer], readings: Sequence[Reading]) -> dict[str, Any]:
+    """Rule 1's labels by category, and how many sentences Rule 2 found of each kind.
+
+    Counts, not D179's metrics: those are rates with intervals, and on eval answers
+    they wait for the NLI model and the owner's labels.
+    """
+    labels: dict[str, Counter[str]] = {}
+    for row, reading in zip(rows, readings, strict=True):
+        labels.setdefault(row.category.value, Counter())[reading.refusal.value] += 1
+    return {
+        "rules": {version: rule_hash(path) for version, path in RULE_SOURCES.items()},
+        "refusal_by_category": {category: dict(counts) for category, counts in labels.items()},
+        "sentences_by_kind": dict(Counter(c.kind.value for r in readings for c in r.claims)),
     }

@@ -40,6 +40,7 @@ from typing import TYPE_CHECKING, Any
 from scholiast.application.prompts import ANSWER_PROMPT_VERSION
 from scholiast.application.use_cases.answer_question import DEFAULT_EVIDENCE_LIMIT, HYBRID_DEPTH
 from scholiast.config.settings import get_settings
+from scholiast.domain.claims import CLAIMS_VERSION
 from scholiast.domain.lexical import LEXICAL_VERSION
 from scholiast.eval import answerability
 from scholiast.eval.abstention import (
@@ -73,9 +74,11 @@ from scholiast.eval.answers import (
     dev_sample,
     eval_set,
     judged_chunks,
+    read_answer,
     read_answers,
     require_frozen_rules,
     summarise,
+    summarise_readings,
 )
 from scholiast.eval.contention import (
     DEFAULT_REPEATS,
@@ -138,6 +141,7 @@ from scholiast.eval.ranking import (
     run_ranking,
 )
 from scholiast.eval.ranking import render as _render_ranking
+from scholiast.eval.refusal import REFUSAL_VERSION
 from scholiast.eval.smoke import (
     BASELINE_PATH,
     SMOKE_PAPERS,
@@ -1786,6 +1790,9 @@ async def run_answers(
         "answers_version": ANSWERS_VERSION,
         "split": "train-dev" if dev else "eval",
     }
+    if not dev:
+        # D179: an eval answer belongs to the frozen rules it was generated under.
+        identity |= {"claims_version": CLAIMS_VERSION, "refusal_version": REFUSAL_VERSION}
     key = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()[:12]
     progress = progress_dir / f"answers-progress-{key}.jsonl"
     done = read_answers(progress)
@@ -1819,6 +1826,7 @@ async def run_answers(
             f"{after['digest']}); its answers are not from one model"
         )
     state = loaded or after
+    readings = [read_answer(row, dataset) for row in rows]
 
     return EvalReport(
         generated_at=datetime.now(UTC).isoformat(timespec="seconds"),
@@ -1845,7 +1853,8 @@ async def run_answers(
             "progress_file": str(progress),
             "resumed_rows": sum(1 for instance in todo if instance.key in done),
             "does_not_establish": [
-                "answers only: Rule 1, Rule 2 and the NLI model read them later (D179)",
+                "Rule 1 and Rule 2 only: the NLI model and the owner's labels read them later "
+                "(D179)",
                 "one local 3B model, sampled, one draw per question",
                 "LaTeX-derived corpus with BIBREF tokens in the passages (T12)",
             ],
@@ -1853,7 +1862,13 @@ async def run_answers(
         blocks={
             "summary": summarise(rows, context_length=state.get("context_length")),
             "generator": {**before, **{k: state.get(k) for k in ("placement", "context_length")}},
-            "answers": {"rows": [row.to_json() for row in rows]},
+            "rules": summarise_readings(rows, readings),
+            "answers": {
+                "rows": [
+                    {**row.to_json(), **reading.to_json()}
+                    for row, reading in zip(rows, readings, strict=True)
+                ]
+            },
         },
     )
 
@@ -1883,6 +1898,8 @@ def _render_answers(report: EvalReport) -> str:
             f"{summary['answers_with_fabricated_labels']} answers",
             f"  prompts    max {summary['prompt_tokens_max']} tokens, "
             f"{summary['prompt_chars_max']} chars; {limit}",
+            f"  rule 1     {report.blocks['rules']['refusal_by_category']}",
+            f"  rule 2     sentences {report.blocks['rules']['sentences_by_kind']}",
         ]
     )
 
