@@ -244,6 +244,10 @@ jobs:
       #     exclusion bypass when building an sdist on macOS. Present only
       #     because torch 2.11 requires setuptools<82; nothing here builds an
       #     sdist with it (the project builds with hatchling).
+      #   GHSA-xmj3-9gf7-h52w — setuptools <84.1, a path escape through
+      #     namespace_packages.txt when setuptools installs a wheel as an egg on
+      #     Windows (D180). Same torch pin; nothing here installs a wheel with
+      #     setuptools (uv installs every package, and the app installs none).
       - name: Audit dependencies
         run: |
           uv export --locked --all-extras --no-emit-project \
@@ -251,7 +255,8 @@ jobs:
           uvx pip-audit -s osv --strict --progress-spinner off \
             --disable-pip --require-hashes -r requirements-audit.txt \
             --ignore-vuln PYSEC-2025-194 \
-            --ignore-vuln PYSEC-2026-3447
+            --ignore-vuln PYSEC-2026-3447 \
+            --ignore-vuln GHSA-xmj3-9gf7-h52w
 
       - name: Scan for committed secrets
         uses: gitleaks/gitleaks-action@v2
