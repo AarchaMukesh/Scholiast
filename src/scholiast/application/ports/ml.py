@@ -19,6 +19,7 @@ Two things measured in M0 are encoded here rather than left to adapter authors:
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from enum import StrEnum, unique
 from typing import Protocol, runtime_checkable
 
@@ -114,6 +115,28 @@ class Reranker(Protocol):
         ...
 
 
+@dataclass(frozen=True, slots=True)
+class Entailment:
+    """One (premise, claim) pair as an NLI model read it.
+
+    The three probabilities are the model's softmax over its own labels. D179's
+    clarification (2026-11-13) fixes what counts as support: entailment is the
+    argmax, with no threshold, since nothing labelled exists to fit one on.
+    `premise_truncated` says the premise did not fit the model's window and was
+    cut, which D179 counts and reports; the claim is never cut.
+    """
+
+    entailment: float
+    neutral: float
+    contradiction: float
+    premise_truncated: bool
+
+    @property
+    def supported(self) -> bool:
+        """Entailment is the argmax. A tie is not support: it is not the argmax."""
+        return self.entailment > self.neutral and self.entailment > self.contradiction
+
+
 @runtime_checkable
 class EntailmentChecker(Protocol):
     """NLI model used for claim-level citation verification (ML-12, D16).
@@ -132,11 +155,12 @@ class EntailmentChecker(Protocol):
         self,
         premises: Sequence[str],
         claims: Sequence[str],
-    ) -> list[float]:
-        """Probability that each premise entails its paired claim.
+    ) -> list[Entailment]:
+        """The model's reading of each premise against its paired claim.
 
         `premises[i]` is checked against `claims[i]`; the sequences must be the
-        same length.
+        same length. All three probabilities are returned, not entailment's alone,
+        because support is decided by the argmax (D179).
         """
         ...
 

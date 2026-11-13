@@ -237,9 +237,13 @@ jobs:
       #
       # Each ignore is scoped, reasoned, and goes away with a torch upgrade:
       #   PYSEC-2025-194 (GHSA-rrmf-rvhw-rf47) — torch <2.13, memory corruption
-      #     via torch.jit.script. Unreachable: nothing in src/, sentence-
-      #     transformers, or the BERT / XLM-RoBERTa code the bge models use
-      #     calls jit.script.
+      #     via torch.jit.script, attacked locally through what is scripted.
+      #     Nothing in src/, sentence-transformers, or the BERT / XLM-RoBERTa
+      #     code the bge models use calls jit.script. The NLI model's DeBERTa-v2
+      #     code does (D179): transformers scripts six of its own fixed functions
+      #     at import. No input of ours reaches them, and the checkpoint is
+      #     safetensors (weights, no code), so attacking them needs write access
+      #     to site-packages already.
       #   PYSEC-2026-3447 (GHSA-h35f-9h28-mq5c) — setuptools <83, MANIFEST.in
       #     exclusion bypass when building an sdist on macOS. Present only
       #     because torch 2.11 requires setuptools<82; nothing here builds an
