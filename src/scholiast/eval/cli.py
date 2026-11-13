@@ -37,7 +37,49 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from scholiast.application.prompts import ANSWER_PROMPT_VERSION
+from scholiast.application.use_cases.answer_question import DEFAULT_EVIDENCE_LIMIT, HYBRID_DEPTH
 from scholiast.config.settings import get_settings
+from scholiast.domain.claims import CLAIMS_VERSION
+from scholiast.domain.lexical import LEXICAL_VERSION
+from scholiast.eval import answerability
+from scholiast.eval.abstention import (
+    ABSTENTION_VERSION,
+    REPRODUCE_SAMPLE,
+    WITHHELD_SIZES,
+    analyse,
+    instances,
+    largest_differences,
+    progress_writer,
+    read_progress,
+    reproduce_sample,
+    score_all,
+    score_one,
+)
+from scholiast.eval.abstention import RULE as ABSTENTION_RULE
+from scholiast.eval.answerability import (
+    build_sets,
+    candidate_sheet,
+    load_sets,
+    read_verdicts,
+    sheet_json,
+    sheet_markdown,
+    write_sets,
+)
+from scholiast.eval.answers import (
+    ANSWERS_VERSION,
+    DEV_ANSWERABLE,
+    answer_all,
+    answer_instances,
+    dev_sample,
+    eval_set,
+    judged_chunks,
+    read_answer,
+    read_answers,
+    require_frozen_rules,
+    summarise,
+    summarise_readings,
+)
 from scholiast.eval.contention import (
     DEFAULT_REPEATS,
     Condition,
@@ -99,6 +141,7 @@ from scholiast.eval.ranking import (
     run_ranking,
 )
 from scholiast.eval.ranking import render as _render_ranking
+from scholiast.eval.refusal import REFUSAL_VERSION
 from scholiast.eval.smoke import (
     BASELINE_PATH,
     SMOKE_PAPERS,
@@ -119,6 +162,9 @@ if TYPE_CHECKING:
 #: across milestones is itself a deliverable, and it cannot exist if each run
 #: destroys the last.
 DEFAULT_REPORT_DIR = Path("var/eval")
+#: Where `--withheld-sheet` writes D177's hand-check sheet: gitignored, like the
+#: reports, because it is generated from the vendored snapshot.
+DEFAULT_SHEET_DIR = Path("var/labelling")
 
 #: Where D68's fetched PDFs live. Under `var/` so the repository never carries
 #: third-party papers, and cached so a re-run costs arXiv nothing.
@@ -1497,6 +1543,426 @@ def _render_gate(report: EvalReport) -> str:
     return "\n".join(out)
 
 
+async def _open_eval_hybrid(
+    dataset: DRet, archived: dict[str, Any], *, run: str, decision: str
+) -> tuple[Any, Any, str]:
+    """The eval hybrid collection, opened read-only under the gate's checks (D168).
+
+    1. The collection names and the embedder version are checked against the ones
+       M2's archive records, before any Qdrant call.
+    2. The hybrid collection, which serves both of production's hybrid arms, must
+       hold every D-RET chunk by `existing_count`, which only reads. A missing or
+       partial collection is refused, never built: a rebuilt collection is not M2's.
+    """
+    base = next(s for s in COMPARED_EMBEDDERS if s.baseline)
+    embedder, _dense_index, dense_collection = _build_dependencies(dataset, base)
+    _, hybrid_index, hybrid_collection = _build_dependencies(dataset, base, sparse=True)
+    wrong = _identity_mismatches(
+        archived,
+        collections={"dense": dense_collection, "hybrid": hybrid_collection},
+        embedder_version=embedder.version,
+    )
+    if wrong:
+        raise ValueError(
+            f"the {run} run would not read the collections M2's arms read ({decision}):\n  "
+            + "\n  ".join(wrong)
+        )
+    present = await hybrid_index.existing_count()
+    if present is None:
+        raise ValueError(
+            f"{hybrid_collection} does not exist. The {run} run reads the collection "
+            f"M2's hybrid arm measured and never creates one ({decision})."
+        )
+    if present != len(dataset.chunks):
+        raise ValueError(
+            f"{hybrid_collection} holds {present} of {len(dataset.chunks)} chunks. The "
+            f"{run} run must not build it; a rebuilt collection is not M2's ({decision})."
+        )
+    return embedder, hybrid_index, hybrid_collection
+
+
+async def run_abstention(
+    *, reference: Path = GATE_REPRODUCES, progress_dir: Path = DEFAULT_REPORT_DIR
+) -> EvalReport:
+    """D177's scoring: three non-fused signals for every instance, then the fixed rule.
+
+    **Read-only against Qdrant**, under the gate's checks (D177, clarified
+    2026-10-28):
+
+    1. The collection names and the embedder version are checked against the ones
+       M2's archive records, before any Qdrant call.
+    2. The hybrid collection, which serves all three signals as production's
+       hybrid path does, must hold every D-RET chunk by `existing_count`, which
+       only reads. A missing or partial collection is refused, never built.
+
+    No LLM is called and no gated embedder is built (D74). Rows are written to a
+    progress file as they are scored, one file per identity (sets, collection,
+    models), so a standby costs one instance and a rerun resumes (D160).
+    """
+    archived = _load_reference(reference)
+    sets = load_sets()
+    sets_sha256 = hashlib.sha256(answerability.SETS.read_bytes()).hexdigest()
+    dataset = build_dret(load_snapshot())
+    verify_split(dataset)
+    verify_core(dataset)
+    embedder, hybrid_index, hybrid_collection = await _open_eval_hybrid(
+        dataset, archived, run="abstention", decision="D177"
+    )
+
+    reranker = _build_reranker()
+    todo = instances(sets, dataset)
+    identity = {
+        "sets_sha256": sets_sha256,
+        "collection": hybrid_collection,
+        "embedder_version": embedder.version,
+        "reranker_version": reranker.version,
+        "lexical_version": LEXICAL_VERSION,
+        "depth": DEPTH,
+    }
+    digest = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()[:12]
+    progress = progress_dir / f"abstention-progress-{digest}.jsonl"
+    done = read_progress(progress)
+    adapters: dict[str, Any] = {
+        "dataset": dataset,
+        "index": hybrid_index,
+        "lexical": hybrid_index,
+        "embedder": embedder,
+        "reranker": reranker,
+    }
+    with progress_writer(progress) as sink:
+        rows = await score_all(todo, done=done, sink=sink, **adapters)
+    sample = reproduce_sample(todo)
+    again = [await score_one(instance, vectors={}, **adapters) for instance in sample]
+    by_key = {row.key: row for row in rows}
+    analysis = analyse(rows)
+
+    return EvalReport(
+        generated_at=datetime.now(UTC).isoformat(timespec="seconds"),
+        config={
+            "comparison": "D177's abstention signals: the top dense cosine, top lexical "
+            "score and top cross-encoder score in a scope, none fused, separating "
+            "answerable from unanswerable questions",
+            "decision": "D177 (clarified 2026-10-22 and 2026-10-28)",
+            "set_version": sets["set_version"],
+            "sets_sha256": sets_sha256,
+            "sheet_sha256": sets["sheet_sha256"],
+            "dataset_versions": dataset.versions,
+            "corpus_papers": len(dataset.papers),
+            "corpus_chunks": len(dataset.chunks),
+            **identity,
+            "abstention_version": ABSTENTION_VERSION,
+            "signals": {
+                "dense": "top cosine of the dense arm in the scope (production's, D174)",
+                "lexical": "top IDF-weighted sparse score in the scope; indexes BIBREF tokens",
+                "rerank": "top cross-encoder score over the RRF top 50; measured, not adopted",
+            },
+            "scope": {
+                "sizes": list(SIZES),
+                "deciding_size": DECIDING_SIZE,
+                "draws_per_question": DRAWS,
+                "draw": f"D168's scope_for, key {GATE_KEY!r}",
+                "withheld_sizes": list(WITHHELD_SIZES),
+                "withheld": "the hand-checked 10-paper scope, and its first 5 at size 5; "
+                "not asked at 25, where 15 papers were never checked",
+            },
+            "weights": "each instance 1/k, k its question's instances at that size",
+            "rule": ABSTENTION_RULE,
+            "reference": str(reference),
+            "progress_file": str(progress),
+            "instances": len(rows),
+            "resumed_rows": sum(1 for instance in todo if instance.key in done),
+            "llm_calls": 0,
+            "does_not_establish": [
+                "QASPER 'unanswerable' often means the paper discusses the topic "
+                "without answering it (D177)",
+                "LaTeX-derived corpus with BIBREF tokens (T12), which the lexical signal indexes",
+                "a random scope is not a real user's single-topic workspace",
+                "withheld-paper labels are one labeller's, judged on titles and abstracts",
+                "retrieval scores only: whether the model itself refuses is phase 2",
+                "eval holds 9 QASPER-unanswerable questions, so their interval is wide",
+            ],
+        },
+        blocks={
+            "verdict": analysis["verdict"],
+            "chosen": analysis["chosen"],
+            "train_fits": analysis["train_fits"],
+            "eval": analysis["eval"],
+            "sizes": analysis["sizes"],
+            "reproducibility": {
+                "instances": len(sample),
+                "of": REPRODUCE_SAMPLE,
+                "largest_abs_difference": largest_differences(
+                    [by_key[instance.key] for instance in sample], again
+                ),
+                "gated": False,
+            },
+            # Every instance's three scores, so any curve can be recomputed offline.
+            "instances": {"rows": [row.to_json() for row in rows]},
+        },
+    )
+
+
+def _build_generator() -> Any:
+    """Production's primary generator, alone (D58): no Groq rung to fail over to (D179)."""
+    from scholiast.infrastructure.llm.ollama import OllamaProvider
+
+    settings = get_settings()
+    return OllamaProvider(settings.ollama_url, model=settings.ollama_model)
+
+
+def _same_model(name: str, wanted: str) -> bool:
+    return name == wanted if ":" in wanted else name.split(":")[0] == wanted
+
+
+async def _ollama_state(generator: Any) -> dict[str, Any]:
+    """What Ollama says about the model it answers with: read, never assumed (D23).
+
+    The version and the model's digest are known before the first answer. Its
+    placement and its context window are known only once it is loaded, which is
+    why the run reads this again after its first answer.
+    """
+    import httpx
+
+    base = get_settings().ollama_url.rstrip("/")
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        version = (await client.get(f"{base}/api/version")).json().get("version")
+        pulled = (await client.get(f"{base}/api/tags")).json().get("models", [])
+        loaded = (await client.get(f"{base}/api/ps")).json().get("models", [])
+    digest = next(
+        (m.get("digest") for m in pulled if _same_model(str(m.get("name", "")), generator.model)),
+        None,
+    )
+    running: dict[str, Any] = next(
+        (m for m in loaded if _same_model(str(m.get("name", "")), generator.model)), {}
+    )
+    return {
+        "ollama_version": version,
+        "digest": digest,
+        "placement": await generator.placement(),
+        "context_length": running.get("context_length"),
+    }
+
+
+async def run_answers(
+    *, dev: bool, reference: Path = GATE_REPRODUCES, progress_dir: Path = DEFAULT_REPORT_DIR
+) -> EvalReport:
+    """D179's answers: production's own answer to each question, archived for the rules.
+
+    `dev` generates the 167 train answers Rule 1 and Rule 2 are built on. Without
+    it, eval answers are refused until both rules are frozen (D179's order).
+    Retrieval reads the eval hybrid collection under the gate's checks and
+    writes nothing; the only generator is local Ollama, so nothing leaves the
+    machine. The model is checked twice: pulled, with a digest, before the run,
+    and fully on the GPU after its first answer (D23); its digest must not change.
+    """
+    if not dev:
+        require_frozen_rules()
+    archived = _load_reference(reference)
+    sets = load_sets()
+    sets_sha256 = hashlib.sha256(answerability.SETS.read_bytes()).hexdigest()
+    dataset = build_dret(load_snapshot())
+    verify_split(dataset)
+    verify_core(dataset)
+    embedder, hybrid_index, hybrid_collection = await _open_eval_hybrid(
+        dataset, archived, run="answers", decision="D179"
+    )
+    asked = answer_instances(sets, dataset)
+    todo = dev_sample(asked) if dev else eval_set(asked)
+
+    generator = _build_generator()
+    before = await _ollama_state(generator)
+    if before["digest"] is None:
+        raise ValueError(
+            f"{generator.model} is not pulled. The answers run never pulls a model: that "
+            "is a network call, and a model nobody chose is not production's (D179)."
+        )
+    identity = {
+        "sets_sha256": sets_sha256,
+        "collection": hybrid_collection,
+        "embedder_version": embedder.version,
+        "lexical_version": LEXICAL_VERSION,
+        "depth": HYBRID_DEPTH,
+        "evidence_limit": DEFAULT_EVIDENCE_LIMIT,
+        "prompt_version": ANSWER_PROMPT_VERSION,
+        "generator": generator.name,
+        "model": generator.model,
+        "digest": before["digest"],
+        "answers_version": ANSWERS_VERSION,
+        "split": "train-dev" if dev else "eval",
+    }
+    if not dev:
+        # D179: an eval answer belongs to the frozen rules it was generated under.
+        identity |= {"claims_version": CLAIMS_VERSION, "refusal_version": REFUSAL_VERSION}
+    key = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()[:12]
+    progress = progress_dir / f"answers-progress-{key}.jsonl"
+    done = read_answers(progress)
+    loaded: dict[str, Any] = {}
+
+    async def on_gpu() -> None:
+        loaded.update(await _ollama_state(generator))
+        if loaded["placement"] != "gpu":
+            raise RuntimeError(
+                f"{generator.model} is placed on {loaded['placement']!r}, not the GPU. "
+                "Production's throughput path is the GPU (D23); stopped after one answer."
+            )
+
+    with progress_writer(progress) as sink:
+        rows = await answer_all(
+            todo,
+            done=done,
+            sink=sink,
+            after_first=on_gpu,
+            dataset=dataset,
+            index=hybrid_index,
+            lexical=hybrid_index,
+            embedder=embedder,
+            generator=generator,
+            judged=judged_chunks(dataset),
+        )
+    after = await _ollama_state(generator)
+    if after["digest"] != before["digest"]:
+        raise ValueError(
+            f"{generator.model}'s digest changed during the run ({before['digest']} -> "
+            f"{after['digest']}); its answers are not from one model"
+        )
+    state = loaded or after
+    readings = [read_answer(row, dataset) for row in rows]
+
+    return EvalReport(
+        generated_at=datetime.now(UTC).isoformat(timespec="seconds"),
+        config={
+            "comparison": "D179's answers: production's answer to each of D177's questions "
+            "in its scope, generated offline for the rules and metrics that read them",
+            "decision": "D179",
+            "set_version": sets["set_version"],
+            "sets_sha256": sets_sha256,
+            "sheet_sha256": sets["sheet_sha256"],
+            "dataset_versions": dataset.versions,
+            "corpus_papers": len(dataset.papers),
+            "corpus_chunks": len(dataset.chunks),
+            **identity,
+            "scope": "draw 0 of D168's 10-paper scope; withheld questions in their checked scope",
+            "sample": (
+                f"every unanswerable train question and the first {DEV_ANSWERABLE} answerable "
+                "ones by sha256('d179-dev:{question_id}')"
+                if dev
+                else "every eval question"
+            ),
+            "generation": "production's request: no options block, so sampled as "
+            "production samples; no failover",
+            "progress_file": str(progress),
+            "resumed_rows": sum(1 for instance in todo if instance.key in done),
+            "does_not_establish": [
+                "Rule 1 and Rule 2 only: the NLI model and the owner's labels read them later "
+                "(D179)",
+                "one local 3B model, sampled, one draw per question",
+                "LaTeX-derived corpus with BIBREF tokens in the passages (T12)",
+            ],
+        },
+        blocks={
+            "summary": summarise(rows, context_length=state.get("context_length")),
+            "generator": {**before, **{k: state.get(k) for k in ("placement", "context_length")}},
+            "rules": summarise_readings(rows, readings),
+            "answers": {
+                "rows": [
+                    {**row.to_json(), **reading.to_json()}
+                    for row, reading in zip(rows, readings, strict=True)
+                ]
+            },
+        },
+    )
+
+
+def _render_answers(report: EvalReport) -> str:
+    """Counts first: the answers themselves are for the rules, not the terminal."""
+    cfg, summary, generator = report.config, report.blocks["summary"], report.blocks["generator"]
+    window = summary["context_length"]
+    limit = (
+        "context window unknown"
+        if window is None
+        else f"{summary['at_context_limit']} of {summary['prompt_tokens_reported']} prompts "
+        f"at the {window}-token window"
+    )
+    return "\n".join(
+        [
+            f"D179 answers ({cfg['split']})  ({report.generated_at})",
+            f"  sets       {cfg['set_version']}  sha256 {cfg['sets_sha256'][:16]}...",
+            f"  collection {cfg['collection']}",
+            f"  generator  {cfg['generator']} {cfg['model']} digest {str(cfg['digest'])[:12]} "
+            f"(ollama {generator['ollama_version']}, placement {generator['placement']})",
+            f"  answers    {summary['answers']} ({cfg['resumed_rows']} resumed)  "
+            f"{summary['by_category']}",
+            f"  structural refusals {summary['structural_refusals']}  "
+            f"evidence shown {summary['evidence_shown']}",
+            f"  fabricated labels {summary['fabricated_labels']} in "
+            f"{summary['answers_with_fabricated_labels']} answers",
+            f"  prompts    max {summary['prompt_tokens_max']} tokens, "
+            f"{summary['prompt_chars_max']} chars; {limit}",
+            f"  rule 1     {report.blocks['rules']['refusal_by_category']}",
+            f"  rule 2     sentences {report.blocks['rules']['sentences_by_kind']}",
+        ]
+    )
+
+
+def _render_abstention(report: EvalReport) -> str:
+    """The verdict first, then the train fits, the eval rates and the AUCs."""
+    cfg, blocks = report.config, report.blocks
+    verdict, chosen = blocks["verdict"], blocks["chosen"]
+    out = [
+        f"D177 abstention signals  ({report.generated_at})",
+        f"  sets       {cfg['set_version']}  sha256 {cfg['sets_sha256'][:16]}...",
+        f"  collection {cfg['collection']}",
+        f"  rule       {cfg['rule']}",
+        f"  instances  {cfg['instances']} ({cfg['resumed_rows']} resumed)",
+        "",
+        f"  VERDICT: {verdict['outcome']}",
+        f"    {verdict['reason']}",
+        "",
+        f"  train, N={DECIDING_SIZE}, at false-answer <= 0.10:",
+    ]
+    for signal, fit in blocks["train_fits"].items():
+        tau = "+inf (answers nothing)" if fit["answers_nothing"] else f"{fit['tau']:.4f}"
+        out.append(
+            f"    {signal:<8} tau {tau:<12} recall {fit['answer_recall']:.3f}  "
+            f"false-answer {fit['false_answer']:.3f}"
+        )
+    out += [
+        "",
+        f"  eval, N={DECIDING_SIZE}: {chosen['signal']} at its train tau, papers resampled:",
+    ]
+    for name, interval in blocks["eval"].items():
+        if name == "papers":
+            continue
+        point = "undefined" if interval["point"] is None else f"{interval['point']:.3f}"
+        ci = interval["ci95"]
+        band = "no interval" if ci is None else f"[{ci[0]:.3f}, {ci[1]:.3f}]"
+        out.append(f"    {name:<36} {point}  {band}  ({interval['undefined_resamples']} undefined)")
+    out += ["", "  AUC, pooled / qasper / withheld:"]
+    for size, block in blocks["sizes"].items():
+        tag = "[DECIDES]" if block["deciding"] else "(reported only)"
+        out.append(f"    {size} {tag}")
+        for split in ("train", "eval"):
+            for signal, numbers in block.get(split, {}).items():
+                cells = [
+                    numbers["auc"],
+                    numbers["auc/unanswerable-qasper"],
+                    numbers["auc/unanswerable-withheld"],
+                ]
+                shown = " / ".join("-" if v is None else f"{v:.3f}" for v in cells)
+                out.append(f"      {split:<5} {signal:<8} {shown}")
+    differences = blocks["reproducibility"]["largest_abs_difference"]
+    shown_differences = ", ".join(
+        f"{signal} " + ("one side empty" if value is None else f"{value:.2e}")
+        for signal, value in differences.items()
+    )
+    out += [
+        "",
+        f"  reproducibility: {blocks['reproducibility']['instances']} instances re-scored, "
+        f"largest |difference| {shown_differences}",
+    ]
+    return "\n".join(out)
+
+
 def _render_pdf_check(report: EvalReport) -> str:
     """Two builds side by side, with what each one's evidence did."""
     cfg = report.config
@@ -1713,6 +2179,60 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--withheld-sheet",
+        action="store_true",
+        help=(
+            "write D177's withheld-paper candidates, each with its scope's titles and "
+            "abstracts, as the sheet the hand-check is done on. Scores nothing and "
+            "archives nothing."
+        ),
+    )
+    parser.add_argument(
+        "--sheet-dir",
+        type=Path,
+        default=DEFAULT_SHEET_DIR,
+        help=f"where --withheld-sheet writes (default: {DEFAULT_SHEET_DIR})",
+    )
+    parser.add_argument(
+        "--build-sets",
+        action="store_true",
+        help=(
+            "build D177's versioned answerability sets from the hand-check's verdicts "
+            "(--verdicts), refusing any row that does not match the sheet. Scores nothing."
+        ),
+    )
+    parser.add_argument(
+        "--verdicts", type=Path, help="with --build-sets, the labeller's completed CSV"
+    )
+    parser.add_argument("--labeller", help="with --build-sets, who labelled the candidates")
+    parser.add_argument(
+        "--labelled-on", help="with --build-sets, the date the labels were made (YYYY-MM-DD)"
+    )
+    parser.add_argument(
+        "--abstention",
+        action="store_true",
+        help=(
+            "D177: score the top dense, lexical and cross-encoder scores for every "
+            "answerable and unanswerable question in its scopes, then fit tau by the "
+            "pre-registered rule. No LLM. Read-only: never creates, indexes or writes a "
+            "collection. Resumes from its progress file after an interruption."
+        ),
+    )
+    parser.add_argument(
+        "--answers",
+        action="store_true",
+        help=(
+            "D179: generate production's answer to each of D177's questions with local "
+            "Ollama, read-only against the collection. Refused for eval questions until "
+            "Rule 1 and Rule 2 are frozen; use --dev for the train answers they are built on."
+        ),
+    )
+    parser.add_argument(
+        "--dev",
+        action="store_true",
+        help="with --answers, the 167 train answers the rules are built on (D179)",
+    )
+    parser.add_argument(
         "--dense",
         action="store_true",
         help=(
@@ -1740,11 +2260,51 @@ def main(argv: list[str] | None = None) -> int:
                 ("--workspace-gate", args.workspace_gate),
                 ("--dedup", args.dedup),
                 ("--ranking", args.ranking),
+                ("--withheld-sheet", args.withheld_sheet),
+                ("--build-sets", args.build_sets),
+                ("--abstention", args.abstention),
+                ("--answers", args.answers),
             )
             if selected
         ]
         if others:
             parser.error(f"--dense only means something on its own, not with {others[0]}")
+
+    if args.dev and not args.answers:
+        parser.error("--dev only means something with --answers")
+
+    if args.build_sets:
+        if not (args.verdicts and args.labeller and args.labelled_on):
+            parser.error("--build-sets needs --verdicts, --labeller and --labelled-on")
+        sheet_path = args.sheet_dir / "d177-withheld-candidates.json"
+        sheet = json.loads(sheet_path.read_text(encoding="utf-8"))
+        raw = args.verdicts.read_bytes()
+        verdicts = read_verdicts(raw.decode("utf-8"), sheet)
+        rows = load_snapshot()
+        sets = build_sets(rows, build_dret(rows), verdicts, sheet_sha256=sheet["sheet_sha256"])
+        record = write_sets(
+            sets,
+            labeller=args.labeller,
+            labelled_on=args.labelled_on,
+            verdicts_sha256=hashlib.sha256(raw).hexdigest(),
+        )
+        print(f"{record['set_version']}: {record['counts']}, sha256 {record['sha256']}")
+        return 0
+
+    if args.withheld_sheet:
+        # D177's hand-check input, not a result: nothing is scored, so nothing is
+        # archived, and the sheet's own hash is what a label file must quote.
+        rows = load_snapshot()
+        entries = candidate_sheet(rows, build_dret(rows))
+        body = sheet_json(entries)
+        digest = json.loads(body)["sheet_sha256"]
+        args.sheet_dir.mkdir(parents=True, exist_ok=True)
+        (args.sheet_dir / "d177-withheld-candidates.json").write_text(body + "\n", encoding="utf-8")
+        (args.sheet_dir / "d177-withheld-candidates.md").write_text(
+            sheet_markdown(entries, sheet_sha256=digest) + "\n", encoding="utf-8"
+        )
+        print(f"{len(entries)} candidates, sheet sha256 {digest}, written to {args.sheet_dir}")
+        return 0
 
     if args.recompute_dense and not args.ranking:
         parser.error("--recompute-dense only means something with --ranking")
@@ -1786,6 +2346,14 @@ def main(argv: list[str] | None = None) -> int:
         # retrieval configurations, so it has its own runner and its own view.
         report = asyncio.run(run_contention())
         print(_render_contention(report))
+    elif args.answers:
+        # Answers for the rules to read, not a verdict: D179's metrics come later.
+        report = asyncio.run(run_answers(dev=args.dev))
+        print(_render_answers(report))
+    elif args.abstention:
+        # A verdict under a rule fixed in advance (D177), so it leads with it.
+        report = asyncio.run(run_abstention())
+        print(_render_abstention(report))
     elif args.workspace_gate:
         # A verdict under a rule fixed in advance (D168), so it leads with the
         # verdict and the precondition rather than with a table.
@@ -1817,6 +2385,9 @@ def main(argv: list[str] | None = None) -> int:
                     ("pdf-check", args.pdf_check),
                     ("contention", args.contention),
                     ("gate", args.workspace_gate),
+                    ("abstention", args.abstention),
+                    ("answers-dev", args.answers and args.dev),
+                    ("answers", args.answers),
                     ("depths", args.compare_depths),
                     ("fusion", args.compare_fusion),
                     ("arms", args.compare_arms),

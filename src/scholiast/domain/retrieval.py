@@ -363,14 +363,19 @@ class EvidenceSet:
     def should_abstain(self, threshold: float) -> bool:
         """Whether evidence is too weak to answer from (FR-Q4).
 
-        `threshold` is fitted on labelled data and reported as a
+        `threshold` must be fitted on labelled data and reported as a
         precision/recall curve, never hand-tuned until the demo looks good
-        (doc 9 §9.6).
+        (doc 9 §9.6). No threshold is fitted, and no production path calls this:
+        M5 phase 1 scored the three candidate signals under a rule fixed in
+        advance (D177) and adopted none (D178), because at a false-answer rate of
+        at most 0.10 the best reached answer recall 0.316 against a floor of 0.50.
+        Production refuses only when retrieval finds nothing (D60), and abstention
+        moves to the model's own refusals in M5 phase 2.
 
         Refuses fused evidence rather than answering from it: a threshold on an
         RRF score would abstain by how much the arms agreed, which D167 rules out
-        as τ's signal. M5's τ phase chooses the signal; until it does, nothing
-        can be wired to this with hybrid evidence by accident.
+        as τ's signal. The guard stays, so a threshold fitted later cannot be
+        wired to hybrid evidence by accident.
         """
         if any(c.arm is RetrievalArm.FUSED for c in self.chunks):
             raise InvariantViolation(

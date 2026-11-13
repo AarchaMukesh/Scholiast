@@ -1,0 +1,4 @@
+# Hash-pinned eval data (d-ans-unans, dedup-fixture, discovery-judgments) is
+# stored and checked out as LF on every OS. Without this, core.autocrlf=true
+# writes CRLF on a fresh Windows clone and every manifest sha256 stops matching.
+data/eval/*.json text eol=lf

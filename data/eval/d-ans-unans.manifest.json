@@ -1,0 +1,27 @@
+{
+ "bytes": 247208,
+ "counts": {
+  "eval/answerable": 243,
+  "eval/unanswerable-qasper": 9,
+  "eval/unanswerable-withheld": 40,
+  "train/answerable": 624,
+  "train/unanswerable-qasper": 47,
+  "train/unanswerable-withheld": 60
+ },
+ "dataset": "scholiast-m5-answerability",
+ "decision": "D177",
+ "derived_from": "data/eval/qasper-validation.json.gz, labels from its annotators",
+ "file": "d-ans-unans.json",
+ "labelled_on": "2026-10-27",
+ "labeller": "owner",
+ "left_out": {
+  "disagree": 75,
+  "outside_dret": 7,
+  "withheld_excluded": 0
+ },
+ "licence": "CC BY 4.0 (derived from QASPER)",
+ "set_version": "d-ans-unans/1.0.0",
+ "sha256": "ff60559cdf8bea8236989376c33256092c871259ea9536bdfd7b0082e4fedb40",
+ "sheet_sha256": "f206c26d5e815edd2b2a05d1d62c0a0a3138d69e5f1a5e72daa84133524c0299",
+ "verdicts_sha256": "a7c2c3f1567402a0412de1c7f3d8cf13e769b3ca5e035a89b09bb1b328aa1fed"
+}
