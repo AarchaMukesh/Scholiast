@@ -31,7 +31,7 @@ import asyncio
 import hashlib
 import json
 import sys
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -43,6 +43,7 @@ from scholiast.config.settings import get_settings
 from scholiast.domain.claims import CLAIMS_VERSION
 from scholiast.domain.lexical import LEXICAL_VERSION
 from scholiast.eval import answerability
+from scholiast.eval import labels as d179
 from scholiast.eval.abstention import (
     ABSTENTION_VERSION,
     REPRODUCE_SAMPLE,
@@ -1967,6 +1968,137 @@ async def run_answers(
     )
 
 
+#: D179's two label sheets and the files the owner fills in, under `--sheet-dir`.
+LABEL_FILES: Mapping[str, tuple[str, str]] = {
+    "answers": ("d179-answer-sheet", "d179-answer-labels.csv"),
+    "pairs": ("d179-pair-sheet", "d179-pair-labels.csv"),
+}
+
+
+def _write_new(path: Path, text: str) -> str:
+    """Write an absent file; leave an identical one; never replace a different one.
+
+    A label file in this directory may already hold the owner's labels, and a
+    regenerated sheet that differs would orphan them, so neither is overwritten.
+    """
+    if path.exists():
+        if path.read_text(encoding="utf-8") == text:
+            return "unchanged"
+        raise FileExistsError(
+            f"{path} exists with different content and may hold labels; move it aside first"
+        )
+    path.write_text(text, encoding="utf-8")
+    return "written"
+
+
+def _eval_answers(archive: Path) -> tuple[list[dict[str, Any]], str]:
+    raw = archive.read_bytes()
+    data = json.loads(raw)
+    if data["config"].get("split") != "eval":
+        raise ValueError(f"{archive} is not an eval answers archive (D179 labels eval answers)")
+    return data["blocks"]["answers"]["rows"], hashlib.sha256(raw).hexdigest()
+
+
+def write_label_sheets(archive: Path, sheet_dir: Path) -> dict[str, Any]:
+    """D179's two blind sheets from an eval answers archive, with blank label files."""
+    rows, digest = _eval_answers(archive)
+    sheet_dir.mkdir(parents=True, exist_ok=True)
+    written: dict[str, Any] = {}
+    for kind, entries in (
+        ("answers", d179.answer_entries(rows)),
+        ("pairs", d179.pair_entries(rows)),
+    ):
+        body = d179.sheet_json(kind, entries, archive=archive.name, archive_sha256=digest)
+        sheet = json.loads(body)
+        stem, labels = LABEL_FILES[kind]
+        written[kind] = {
+            "items": len(entries),
+            "sheet_sha256": sheet["sheet_sha256"],
+            "files": {
+                f"{stem}.json": _write_new(sheet_dir / f"{stem}.json", body + "\n"),
+                f"{stem}.md": _write_new(
+                    sheet_dir / f"{stem}.md", d179.sheet_markdown(sheet) + "\n"
+                ),
+                labels: _write_new(sheet_dir / labels, d179.csv_template(sheet)),
+            },
+        }
+    return written
+
+
+def score_labels(archive: Path, sheet_dir: Path) -> EvalReport:
+    """D179's bars and agreements from the owner's two label files."""
+    rows, digest = _eval_answers(archive)
+    sheets: dict[str, Any] = {}
+    labels: dict[str, list[str]] = {}
+    label_hashes: dict[str, str] = {}
+    for kind, (stem, name) in LABEL_FILES.items():
+        sheet = json.loads((sheet_dir / f"{stem}.json").read_text(encoding="utf-8"))
+        if sheet["archive_sha256"] != digest:
+            raise ValueError(
+                f"{stem} was made on archive {sheet['archive_sha256'][:16]}..., not on "
+                f"{archive.name} ({digest[:16]}...); labels score only the answers they read"
+            )
+        raw = (sheet_dir / name).read_bytes()
+        sheets[kind] = sheet
+        labels[kind] = d179.read_labels(raw.decode("utf-8"), sheet)
+        label_hashes[name] = hashlib.sha256(raw).hexdigest()
+    result = d179.score(
+        rows, sheets["answers"], labels["answers"], sheets["pairs"], labels["pairs"]
+    )
+    return EvalReport(
+        generated_at=datetime.now(UTC).isoformat(timespec="seconds"),
+        config={
+            "comparison": "D179's bars and agreements, on the owner's labels of eval answers",
+            "decision": "D179",
+            "labels_version": d179.LABELS_VERSION,
+            "archive": str(archive),
+            "archive_sha256": digest,
+            "sheets_sha256": {kind: sheet["sheet_sha256"] for kind, sheet in sheets.items()},
+            "label_files_sha256": label_hashes,
+            "does_not_establish": [
+                "one labeller",
+                "100 answers and 100 pairs: a sample, with the intervals that implies",
+                "one local 3B model, sampled, one draw per question",
+            ],
+        },
+        blocks=result,
+    )
+
+
+def _render_labels(report: EvalReport) -> str:
+    """The two verdicts first: they are what D179 fixed in advance."""
+    bar_1, bar_2 = report.blocks["bar_1"], report.blocks["bar_2"]
+    rule_1, nli = report.blocks["rule_1"], report.blocks["nli"]
+
+    def kappa(value: float | None) -> str:
+        return "undefined" if value is None else f"{value:.3f}"
+
+    low, high = bar_1["ci95_papers"]
+    lines = [
+        f"D179 labels  ({report.generated_at})",
+        f"  bar 1      {bar_1['verdict']}: owner-labelled false-answer rate "
+        f"{bar_1['false_answer_rate']:.3f} [{low:.3f}, {high:.3f}] "
+        f"({bar_1['false_answers']} of {bar_1['questions']}); bar <= 0.10",
+        f"             by category {bar_1['by_category']}; "
+        f"Rule 1 said {bar_1['rule_1_false_answer_rate']:.3f}",
+        f"  rule 1     kappa {kappa(rule_1['kappa'])}, raw {rule_1['raw_agreement']:.3f} over "
+        f"{rule_1['items']} answers; "
+        + ("reliable (>= 0.80)" if rule_1["reliable"] else "NOT reliable: quote owner labels only"),
+    ]
+    agreement = nli["agreement"]
+    if agreement is None:
+        lines.append(f"  nli        no judgeable pairs ({nli['cannot_tell']} cannot tell)")
+    else:
+        lines.append(
+            f"  nli        kappa {kappa(agreement['kappa'])}, raw "
+            f"{agreement['raw_agreement']:.3f} over {agreement['items']} pairs "
+            f"({nli['cannot_tell']} cannot tell); owner supports {nli['owner_supports']}, "
+            f"NLI supports {nli['nli_supports']}"
+        )
+    lines.append(f"  bar 2      {bar_2['verdict']} (kappa {kappa(bar_2['kappa'])}; needs >= 0.60)")
+    return "\n".join(lines)
+
+
 def _render_answers(report: EvalReport) -> str:
     """Counts first: the answers themselves are for the rules, not the terminal."""
     cfg, summary, generator = report.config, report.blocks["summary"], report.blocks["generator"]
@@ -2347,6 +2479,26 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--label-sheets",
+        action="store_true",
+        help=(
+            "D179: write the owner's two blind label sheets (answers, and claim/passage "
+            "pairs) from an eval answers archive (--archive), with blank label files. "
+            "Never overwrites a different file. Scores nothing and archives nothing."
+        ),
+    )
+    parser.add_argument(
+        "--score-labels",
+        action="store_true",
+        help=(
+            "D179: score the owner's label files against the eval answers archive "
+            "(--archive): bar 1, Rule 1's and the NLI model's agreement, and bar 2."
+        ),
+    )
+    parser.add_argument(
+        "--archive", type=Path, help="with --label-sheets or --score-labels: the eval answers"
+    )
+    parser.add_argument(
         "--dev",
         action="store_true",
         help="with --answers, the 167 train answers the rules are built on (D179)",
@@ -2383,6 +2535,8 @@ def main(argv: list[str] | None = None) -> int:
                 ("--build-sets", args.build_sets),
                 ("--abstention", args.abstention),
                 ("--answers", args.answers),
+                ("--label-sheets", args.label_sheets),
+                ("--score-labels", args.score_labels),
             )
             if selected
         ]
@@ -2408,6 +2562,18 @@ def main(argv: list[str] | None = None) -> int:
             verdicts_sha256=hashlib.sha256(raw).hexdigest(),
         )
         print(f"{record['set_version']}: {record['counts']}, sha256 {record['sha256']}")
+        return 0
+
+    if (args.label_sheets or args.score_labels) and args.archive is None:
+        parser.error("--label-sheets and --score-labels need --archive")
+
+    if args.label_sheets:
+        # The owner's labelling input, not a result: nothing scored, nothing archived.
+        for kind, made in write_label_sheets(args.archive, args.sheet_dir).items():
+            print(
+                f"{kind}: {made['items']} items, sheet sha256 {made['sheet_sha256']}, "
+                f"{made['files']}"
+            )
         return 0
 
     if args.withheld_sheet:
@@ -2465,6 +2631,10 @@ def main(argv: list[str] | None = None) -> int:
         # retrieval configurations, so it has its own runner and its own view.
         report = asyncio.run(run_contention())
         print(_render_contention(report))
+    elif args.score_labels:
+        # Two verdicts fixed in advance (D179), so it leads with them.
+        report = score_labels(args.archive, args.sheet_dir)
+        print(_render_labels(report))
     elif args.answers:
         # Answers for the rules to read, not a verdict: D179's metrics come later.
         report = asyncio.run(run_answers(dev=args.dev))
@@ -2505,6 +2675,7 @@ def main(argv: list[str] | None = None) -> int:
                     ("contention", args.contention),
                     ("gate", args.workspace_gate),
                     ("abstention", args.abstention),
+                    ("labels", args.score_labels),
                     ("answers-dev", args.answers and args.dev),
                     ("answers", args.answers),
                     ("depths", args.compare_depths),

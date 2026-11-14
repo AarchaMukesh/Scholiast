@@ -210,6 +210,27 @@ def wilson_interval(successes: int, trials: int) -> Interval:
     )
 
 
+def cohen_kappa(first: Sequence[str], second: Sequence[str]) -> float | None:
+    """Agreement between two labellers beyond what chance alone would give (D179).
+
+    Raw agreement flatters a skewed label set: two labellers who both say
+    "answered" 90% of the time agree 82% by chance. Kappa subtracts that. It is
+    undefined, and returned as None rather than as 0 or 1, when chance agreement
+    is total: both labellers used one and the same label for every item.
+    """
+    if len(first) != len(second):
+        raise ValueError(f"{len(first)} labels against {len(second)}")
+    if not first:
+        raise ValueError("agreement over zero items is undefined")
+    n = len(first)
+    observed = sum(1 for a, b in zip(first, second, strict=True) if a == b) / n
+    labels = set(first) | set(second)
+    expected = sum((first.count(label) / n) * (second.count(label) / n) for label in labels)
+    if expected == 1.0:
+        return None
+    return (observed - expected) / (1.0 - expected)
+
+
 def paired_bootstrap_delta(
     treatment: Sequence[float],
     baseline: Sequence[float],
