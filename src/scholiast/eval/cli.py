@@ -105,6 +105,16 @@ from scholiast.eval.gate import (
     measure_scoped,
     whole_corpus,
 )
+from scholiast.eval.grounding import (
+    GROUNDING_VERSION,
+    compare_regenerated,
+    count,
+    nli_pairs,
+    paper_intervals,
+    read_pairs,
+    regeneration_sample,
+    totals,
+)
 from scholiast.eval.harness import (
     EmbedderLike,
     IndexReport,
@@ -1710,6 +1720,13 @@ def _build_generator() -> Any:
     return OllamaProvider(settings.ollama_url, model=settings.ollama_model)
 
 
+def _build_nli() -> Any:
+    """D179's pinned NLI checkpoint, from the local copy only (its clarification, 2026-11-13)."""
+    from scholiast.infrastructure.ml.nli import LocalEntailmentChecker
+
+    return LocalEntailmentChecker()
+
+
 def _same_model(name: str, wanted: str) -> bool:
     return name == wanted if ":" in wanted else name.split(":")[0] == wanted
 
@@ -1754,6 +1771,12 @@ async def run_answers(
     writes nothing; the only generator is local Ollama, so nothing leaves the
     machine. The model is checked twice: pulled, with a digest, before the run,
     and fully on the GPU after its first answer (D23); its digest must not change.
+
+    On eval answers it then measures what D179 asks (`eval.grounding`): 20 answers
+    regenerated while the model is loaded, every (claim, cited passage) read by the
+    pinned NLI model from its local copy, and every rate with a paper-resampled
+    interval. Every pair's premise, hypothesis and probabilities are archived with
+    its answer, so each rate can be recomputed without Qdrant, Ollama or the model.
     """
     if not dev:
         require_frozen_rules()
@@ -1819,6 +1842,21 @@ async def run_answers(
             generator=generator,
             judged=judged_chunks(dataset),
         )
+    again: list[Any] = []
+    if not dev:
+        # D179: 20 eval answers asked again, while the model is still loaded. A
+        # second sample, not an answer: it is never written to the progress file.
+        again = await answer_all(
+            regeneration_sample(todo),
+            done={},
+            sink=lambda _row: None,
+            dataset=dataset,
+            index=hybrid_index,
+            lexical=hybrid_index,
+            embedder=embedder,
+            generator=generator,
+            judged=judged_chunks(dataset),
+        )
     after = await _ollama_state(generator)
     if after["digest"] != before["digest"]:
         raise ValueError(
@@ -1827,6 +1865,46 @@ async def run_answers(
         )
     state = loaded or after
     readings = [read_answer(row, dataset) for row in rows]
+
+    measured: dict[str, Any] = {}
+    pair_rows: dict[str, list[dict[str, Any]]] = {}
+    if not dev:
+        pairs = [
+            p for row, r in zip(rows, readings, strict=True) for p in nli_pairs(row, r, dataset)
+        ]
+        checker = _build_nli()
+        nli = await read_pairs(pairs, checker)
+        counts = [count(row, r, nli) for row, r in zip(rows, readings, strict=True)]
+        for pair in pairs:
+            entailment = nli[pair.key]
+            pair_rows.setdefault(pair.answer_key, []).append(
+                {
+                    "claim_index": pair.claim_index,
+                    "label": pair.label,
+                    "chunk_id": pair.chunk_id,
+                    "premise": pair.premise,
+                    "hypothesis": pair.hypothesis,
+                    "entailment": entailment.entailment,
+                    "neutral": entailment.neutral,
+                    "contradiction": entailment.contradiction,
+                    "supported": entailment.supported,
+                    "premise_truncated": entailment.premise_truncated,
+                }
+            )
+        first = {row.key: (row, r) for row, r in zip(rows, readings, strict=True)}
+        measured = {
+            "grounding": {
+                "version": GROUNDING_VERSION,
+                "nli": checker.version,
+                "support": "entailment is the argmax (D179's clarification); no threshold",
+                "totals": totals(counts),
+                "rates": paper_intervals(counts),
+                "bar_1": "judged on the owner's labels (D179), not on these Rule 1 rates",
+            },
+            "regeneration": compare_regenerated(
+                [first[a.key] for a in again], [(a, read_answer(a, dataset)) for a in again]
+            ),
+        }
 
     return EvalReport(
         generated_at=datetime.now(UTC).isoformat(timespec="seconds"),
@@ -1854,18 +1932,34 @@ async def run_answers(
             "resumed_rows": sum(1 for instance in todo if instance.key in done),
             "does_not_establish": [
                 "Rule 1 and Rule 2 only: the NLI model and the owner's labels read them later "
-                "(D179)",
+                "(D179)"
+                if dev
+                else "bar 1 and the NLI model's agreement: both wait for the owner's labels (D179)",
                 "one local 3B model, sampled, one draw per question",
                 "LaTeX-derived corpus with BIBREF tokens in the passages (T12)",
+                *(
+                    []
+                    if dev
+                    else [
+                        "support read one passage at a time; a sentence is not an atomic claim",
+                        "an NLI model trained on general text, unproven on scientific prose "
+                        "until the owner's 100 pairs are labelled",
+                    ]
+                ),
             ],
         },
         blocks={
             "summary": summarise(rows, context_length=state.get("context_length")),
             "generator": {**before, **{k: state.get(k) for k in ("placement", "context_length")}},
             "rules": summarise_readings(rows, readings),
+            **measured,
             "answers": {
                 "rows": [
-                    {**row.to_json(), **reading.to_json()}
+                    {
+                        **row.to_json(),
+                        **reading.to_json(),
+                        **({} if dev else {"pairs": pair_rows.get(row.key, [])}),
+                    }
                     for row, reading in zip(rows, readings, strict=True)
                 ]
             },
@@ -1883,6 +1977,30 @@ def _render_answers(report: EvalReport) -> str:
         else f"{summary['at_context_limit']} of {summary['prompt_tokens_reported']} prompts "
         f"at the {window}-token window"
     )
+    measured: list[str] = []
+    if "grounding" in report.blocks:
+        grounding, regen = report.blocks["grounding"], report.blocks["regeneration"]
+        measured = [
+            f"  nli        {grounding['nli']}  totals {grounding['totals']}",
+            "  rates (95% interval resampling papers; bar 1 waits for the owner's labels):",
+            *(
+                f"    {name:<44} "
+                + (
+                    "undefined"
+                    if value["point"] is None
+                    else f"{value['point']:.3f}  "
+                    + (
+                        "[no interval]"
+                        if value["ci95"] is None
+                        else f"[{value['ci95'][0]:.3f}, {value['ci95'][1]:.3f}]"
+                    )
+                )
+                for name, value in grounding["rates"].items()
+                if name != "papers"
+            ),
+            f"  regenerated {regen['regenerated']}: text changed {regen['text_changed']}, "
+            f"Rule 1 label changed {regen['refusal_label_changed']}",
+        ]
     return "\n".join(
         [
             f"D179 answers ({cfg['split']})  ({report.generated_at})",
@@ -1900,6 +2018,7 @@ def _render_answers(report: EvalReport) -> str:
             f"{summary['prompt_chars_max']} chars; {limit}",
             f"  rule 1     {report.blocks['rules']['refusal_by_category']}",
             f"  rule 2     sentences {report.blocks['rules']['sentences_by_kind']}",
+            *measured,
         ]
     )
 

@@ -18,6 +18,7 @@ from typing import Any
 import pytest
 
 from scholiast.application.ports.llm import GenerationChunk, GenerationUnavailable, TokenUsage
+from scholiast.application.ports.ml import Entailment
 from scholiast.application.use_cases.answer_question import (
     DEFAULT_EVIDENCE_LIMIT,
     HYBRID_DEPTH,
@@ -663,13 +664,31 @@ def run_world(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict[str, Any]
     monkeypatch.setattr(cli, "build_dret", lambda _rows: dataset)
     monkeypatch.setattr(cli, "verify_split", lambda _d: None)
     monkeypatch.setattr(cli, "verify_core", lambda _d: None)
+    # The real checker would load the NLI model in a unit test; CI has no torch.
+    checker = Checker()
+    monkeypatch.setattr(cli, "_build_nli", lambda: checker)
     return {
         "index": index,
         "dir": tmp_path,
         "generator": generator,
         "state": state,
         "states": states,
+        "checker": checker,
+        "dataset": dataset,
     }
+
+
+class Checker:
+    """An NLI checker that records every pair and supports all of them."""
+
+    version = "stand-in-nli/1"
+
+    def __init__(self) -> None:
+        self.pairs: list[tuple[str, str]] = []
+
+    async def entails(self, premises: Sequence[str], claims: Sequence[str]) -> list[Entailment]:
+        self.pairs.extend(zip(premises, claims, strict=True))
+        return [Entailment(0.8, 0.1, 0.1, False) for _ in premises]
 
 
 class TestTheRun:
@@ -713,6 +732,66 @@ class TestTheRun:
         assert held.config["progress_file"] != dev.config["progress_file"]
         assert {r["split"] for r in held.blocks["answers"]["rows"]} == {"eval"}
         assert held.config["split"] == "eval"
+
+    async def test_an_eval_run_measures_and_archives_every_pair_it_read(
+        self, run_world: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # D179: every pair's premise, hypothesis and probabilities are archived, so
+        # each rate can be recomputed without Qdrant, Ollama or the model.
+        monkeypatch.setattr(cli, "require_frozen_rules", lambda: None)
+        report = await cli.run_answers(dev=False, progress_dir=run_world["dir"])
+        checker: Checker = run_world["checker"]
+        rows = report.blocks["answers"]["rows"]
+        archived = [pair for row in rows for pair in row["pairs"]]
+        assert archived and len(archived) == len(checker.pairs)
+        dataset: DRet = run_world["dataset"]
+        for pair in archived:
+            assert pair["premise"] == dataset.chunks[pair["chunk_id"]].text
+            assert (pair["premise"], pair["hypothesis"]) in checker.pairs
+            assert pair["supported"] is True
+        grounding = report.blocks["grounding"]
+        assert grounding["nli"] == "stand-in-nli/1"
+        assert grounding["totals"]["pairs"] == len(archived)
+        assert grounding["rates"]["answerable/groundedness"]["point"] == 1.0
+        assert grounding["rates"]["papers"]["seed"] == 20260915
+        json.loads(report.to_json())
+
+    async def test_regenerated_answers_are_reported_but_never_stored(
+        self, run_world: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(cli, "require_frozen_rules", lambda: None)
+        report = await cli.run_answers(dev=False, progress_dir=run_world["dir"])
+        answered = len(report.blocks["answers"]["rows"])
+        regen = report.blocks["regeneration"]
+        assert regen["regenerated"] == min(20, answered)
+        # The stand-in answers identically every time.
+        assert (regen["text_changed"], regen["refusal_label_changed"]) == (0, 0)
+        assert len(run_world["generator"].prompts) == answered + regen["regenerated"]
+        stored = an.read_answers(Path(report.config["progress_file"]))
+        assert len(stored) == answered
+
+    async def test_a_resumed_run_still_regenerates_instead_of_reusing(
+        self, run_world: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A resumed run finds every answer stored. Handing those to the
+        # regeneration would compare each answer with itself and report zero
+        # variation that was never measured.
+        monkeypatch.setattr(cli, "require_frozen_rules", lambda: None)
+        await cli.run_answers(dev=False, progress_dir=run_world["dir"])
+        before = len(run_world["generator"].prompts)
+        resumed = await cli.run_answers(dev=False, progress_dir=run_world["dir"])
+        assert resumed.config["resumed_rows"] == len(resumed.blocks["answers"]["rows"])
+        regenerated = resumed.blocks["regeneration"]["regenerated"]
+        assert regenerated > 0
+        assert len(run_world["generator"].prompts) - before == regenerated
+
+    async def test_a_dev_run_reads_no_pairs_and_regenerates_nothing(
+        self, run_world: dict[str, Any]
+    ) -> None:
+        report = await cli.run_answers(dev=True, progress_dir=run_world["dir"])
+        assert run_world["checker"].pairs == []
+        assert "grounding" not in report.blocks and "regeneration" not in report.blocks
+        assert all("pairs" not in row for row in report.blocks["answers"]["rows"])
 
     async def test_a_model_off_the_gpu_stops_the_run_after_one_answer(
         self, run_world: dict[str, Any]
